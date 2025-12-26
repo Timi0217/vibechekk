@@ -121,7 +121,13 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-            if (lastReport.createdAt > thirtyDaysAgo && lastReport.recruiterSummary) {
+            // Check if report has old hyperlink format (contains ** or https://)
+            const hasOldFormat = lastReport.trajectorySummary?.includes('**') ||
+                lastReport.trajectorySummary?.includes('https://') ||
+                lastReport.recruiterSummary?.includes('**') ||
+                lastReport.recruiterSummary?.includes('https://');
+
+            if (lastReport.createdAt > thirtyDaysAgo && lastReport.recruiterSummary && !hasOldFormat) {
                 if (user) {
                     await prisma.user.update({
                         where: { id: user.id },
