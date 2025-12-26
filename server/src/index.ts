@@ -4,8 +4,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
-import { findTopRepos, analyzeGlobalTrajectory, fetchMultiRepoDiffs } from './lib/github';
-import { analyzeWithDeepSeek } from './lib/deepseek';
+import { findTopRepos, analyzeGlobalTrajectory, fetchMultiRepoDiffs } from './lib/github.js';
+import { analyzeWithDeepSeek } from './lib/deepseek.js';
 
 dotenv.config();
 
