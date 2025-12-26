@@ -1,0 +1,7 @@
+-- CreateEnum
+CREATE TYPE "SubscriptionTier" AS ENUM ('GUEST', 'AUTHENTICATED', 'PRO');
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "lastResetAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "tier" "SubscriptionTier" NOT NULL DEFAULT 'GUEST',
+ADD COLUMN     "usageCount" INTEGER NOT NULL DEFAULT 0;

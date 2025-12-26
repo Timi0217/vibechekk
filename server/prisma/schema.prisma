@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionTier {
+  GUEST
+  AUTHENTICATED
+  PRO
+}
+
+model User {
+  id              String           @id @default(cuid())
+  email           String           @unique
+  name            String?
+  tier            SubscriptionTier @default(GUEST)
+  usageCount      Int              @default(0)
+  lastResetAt     DateTime         @default(now())
+  reports         VibeReport[]
+  createdAt       DateTime         @default(now())
+}
+
+model Candidate {
+  id            String   @id @default(cuid())
+  githubUrl     String   @unique
+  githubHandle  String
+  reports       VibeReport[]
+  lastCheckedAt DateTime @default(now())
+}
+
+model VibeReport {
+  id                String   @id @default(cuid())
+  candidateId       String
+  candidate         Candidate @relation(fields: [candidateId], references: [id])
+  userId            String?
+  user              User?      @relation(fields: [userId], references: [id])
+  guestIp           String?
+  
+  archetype         String   // S, A, B, C, F
+  label             String   // e.g. "The Architect"
+  trajectorySummary String
+  meritPoints       Json     // Array of objects { title, detail }
+  recruiterSummary  String?  // Detailed analysis for sharing
+  confidence        Int
+  
+  repoName          String?
+  metadata          Json     // Store the raw metadata used for analysis
+  createdAt         DateTime @default(now())
+}
