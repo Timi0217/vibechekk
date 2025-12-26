@@ -22,13 +22,15 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
       "label": "The Architect" | "The Independent Builder" | "The Safe Junior" | "The Tutorial Follower" | "The Ghost",
       "trajectory_summary": "1-sentence summary of overall engineering growth across all projects",
       "recruiter_summary": "2-3 paragraphs of deep, professional analysis of their technical trajectory, ownership, and engineering taste. Written for hiring managers and technical recruiters to understand the candidate's unique value.",
-      "merit_points": [
-        { "title": "Short title", "detail": "1-2 sentence detailed evidence or explanation" },
-        { "title": "Short title", "detail": "1-2 sentence detailed evidence or explanation" },
-        { "title": "Short title", "detail": "1-2 sentence detailed evidence or explanation" }
+      "highlights": [
+        { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence or explanation" },
+        { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence or explanation" },
+        { "type": "negative", "title": "Short title", "detail": "1-2 sentence detailed evidence or concern" }
       ],
       "confidence": 0-100
     }
+    
+    IMPORTANT: Include 2-3 positive highlights AND 1-2 red flags/concerns. Be honest about weaknesses.
   `;
 
     try {

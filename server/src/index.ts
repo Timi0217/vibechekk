@@ -174,7 +174,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 label: reportData.label,
                 trajectorySummary: reportData.trajectory_summary,
                 recruiterSummary: reportData.recruiter_summary,
-                meritPoints: reportData.merit_points,
+                meritPoints: reportData.highlights || reportData.merit_points,
                 confidence: reportData.confidence,
                 repoName: primaryRepo,
                 metadata: metadata as any

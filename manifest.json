@@ -1,0 +1,48 @@
+{
+    "manifest_version": 3,
+    "name": "Vibechekk",
+    "version": "1.0.0",
+    "description": "Trajectory of Merit for Developers",
+    "permissions": [
+        "storage",
+        "sidePanel"
+    ],
+    "side_panel": {
+        "default_path": "index.html"
+    },
+    "action": {
+        "default_title": "Open Vibechekk"
+    },
+    "host_permissions": [
+        "https://api.github.com/*",
+        "https://*.linkedin.com/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.greenhouse.io/*"
+    ],
+    "background": {
+        "service_worker": "src/background.ts",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://*.ashbyhq.com/*",
+                "https://*.greenhouse.io/*"
+            ],
+            "js": [
+                "src/content.tsx"
+            ]
+        },
+        {
+            "matches": [
+                "https://*.ashbyhq.com/*",
+                "https://*.greenhouse.io/*"
+            ],
+            "js": [
+                "src/sniffer.ts"
+            ],
+            "world": "MAIN",
+            "run_at": "document_start"
+        }
+    ]
+}
