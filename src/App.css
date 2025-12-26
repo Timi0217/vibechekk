@@ -342,22 +342,24 @@ main {
 }
 
 .merit-card {
-  background: white;
+  background: rgba(76, 175, 80, 0.08);
+  /* Light green for positive */
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   transition: all 0.2s;
+  min-height: 52px;
+  /* Consistent height */
 }
 
 .merit-card:hover {
   border-color: var(--primary);
-  background: var(--bg-gray);
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.08);
 }
 
 .merit-card.expanded {
   border-color: var(--primary);
-  background: white;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
@@ -373,6 +375,19 @@ main {
   font-weight: 600;
   color: var(--text-main);
   line-height: 1.4;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  /* Show only 1 line when collapsed */
+  -webkit-box-orient: vertical;
+}
+
+/* Show full title when expanded */
+.merit-card.expanded .merit-title {
+  -webkit-line-clamp: unset;
+  overflow: visible;
 }
 
 .merit-detail {
@@ -530,9 +545,10 @@ main {
   color: var(--primary);
 }
 
-/* Negative highlight card */
+/* Negative highlight card override */
 .merit-card.negative {
-  border-left: 3px solid #d32f2f;
+  background: rgba(211, 47, 47, 0.08);
+  /* Light red */
 }
 
 .merit-card.negative .merit-title {

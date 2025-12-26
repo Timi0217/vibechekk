@@ -177,7 +177,11 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 meritPoints: reportData.highlights || reportData.merit_points,
                 confidence: reportData.technical_signal ? 100 : 50, // Use technical_signal presence as confidence indicator
                 repoName: primaryRepo,
-                metadata: { ...metadata, technical_signal: reportData.technical_signal } as any
+                metadata: {
+                    ...metadata,
+                    technical_signal: reportData.technical_signal,
+                    technical_signal_detailed: reportData.technical_signal_detailed
+                } as any
             },
             include: { candidate: true }
         });

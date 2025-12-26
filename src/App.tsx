@@ -19,6 +19,7 @@ function App() {
   const [authStep, setAuthStep] = useState<'none' | 'ashby' | 'greenhouse'>('none')
   const [expandedMerits, setExpandedMerits] = useState<number[]>([])
   const [showFullSummary, setShowFullSummary] = useState(false)
+  const [showTechnicalSignal, setShowTechnicalSignal] = useState(false)
 
   useEffect(() => {
     chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data'], (res) => {
@@ -234,11 +235,25 @@ function App() {
 
             {selectedReport.metadata?.technical_signal && (
               <div className="detail-section">
-                <h3 className="section-title">Technical Signal</h3>
-                <div className="trajectory-box" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
+                </div>
+                <div className={`trajectory-box ${showTechnicalSignal ? 'expanded' : ''}`} style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
                   <p className="trajectory-text" style={{ margin: 0, fontWeight: 500 }}>
-                    {selectedReport.metadata.technical_signal}
+                    {showTechnicalSignal && selectedReport.metadata.technical_signal_detailed
+                      ? selectedReport.metadata.technical_signal_detailed
+                      : selectedReport.metadata.technical_signal
+                    }
                   </p>
+
+                  {selectedReport.metadata.technical_signal_detailed && (
+                    <button
+                      className="view-more-btn"
+                      onClick={() => setShowTechnicalSignal(!showTechnicalSignal)}
+                    >
+                      {showTechnicalSignal ? 'view less' : 'view more'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -275,12 +290,6 @@ function App() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            <div className="detail-section" style={{ border: 'none' }}>
-              <div className="confidence-pill">
-                Confidence: <strong>{selectedReport.confidence}%</strong>
               </div>
             </div>
           </div>

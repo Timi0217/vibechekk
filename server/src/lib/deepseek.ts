@@ -23,7 +23,8 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
       "label": "The Architect" | "The System Builder" | "The Product Engineer" | "The Full-Stack Specialist" | "The Independent Builder" | "The Rapid Prototyper" | "The Safe Junior" | "The Tutorial Follower" | "The Copycat" | "Draft",
       "trajectory_summary": "1-sentence summary of overall engineering growth and originality across all projects",
       "recruiter_summary": "2-3 paragraphs of deep, professional analysis. AVOID pure CS jargon. Translate technical skills into business value and team impact. Example: Instead of 'demonstrates mastery of O(n) complexity,' say 'writes efficient algorithms that scale well and are easy for team members to maintain.' Focus on what makes this developer valuable to a hiring manager.",
-      "technical_signal": "Specific, concrete evidence of technical skill. Examples: 'Uses custom middleware for auth in project X', 'Migrated from JavaScript to TypeScript in Month 4 of project Y', 'Implemented real-time WebSocket handling with error recovery in project Z'. Be SPECIFIC with project names and technical choices.",
+      "technical_signal": "1-sentence summary of key technical evidence. Example: 'Built production-ready auth system and migrated codebase to TypeScript.'",
+      "technical_signal_detailed": "2-3 sentences with specific, concrete evidence of technical skill. Examples: 'Uses custom middleware for auth in project X', 'Migrated from JavaScript to TypeScript in Month 4 of project Y', 'Implemented real-time WebSocket handling with error recovery in project Z'. Be SPECIFIC with project names and technical choices.",
       "highlights": [
         { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence with specific examples from their code" },
         { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence with specific examples from their code" },
