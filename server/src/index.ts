@@ -170,14 +170,14 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 candidateId: savedCandidate.id,
                 userId: user?.id || null,
                 guestIp: user ? null : (Array.isArray(requesterIp) ? requesterIp[0] : requesterIp),
-                archetype: reportData.archetype,
+                archetype: reportData.label || reportData.archetype || 'Unknown', // Use label as archetype for backward compatibility
                 label: reportData.label,
                 trajectorySummary: reportData.trajectory_summary,
                 recruiterSummary: reportData.recruiter_summary,
                 meritPoints: reportData.highlights || reportData.merit_points,
-                confidence: reportData.confidence,
+                confidence: reportData.technical_signal ? 100 : 50, // Use technical_signal presence as confidence indicator
                 repoName: primaryRepo,
-                metadata: metadata as any
+                metadata: { ...metadata, technical_signal: reportData.technical_signal } as any
             },
             include: { candidate: true }
         });

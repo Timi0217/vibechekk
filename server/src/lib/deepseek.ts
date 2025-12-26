@@ -1,8 +1,11 @@
 export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, codeSamples: string) => {
     const prompt = `
-    Analyze this developer's GitHub activity across all their top public repositories to determine their "Engineering Trajectory" and "Archetype".
+    Analyze this developer's GitHub activity across all their top public repositories to determine their "Engineering Label" based on originality, rigor, and business value.
     
-    You are looking for a holistic view of the developer's taste, rigor, and growth.
+    You are evaluating a REAL ENGINEER for a REAL HIRING MANAGER. Focus on:
+    1. **Iterative Struggle**: Look for commits that fix their own bugs or refactor logic they wrote weeks ago. If a project appears perfectly formed in 2 commits, flag it as "Low Evidence of Original Logic."
+    2. **Originality over Perfection**: Forks and tutorial clones without significant original modifications should be labeled "Draft" regardless of code quality.
+    3. **Business Value**: Translate technical skills into team impact. Instead of just "mastery of O(n) complexity," explain "writes maintainable code that other team members can easily understand and extend."
 
     Global Metadata (Top 5 Repos):
     ${JSON.stringify(globalMetadata, null, 2)}
@@ -10,27 +13,28 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     Raw Code Samples/Diffs (Top 3 Repos):
     ${codeSamples}
 
-    Evaluate based on:
-    1. Scope of Impact: Do they contribute to diverse projects?
-    2. Consistency: Is their rigor consistent across different repos?
-    3. Trajectory: Is there evidence of learning or level-up across projects?
-    4. Code Taste: Are there recurring patterns of high-quality engineering?
+    ### CRITICAL INSTRUCTION
+    If the repository looks like a 'fork' or a 'tutorial clone' without original modifications, 
+    you MUST categorize as 'Draft' regardless of how clean the code is. 
+    We value Originality and Rigor over 'Perfect Result.'
 
     Return ONLY a JSON object with:
     {
-      "archetype": "S" | "A" | "B" | "C" | "F",
-      "label": "The Architect" | "The Independent Builder" | "The Safe Junior" | "The Tutorial Follower" | "The Ghost",
-      "trajectory_summary": "1-sentence summary of overall engineering growth across all projects",
-      "recruiter_summary": "2-3 paragraphs of deep, professional analysis of their technical trajectory, ownership, and engineering taste. Written for hiring managers and technical recruiters to understand the candidate's unique value.",
+      "label": "The Architect" | "The System Builder" | "The Product Engineer" | "The Full-Stack Specialist" | "The Independent Builder" | "The Rapid Prototyper" | "The Safe Junior" | "The Tutorial Follower" | "The Copycat" | "Draft",
+      "trajectory_summary": "1-sentence summary of overall engineering growth and originality across all projects",
+      "recruiter_summary": "2-3 paragraphs of deep, professional analysis. AVOID pure CS jargon. Translate technical skills into business value and team impact. Example: Instead of 'demonstrates mastery of O(n) complexity,' say 'writes efficient algorithms that scale well and are easy for team members to maintain.' Focus on what makes this developer valuable to a hiring manager.",
+      "technical_signal": "Specific, concrete evidence of technical skill. Examples: 'Uses custom middleware for auth in project X', 'Migrated from JavaScript to TypeScript in Month 4 of project Y', 'Implemented real-time WebSocket handling with error recovery in project Z'. Be SPECIFIC with project names and technical choices.",
       "highlights": [
-        { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence or explanation" },
-        { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence or explanation" },
-        { "type": "negative", "title": "Short title", "detail": "1-2 sentence detailed evidence or concern" }
-      ],
-      "confidence": 0-100
+        { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence with specific examples from their code" },
+        { "type": "positive", "title": "Short title", "detail": "1-2 sentence detailed evidence with specific examples from their code" },
+        { "type": "negative", "title": "Short title", "detail": "1-2 sentence concern with specific evidence (e.g., 'Project X appears to be a tutorial clone with minimal original logic')" }
+      ]
     }
     
-    IMPORTANT: Include 2-3 positive highlights AND 1-2 red flags/concerns. Be honest about weaknesses.
+    IMPORTANT: 
+    - Include 2-3 positive highlights AND 1-2 red flags/concerns. Be honest about weaknesses.
+    - The "technical_signal" field is MANDATORY and must contain specific, verifiable evidence.
+    - Avoid generic statements. Recruiters need "receipts" to show Hiring Managers.
   `;
 
     try {

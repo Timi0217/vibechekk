@@ -101,6 +101,7 @@ function App() {
         };
         setHistory((prev: any[]) => [finalReport, ...prev])
         setSelectedReport(finalReport)
+        setActiveTab('history') // Switch to history tab to show the result
       } else {
         alert(`Failed: ${response?.error || 'Unknown error'}`)
       }
@@ -156,16 +157,16 @@ function App() {
       </header>
 
       <div className="tabs-nav">
-        <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => setActiveTab('analyze')}>
+        <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
           <Search size={14} strokeWidth={2} />
         </button>
-        <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+        <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
           <Clock size={14} strokeWidth={2} />
         </button>
-        <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+        <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
           <TrendingUp size={14} strokeWidth={2} />
         </button>
-        <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+        <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setSelectedReport(null); }}>
           <Sliders size={14} strokeWidth={2} />
         </button>
       </div>
@@ -179,9 +180,7 @@ function App() {
             </button>
             <div className="report-header">
               <h2 className="detail-name">{selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : 'Global Analyst'}</h2>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="history-archetype">{selectedReport.archetype} - {selectedReport.label}</span>
-              </div>
+              <span className="history-archetype">{selectedReport.label}</span>
             </div>
 
             <div className="detail-section">
@@ -232,6 +231,17 @@ function App() {
                 )}
               </div>
             </div>
+
+            {selectedReport.metadata?.technical_signal && (
+              <div className="detail-section">
+                <h3 className="section-title">Technical Signal</h3>
+                <div className="trajectory-box" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                  <p className="trajectory-text" style={{ margin: 0, fontWeight: 500 }}>
+                    {selectedReport.metadata.technical_signal}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="detail-section">
               <h3 className="section-title">Highlights</h3>
@@ -296,7 +306,7 @@ function App() {
 
             {activeTab === 'history' && (
               <div className="history-list">
-                <h2 className="section-title">Merit History</h2>
+                <h2 className="section-title">History</h2>
                 {history.length === 0 ? (
                   <p className="footer-info">No reports found.</p>
                 ) : (
@@ -304,7 +314,7 @@ function App() {
                     <div key={i} className="history-item" onClick={() => setSelectedReport(item)} style={{ cursor: 'pointer' }}>
                       <div className="history-info">
                         <span className="history-name">{item.candidate?.githubHandle || 'Guest Candidate'}</span>
-                        <span className="history-archetype">{item.archetype} - {item.label}</span>
+                        <span className="history-archetype">{item.label}</span>
                       </div>
                       <ExternalLink size={14} color="var(--text-dim)" />
                     </div>
