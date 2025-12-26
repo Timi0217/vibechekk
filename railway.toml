@@ -3,5 +3,4 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "cd server && npx prisma db push --accept-data-loss && node dist/index.js"
 restartPolicyType = "ON_FAILURE"
