@@ -1,9 +1,77 @@
-import { useState, useEffect } from 'react'
-import { Clock, Sliders, Search, ExternalLink, TrendingUp, ChevronDown, ChevronRight, Zap, BadgeCheck, ArrowLeft, Copy, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, CheckCircle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
 type Tab = 'analyze' | 'history' | 'analytics' | 'settings'
+
+const VibeLogo = ({ size = 20, color = 'currentColor', className = '', ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    style={{ flexShrink: 0 }}
+    {...props}
+  >
+    <path
+      fill={color === 'currentColor' ? 'var(--accent)' : color}
+      d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"
+    />
+    <path
+      fill="white"
+      d="M12 17.5L6 7.5H10L12 12L14 7.5H18L12 17.5Z"
+    />
+  </svg>
+)
+
+const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: string, size?: number }) => {
+  const ArchetypeMap: Record<string, any> = {
+    // TIER 4 - LEGENDARY
+    'the foundation builder': Bug,
+    'the technical titan': BookOpen,
+    'the industry shaper': Award,
+
+    // TIER 3 - RARE
+    'the open source champion': Heart,
+    'the system architect': Layers,
+    'the deep specialist': Search,
+
+    // TIER 2 - UNCOMMON
+    'the open source contributor': MessageSquare,
+    'the independent builder': Sliders,
+    'the product engineer': Box,
+
+    // TIER 1 - COMMON
+    'the hidden gem': Star,
+    'the practical builder': Hammer,
+    'the feature engineer': Code,
+    'the experimental developer': Beaker,
+    'the beginner student': BookOpen,
+  }
+
+  const rarityColors: Record<string, string> = {
+    'LEGENDARY': '#b45309',
+    'RARE': '#7c3aed',
+    'UNCOMMON': '#2563eb',
+    'COMMON': '#64748b'
+  }
+
+  const normalizedLabel = label?.toLowerCase().trim().replace(/^the\s+/, '');
+  const Icon = ArchetypeMap[label?.toLowerCase().trim()] || ArchetypeMap['the ' + normalizedLabel] || ArchetypeMap[normalizedLabel] || Zap
+  const color = rarityColors[rarity?.toUpperCase() || ''] || 'var(--brand-blue)'
+
+  return <Icon size={size} color={color} />
+}
+
+const getRarityClass = (rarity: string) => {
+  const r = rarity?.toUpperCase();
+  if (r === 'LEGENDARY') return 'legendary';
+  if (r === 'RARE') return 'rare';
+  if (r === 'UNCOMMON') return 'uncommon';
+  return 'common';
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('analyze')
@@ -19,7 +87,27 @@ function App() {
   const [authStep, setAuthStep] = useState<'none' | 'ashby' | 'greenhouse'>('none')
   const [expandedMerits, setExpandedMerits] = useState<number[]>([])
   const [showFullSummary, setShowFullSummary] = useState(false)
+  const [showDetailedSummary, setShowDetailedSummary] = useState(false)
   const [showTechnicalSignal, setShowTechnicalSignal] = useState(false)
+  const [showDetailedTechnical, setShowDetailedTechnical] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [expandedSkills, setExpandedSkills] = useState<number[]>([])
+  const [loadingStep, setLoadingStep] = useState(0)
+  const activeTabRef = useRef(activeTab)
+
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
+  const handleOpenReport = (report: any) => {
+    setSelectedReport(report)
+    setShowFullSummary(false)
+    setShowDetailedSummary(false)
+    setShowTechnicalSignal(false)
+    setShowDetailedTechnical(false)
+    setExpandedSkills([])
+    setExpandedMerits([])
+  }
 
   useEffect(() => {
     chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data'], (res) => {
@@ -66,13 +154,13 @@ function App() {
     }
   }
 
+  const [pendingHandles, setPendingHandles] = useState<string[]>([])
+
   const handleManualSearch = async () => {
     if (!manualUrl) return
-    setIsLoading(true)
-    setExpandedMerits([])
-    let normalized = manualUrl.trim().replace(/^@/, '');
 
-    // Extract owner for fallback display
+    // 1. Normalize
+    let normalized = manualUrl.trim().replace(/^@/, '');
     let ownerHandle = normalized;
     if (normalized.includes('github.com/')) {
       const match = normalized.match(/github\.com\/([^/]+)/i);
@@ -80,17 +168,56 @@ function App() {
     }
     ownerHandle = ownerHandle.replace(/^@/, '').split('/')[0];
 
+    // 2. CHECK HISTORY (Prevent Duplicates) - DISABLED FOR QA/TESTING
+    // The user wants to see the analysis run after flushing the DB.
+    // Client-side caching prevents this. Letting it hit the backend ensures fresh data.
+    /*
+    const existingReport = history.find(h => {
+      const hHandle = h.candidate?.githubHandle || h.githubHandle;
+      return hHandle?.toLowerCase() === ownerHandle.toLowerCase();
+    });
+
+    if (existingReport) {
+      handleOpenReport(existingReport);
+      setManualUrl('');
+      setActiveTab('history');
+      return;
+    }
+    */
+
+    // 3. Prevent duplicate active processing
+    if (pendingHandles.includes(ownerHandle)) {
+      alert(`Analysis for ${ownerHandle} is already in progress.`);
+      return;
+    }
+
     const finalUrl = normalized.includes('github.com')
       ? (normalized.startsWith('http') ? normalized : `https://${normalized}`)
       : `https://github.com/${normalized}`;
+
+    // 4. Queue the request & Start Simulation
+    setPendingHandles(prev => [ownerHandle, ...prev]);
+    setManualUrl('');
+    setLoadingStep(1); // Restart visual feedback for this new item
+
+    // Simulate progress steps (Purely visual for the "Run" button)
+    // We clear these timeouts when this specific request finishes, but effectively
+    // the UI will just show the step for the *latest* one, which is fine.
+    setTimeout(() => setLoadingStep(2), 1500);
+    setTimeout(() => setLoadingStep(3), 3500);
+    setTimeout(() => setLoadingStep(4), 6000);
+    setTimeout(() => setLoadingStep(5), 9000);
+    setTimeout(() => setLoadingStep(6), 12500);
+    setTimeout(() => setLoadingStep(7), 16000);
 
     chrome.runtime.sendMessage({
       type: 'START_VIBE_CHECK',
       url: finalUrl
     }, (response) => {
-      setIsLoading(false)
+      // 5. Cleanup on completion
+      setPendingHandles(prev => prev.filter(h => h !== ownerHandle));
+
       if (response && response.success) {
-        // Enforce the searched handle if server returns 'Guest' or generic
         const finalReport = {
           ...response.data,
           candidate: {
@@ -101,13 +228,16 @@ function App() {
           }
         };
         setHistory((prev: any[]) => [finalReport, ...prev])
-        setSelectedReport(finalReport)
-        setActiveTab('history') // Switch to history tab to show the result
+        // 6. Auto-open if still on search page
+        if (activeTabRef.current === 'analyze') {
+          handleOpenReport(finalReport)
+        }
       } else {
-        alert(`Failed: ${response?.error || 'Unknown error'}`)
+        alert(`Failed to analyze ${ownerHandle}: ${response?.error || 'Unknown error'}`)
       }
     })
   }
+
 
   const handleAtsLogin = async (keyOverride?: string) => {
     const key = keyOverride || atsInput.key
@@ -147,11 +277,14 @@ function App() {
 
   return (
     <div className="popup-container">
-      <header>
-        <h1 className="logo">Vibechekk</h1>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <BadgeCheck size={16} color={user ? 'var(--accent)' : 'var(--text-dim)'} strokeWidth={1.5} />
-          <span style={{ fontSize: '11px', fontWeight: 800, color: user ? 'var(--accent)' : 'var(--text-dim)' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: 'white', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <VibeLogo size={20} color="var(--brand-blue)" strokeWidth={2.5} />
+          <h1 className="logo" style={{ textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>VIBECHEKK</h1>
+        </div>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
+          <BadgeCheck size={14} color={user ? 'var(--accent)' : 'var(--text-dim)'} strokeWidth={1.5} />
+          <span style={{ fontSize: '10px', fontWeight: 800, color: user ? 'var(--accent)' : 'var(--text-dim)', letterSpacing: '0.5px' }}>
             {user ? user.tier : 'GUEST'} TIER
           </span>
         </div>
@@ -162,7 +295,26 @@ function App() {
           <Search size={14} strokeWidth={2} />
         </button>
         <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
-          <Clock size={14} strokeWidth={2} />
+          <div style={{ position: 'relative' }}>
+            <Clock size={14} strokeWidth={2} />
+            {isLoading && (
+              <div style={{
+                position: 'absolute',
+                top: '-6px',
+                right: '-8px',
+                width: '14px',
+                height: '14px',
+                background: 'var(--accent)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid white'
+              }}>
+                <Loader2 size={8} color="white" className="spin" />
+              </div>
+            )}
+          </div>
         </button>
         <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
           <TrendingUp size={14} strokeWidth={2} />
@@ -175,91 +327,234 @@ function App() {
       <main>
         {selectedReport ? (
           <div className="detail-view">
-            <button className="back-btn" onClick={() => setSelectedReport(null)}>
-              <ArrowLeft size={14} style={{ marginRight: '6px' }} strokeWidth={2} />
-              Back to {activeTab === 'analyze' ? 'Search' : 'History'}
-            </button>
-            <div className="report-header">
-              <h2 className="detail-name">{selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : 'Global Analyst'}</h2>
-              <span className="history-archetype">{selectedReport.label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '8px' }}>
+              <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
+                padding: '10px',
+                marginLeft: '-8px',
+                background: 'var(--bg-gray)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                cursor: 'pointer'
+              }}>
+                <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
+                {(() => {
+                  const handle = selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : '';
+                  return (
+                    <>
+                      {handle ? (
+                        <img
+                          src={`https://github.com/${handle}.png?size=48`}
+                          alt={handle}
+                          className="history-avatar"
+                          style={{ width: '48px', height: '48px', borderRadius: '12px' }}
+                        />
+                      ) : (
+                        <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
+                          <User size={24} color="var(--text-dim)" />
+                        </div>
+                      )}
+                      <div className="history-meta" style={{ gap: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{handle || 'Guest Profile'}</h2>
+                          {selectedReport.rarity_badge && (
+                            <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity} size={14} />
+                          <div className={`archetype-badge ${getRarityClass(selectedReport.rarity)}`}>
+                            {selectedReport.label || 'Profile'}
+                          </div>
+                          {selectedReport.rarity_percentile && (
+                            <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
+                              • {selectedReport.rarity_percentile.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                          {selectedReport.seniority && (
+                            <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.2px', opacity: 0.8 }}>
+                              {selectedReport.seniority.toUpperCase()}
+                            </span>
+                          )}
+                          {selectedReport.star_count !== undefined && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
+                              <Star size={10} fill="currentColor" /> {selectedReport.star_count} STARS
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
 
             <div className="detail-section">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL ANALYSIS</h3>
-              </div>
-              <div className={`trajectory-box ${showFullSummary ? 'expanded' : ''}`}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                  <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>{selectedReport.trajectorySummary}</p>
-                  <button
-                    className="copy-icon-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigator.clipboard.writeText(selectedReport.trajectorySummary);
-                    }}
-                    title="Copy summary"
-                  >
-                    <Copy size={14} strokeWidth={2} />
-                  </button>
-                </div>
+              <button
+                onClick={() => {
+                  setShowFullSummary(!showFullSummary);
+                  if (!showFullSummary) setShowDetailedSummary(false);
+                }}
+                className="section-header-btn"
+              >
+                <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
+                {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+              </button>
 
-                {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
-                  <button
-                    className="view-more-btn"
-                    onClick={() => setShowFullSummary(!showFullSummary)}
-                  >
-                    {showFullSummary ? 'view less' : 'view more'}
-                  </button>
-                )}
-
-                {(showFullSummary && (selectedReport.recruiterSummary || selectedReport.recruiter_summary)) && (
-                  <div className="recruiter-summary">
-                    <div className="summary-divider"></div>
-                    <p className="recruiter-text">{selectedReport.recruiterSummary || selectedReport.recruiter_summary}</p>
+              {showFullSummary && (
+                <div className="trajectory-box expanded">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                    <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
+                      {showDetailedSummary
+                        ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                        : (selectedReport.trajectorySummary || selectedReport.trajectory)
+                      }
+                    </p>
                     <button
-                      className="copy-summary-btn"
-                      onClick={() => {
-                        const summary = selectedReport.recruiterSummary || selectedReport.recruiter_summary;
-                        const text = `Engineer Analysis: ${selectedReport.candidate?.githubHandle}\n\nTrajectory: ${selectedReport.trajectorySummary}\n\nDetailed Analysis:\n${summary}`;
+                      className="copy-icon-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const text = showDetailedSummary
+                          ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                          : selectedReport.trajectorySummary;
                         navigator.clipboard.writeText(text);
-                        alert('Professional summary copied to clipboard!');
+                        setCopiedId('summary');
+                        setTimeout(() => setCopiedId(null), 2000);
                       }}
+                      title={copiedId === 'summary' ? "Copied!" : "Copy summary"}
                     >
-                      <Zap size={12} style={{ marginRight: '6px' }} strokeWidth={2} />
-                      Copy for Recruiters
+                      {copiedId === 'summary' ? (
+                        <CheckCircle size={14} strokeWidth={2} color="#10b981" />
+                      ) : (
+                        <Copy size={14} strokeWidth={2} />
+                      )}
                     </button>
                   </div>
-                )}
-              </div>
+
+                  {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
+                    <button
+                      className="view-more-btn"
+                      onClick={() => setShowDetailedSummary(!showDetailedSummary)}
+                      style={{ marginTop: '12px' }}
+                    >
+                      {showDetailedSummary ? 'view less' : 'view more'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {selectedReport.metadata?.technical_signal && (
               <div className="detail-section">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <button
+                  onClick={() => {
+                    setShowTechnicalSignal(!showTechnicalSignal);
+                    if (!showTechnicalSignal) setShowDetailedTechnical(false);
+                  }}
+                  className="section-header-btn"
+                >
                   <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
-                </div>
-                <div className={`trajectory-box ${showTechnicalSignal ? 'expanded' : ''}`} style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
-                  <p className="trajectory-text" style={{ margin: 0, fontWeight: 500 }}>
-                    {showTechnicalSignal && selectedReport.metadata.technical_signal_detailed
-                      ? selectedReport.metadata.technical_signal_detailed
-                      : selectedReport.metadata.technical_signal
-                    }
-                  </p>
+                  {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+                </button>
 
-                  {selectedReport.metadata.technical_signal_detailed && (
-                    <button
-                      className="view-more-btn"
-                      onClick={() => setShowTechnicalSignal(!showTechnicalSignal)}
-                    >
-                      {showTechnicalSignal ? 'view less' : 'view more'}
-                    </button>
-                  )}
+                {showTechnicalSignal && (
+                  <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                      <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
+                        {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                          ? selectedReport.metadata.technical_signal_detailed
+                          : selectedReport.metadata.technical_signal
+                        }
+                      </p>
+                      <button
+                        className="copy-icon-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                            ? selectedReport.metadata.technical_signal_detailed
+                            : selectedReport.metadata.technical_signal;
+                          navigator.clipboard.writeText(text);
+                          setCopiedId('signal');
+                          setTimeout(() => setCopiedId(null), 2000);
+                        }}
+                        title={copiedId === 'signal' ? "Copied!" : "Copy signal"}
+                      >
+                        {copiedId === 'signal' ? (
+                          <CheckCircle size={14} strokeWidth={2} color="#10b981" />
+                        ) : (
+                          <Copy size={14} strokeWidth={2} />
+                        )}
+                      </button>
+                    </div>
+
+                    {selectedReport.metadata.technical_signal_detailed && (
+                      <button
+                        className="view-more-btn"
+                        onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
+                        style={{ marginTop: '12px' }}
+                      >
+                        {showDetailedTechnical ? 'view less' : 'view more'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedReport.metadata?.verified_skills && (
+              <div className="detail-section">
+                <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
+                <h3 className="section-title" style={{ marginBottom: '8px', textTransform: 'uppercase' }}>SKILLS VERIFIED FROM CODE</h3>
+                <div className="merit-grid scrollable">
+                  {selectedReport.metadata.verified_skills.map((skill: string, i: number) => {
+                    const match = skill.match(/^(.*?)\s*\((.*)\)$/);
+                    const title = match ? match[1] : skill;
+                    const detail = match ? match[2] : '';
+                    const isExpanded = expandedSkills.includes(i);
+                    const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
+
+                    return (
+                      <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                        <div className="merit-header">
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                            <span className="merit-title" style={{ fontWeight: 700 }}>{title}</span>
+                          </div>
+                          {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                        </div>
+                        {isExpanded && detail && (
+                          <div className="merit-detail">
+                            <div style={{ marginBottom: '8px' }}>{detail}</div>
+                            {skill.includes('|') && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {skill.split('|').slice(1).map((part, idx) => (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', opacity: 0.8 }}>
+                                    <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent)' }}></div>
+                                    <span>{part.trim()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
+
             <div className="detail-section">
-              <h3 className="section-title">Highlights</h3>
+              <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
+              <h3 className="section-title" style={{ textTransform: 'uppercase' }}>HIGHLIGHTS</h3>
               <div className="merit-grid">
                 {selectedReport.meritPoints.map((point: any, i: number) => {
                   const isExpanded = expandedMerits.includes(i);
@@ -274,7 +569,7 @@ function App() {
                       <div className="merit-header">
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           {isNegative ? (
-                            <AlertTriangle size={14} style={{ marginRight: '8px', color: '#d32f2f' }} strokeWidth={1.5} />
+                            <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
                           ) : (
                             <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
                           )}
@@ -282,15 +577,35 @@ function App() {
                         </div>
                         {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                       </div>
-                      {isExpanded && point.detail && (
+                      {isExpanded && (
                         <div className="merit-detail">
-                          {point.detail}
+                          <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
+
+                          {point.business_impact && (
+                            <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
+                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
+                              <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
+                            </div>
+                          )}
+
+                          {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
+                            <div>
+                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
+                              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   );
                 })}
               </div>
+              <button className="download-card-btn">
+                <FileDown size={16} />
+                DOWNLOAD REPORT CARD
+              </button>
             </div>
           </div>
         ) : (
@@ -298,17 +613,98 @@ function App() {
             {activeTab === 'analyze' && (
               <div className="search-box">
                 <h2 className="section-title" style={{ textAlign: 'center', textTransform: 'uppercase' }}>CHEKK DEV SKILLS</h2>
-                <input
-                  className="input-field"
-                  placeholder="github.com/username or @handle"
-                  value={manualUrl}
-                  onChange={e => setManualUrl(e.target.value)}
-                />
-                <button className="primary-btn" onClick={handleManualSearch} disabled={isLoading || !manualUrl}>
-                  {isLoading ? 'RUNNING...' : 'RUN'}
+                <div style={{ textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '-4px' }}>
+                  Analyze code quality & originality from GitHub
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="input-field"
+                    placeholder="github.com/username or @handle"
+                    value={manualUrl}
+                    onChange={e => setManualUrl(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && manualUrl && handleManualSearch()}
+                    style={{ paddingRight: '40px' }}
+                  />
+                  <button
+                    onClick={() => { setManualUrl(''); }}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      padding: '4px',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: 'var(--text-dim)'
+                    }}
+                    title="New Analysis"
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                  </button>
+                </div>
+                <button className="primary-btn" onClick={handleManualSearch} disabled={!manualUrl} style={{ minHeight: '44px' }}>
+                  {manualUrl ? 'RUN' : (pendingHandles.length > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                      <Clock size={16} className="spin" />
+                      <span>
+                        {pendingHandles.length === 1 ? (
+                          loadingStep === 1 ? 'FETCHING PROFILE...' :
+                            loadingStep === 2 ? 'LOCATING TOP REPOS...' :
+                              loadingStep === 3 ? 'ANALYZING CODE STRUCTURE...' :
+                                loadingStep === 4 ? 'CHECKING ORIGINALITY...' :
+                                  loadingStep === 5 ? 'EXTRACTING EVIDENCE...' :
+                                    loadingStep === 6 ? 'GENERATING IMPACT ANALYSIS...' :
+                                      'FINALIZING REPORT...'
+                        ) : `PROCESSING ${pendingHandles.length} PROFILES...`}
+                      </span>
+                    </div>
+                  ) : 'RUN')}
                 </button>
                 <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>
                   3 FREE ANALYSIS LEFT
+                </div>
+
+                <div className="referral-card" style={{
+                  marginTop: '24px',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, var(--accent) 0%, #92400e 100%)',
+                  color: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(180, 83, 9, 0.2)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Zap size={15} fill="white" style={{ position: 'relative', top: '-0.5px' }} />
+                    <span style={{ fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Get Unlimited Chekks for Free</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9 }}>
+                    Refer 3 friends and get Vibechekk unlimited free for one month if they each run at least one chekk.
+                  </p>
+                  <button className="primary-btn" style={{
+                    marginTop: '8px',
+                    background: 'white',
+                    color: 'var(--accent)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0 16px',
+                    height: '34px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    width: 'fit-content',
+                    boxShadow: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    INVITE FRIENDS
+                  </button>
                 </div>
               </div>
             )}
@@ -319,41 +715,106 @@ function App() {
                 {history.length === 0 ? (
                   <p className="footer-info">No reports found.</p>
                 ) : (
-                  history.map((item: any, i: number) => (
-                    <div key={i} className="history-item" onClick={() => setSelectedReport(item)} style={{ cursor: 'pointer' }}>
-                      <div className="history-info">
-                        <span className="history-name">{item.candidate?.githubHandle || 'Guest Candidate'}</span>
-                        <span className="history-archetype">{item.label}</span>
+                  history.map((item: any, i: number) => {
+                    const handle = item.candidate?.githubHandle || item.githubHandle || '';
+                    return (
+                      <div key={i} className={`history-item ${getRarityClass(item.rarity)}`} onClick={() => handleOpenReport(item)}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                          {handle ? (
+                            <img
+                              src={`https://github.com/${handle}.png?size=40`}
+                              alt={handle}
+                              className="history-avatar"
+                            />
+                          ) : (
+                            <div className="history-avatar-placeholder">
+                              <User size={20} color="var(--text-dim)" />
+                            </div>
+                          )}
+                          <div className="history-meta">
+                            <span className="history-name">{handle || 'Guest Profile'}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <ArchetypeIcon label={item.label || 'Profile'} rarity={item.rarity} size={12} />
+                              <div className={`archetype-badge ${getRarityClass(item.rarity)}`}>
+                                {item.label || 'Profile'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="history-action-icon">
+                          <ChevronRight size={16} color="var(--text-dim)" strokeWidth={2.5} />
+                        </div>
                       </div>
-                      <ExternalLink size={14} color="var(--text-dim)" />
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
 
             {activeTab === 'analytics' && (
               <div className="analytics-view">
-                <h2 className="section-title">Talent Pool Insights</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div>
+                    <h2 className="section-title" style={{ margin: 0 }}>Insights</h2>
+                    <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Pipeline Intelligence
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '6px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#059669' }}>ACTIVE</span>
+                  </div>
+                </div>
+
                 {analytics ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div className="history-item">
-                      <div className="history-info">
-                        <span className="history-dim">Total Candidates Analyzed</span>
-                        <span className="history-name" style={{ fontSize: '24px' }}>{analytics.totalChecks}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div className="stat-card hero" style={{ padding: '20px', background: 'white' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                        <div className="stat-value" style={{ fontSize: '38px' }}>{analytics.totalChecks}</div>
+                        <TrendingUp size={16} color="var(--accent)" strokeWidth={3} style={{ marginBottom: '4px' }} />
                       </div>
+                      <div className="stat-label" style={{ opacity: 0.7 }}>TOTAL PROFILES PROCESSED</div>
                     </div>
-                    <div className="history-list">
-                      {Object.entries(analytics.distribution).map(([arch, count]: any) => (
-                        <div key={arch} className="history-item" style={{ padding: '8px 12px' }}>
-                          <span className="history-archetype">{arch} Tier</span>
-                          <span className="history-name">{count} candidates</span>
-                        </div>
-                      ))}
+
+                    <div className="detail-section">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>PROFILE DISTRIBUTION</h3>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>BY ARCHETYPE</span>
+                      </div>
+
+                      <div className="history-list" style={{ gap: '10px' }}>
+                        {Object.entries(analytics.distribution).map(([arch, count]: any) => {
+                          const percentage = Math.round((count / analytics.totalChecks) * 100);
+                          return (
+                            <div key={arch} className="stat-card compact" style={{ background: 'white' }}>
+                              <div className="stat-info">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div className="archetype-icon-small">
+                                    <ArchetypeIcon label={arch} size={14} />
+                                  </div>
+                                  <span className="stat-arch-name">{arch}</span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
+                                  <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
+                                </div>
+                              </div>
+                              <div className="percentage-bar-bg" style={{ height: '4px' }}>
+                                <div
+                                  className="percentage-bar-fill"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="footer-info">Connect backend to view analytics.</p>
+                  <div className="stat-card empty">
+                    <p className="footer-info">Connect your ATS to view real-time data trends.</p>
+                  </div>
                 )}
               </div>
             )}
@@ -361,7 +822,7 @@ function App() {
             {activeTab === 'settings' && (
               <div className="settings-scroll-container">
                 <div className="settings-group">
-                  <h2 className="section-title">Premium Analytics Sync</h2>
+                  <h2 className="section-title" style={{ marginBottom: '4px' }}>Analytics</h2>
                   {user ? (
                     <div className="auth-status-card" style={{ width: '100%', maxWidth: '100%' }}>
                       <p className="footer-info" style={{ color: 'var(--text-main)', marginBottom: '8px' }}>Connected as <strong>{user.name || user.email}</strong></p>
@@ -370,12 +831,32 @@ function App() {
                     </div>
                   ) : authStep === 'none' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-                      <p className="footer-info" style={{ marginBottom: '4px', textAlign: 'left' }}>Analyze more candidates by linking your ATS account.</p>
                       <button className="primary-btn" onClick={() => setAuthStep('ashby')} style={{ background: '#2563eb' }}>
-                        Sync with Ashby
+                        Connect Ashby
                       </button>
                       <button className="primary-btn" onClick={() => setAuthStep('greenhouse')} style={{ background: '#059669' }}>
-                        Sync with Greenhouse
+                        Connect Greenhouse
+                      </button>
+
+                      <div style={{ marginTop: '8px' }}>
+                        <p className="footer-info" style={{ marginBottom: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text-main)' }}>Connect your ATS to:</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '4px' }}>
+                          {[
+                            'Analyze profiles in bulk',
+                            'See skill trends across your pipeline',
+                            'Benchmark against industry standards',
+                            'Export reports directly to your ATS'
+                          ].map((text, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              <BadgeCheck size={14} color="var(--accent)" strokeWidth={2} />
+                              <span>{text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <button className="upgrade-pro-btn">
+                        <TrendingUp size={16} strokeWidth={2.5} />
+                        UPGRADE TO PRO
                       </button>
                     </div>
                   ) : (
@@ -410,7 +891,7 @@ function App() {
           </>
         )}
       </main>
-    </div>
+    </div >
   )
 }
 

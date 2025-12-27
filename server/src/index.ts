@@ -4,7 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
-import { findTopRepos, analyzeGlobalTrajectory, fetchMultiRepoDiffs } from './lib/github.js';
+import { analyzeGitHubProfile } from './lib/github.js';
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
 
 dotenv.config();
@@ -19,6 +19,7 @@ const GITHUB_TOKEN = process.env.GITHUB_API_TOKEN;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 
 // --- AUTH UTILS ---
+// ... (rest of imports/utils remains same)
 const verifyAtsToken = async (token: string, type: 'ashby' | 'greenhouse') => {
     // Mocking ATS verification for now
     if (token.startsWith('ash_') || token.startsWith('gh_')) {
@@ -149,14 +150,23 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
         let [, owner] = match;
         owner = owner.replace(/^@/, '');
 
-        console.log(`[Backend] Starting holistic vibe check for ${owner}`);
-        const topRepos = await findTopRepos(GITHUB_TOKEN, owner);
-        if (topRepos.length === 0) throw new Error('No public repositories found');
+        console.log(`[Backend] Starting holistic profile check for ${owner}`);
+        const profileData = await analyzeGitHubProfile(GITHUB_TOKEN, owner);
+        console.log(`[Stats] ${owner}: Total ${profileData.starDistribution.total_stars}, Peak ${profileData.starDistribution.highest_single_repo}`);
 
-        const metadata = analyzeGlobalTrajectory(topRepos);
-        const diffs = await fetchMultiRepoDiffs(GITHUB_TOKEN, owner, topRepos);
-        const reportData = await analyzeWithDeepSeek(DEEPSEEK_KEY, metadata, diffs);
-        const primaryRepo = topRepos[0].name;
+        // Calculate quality score for Hidden Gem detection
+        const qualityScore = profileData.qualitySignals.reduce((score: number, q: any) => {
+            if (!q) return score;
+            return score
+                + (q.hasTests ? 2 : 0)
+                + (q.hasCI ? 2 : 0)
+                + (q.hasTypeScript ? 1 : 0)
+                + (q.hasLinting ? 1 : 0)
+                + (q.complexity === 'high' ? 2 : q.complexity === 'medium' ? 1 : 0);
+        }, 0);
+
+        const reportData = await analyzeWithDeepSeek(DEEPSEEK_KEY, profileData, profileData.codeSamples);
+        const primaryRepo = profileData.topRepos[0].name;
 
         const savedCandidate = await prisma.candidate.upsert({
             where: { githubUrl },
@@ -170,17 +180,22 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 candidateId: savedCandidate.id,
                 userId: user?.id || null,
                 guestIp: user ? null : (Array.isArray(requesterIp) ? requesterIp[0] : requesterIp),
-                archetype: reportData.label || reportData.archetype || 'Unknown', // Use label as archetype for backward compatibility
+                archetype: reportData.label || 'Unknown',
                 label: reportData.label,
                 trajectorySummary: reportData.trajectory_summary,
                 recruiterSummary: reportData.recruiter_summary,
-                meritPoints: reportData.highlights || reportData.merit_points,
-                confidence: reportData.technical_signal ? 100 : 50, // Use technical_signal presence as confidence indicator
+                meritPoints: reportData.highlights as any,
+                confidence: 100,
                 repoName: primaryRepo,
                 metadata: {
-                    ...metadata,
+                    userStats: profileData.userStats,
+                    starDistribution: profileData.starDistribution,
+                    qualitySignals: profileData.qualitySignals,
+                    qualityScore,
                     technical_signal: reportData.technical_signal,
-                    technical_signal_detailed: reportData.technical_signal_detailed
+                    technical_signal_detailed: reportData.technical_signal_detailed,
+                    verified_skills: reportData.verified_skills,
+                    highest_repo_stars: reportData.highest_repo_stars
                 } as any
             },
             include: { candidate: true }

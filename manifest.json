@@ -3,15 +3,22 @@
     "name": "Vibechekk",
     "version": "1.0.0",
     "description": "Trajectory of Merit for Developers",
+    "icons": {
+        "16": "vibe-icon.svg",
+        "48": "vibe-icon.svg",
+        "128": "vibe-icon.svg"
+    },
     "permissions": [
         "storage",
         "sidePanel"
     ],
     "side_panel": {
-        "default_path": "index.html"
+        "default_path": "index.html",
+        "default_title": " "
     },
     "action": {
-        "default_title": "Open Vibechekk"
+        "default_title": "Open Vibechekk",
+        "default_icon": "vibe-icon.svg"
     },
     "host_permissions": [
         "https://api.github.com/*",
