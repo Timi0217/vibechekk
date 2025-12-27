@@ -24,16 +24,19 @@
 
 body {
   margin: 0;
-  padding: 0;
+  padding: 0 16px;
+  /* Aggressive pull-away from edges */
   background-color: var(--bg-gray);
   color: var(--text-main);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   min-height: 520px;
-  width: 380px;
-  max-width: 380px;
+  width: 100%;
+  max-width: 400px;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
+  align-items: center;
+  /* Center the container if width allows */
 }
 
 .popup-container {
@@ -41,13 +44,21 @@ body {
   flex-direction: column;
   flex: 1;
   width: 100%;
+  max-width: 360px;
+  /* Standardize on 360px for safety */
   background-color: var(--bg-light);
+  overflow-x: hidden;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  /* Add rounding to make it look like a floating card */
+  margin: 12px 0;
+  /* Space from top/bottom of panel */
 }
 
 header {
-  padding: 14px 20px;
-  background: var(--bg-light);
-  border-bottom: 2px solid var(--border);
+  padding: 14px 16px;
+  background: white;
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -106,10 +117,9 @@ header {
 
 /* Content */
 main {
-  padding: 0 20px 20px 20px;
+  padding: 0 16px 20px 16px;
   flex: 1;
   width: 100%;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }
