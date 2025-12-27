@@ -166,7 +166,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
         }, 0);
 
         const reportData = await analyzeWithDeepSeek(DEEPSEEK_KEY, profileData, profileData.codeSamples);
-        const primaryRepo = profileData.topRepos[0].name;
+        const primaryRepo = profileData.topRepos.length > 0 ? profileData.topRepos[0].name : 'No Public Projects';
 
         const savedCandidate = await prisma.candidate.upsert({
             where: { githubUrl },
@@ -180,11 +180,11 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 candidateId: savedCandidate.id,
                 userId: user?.id || null,
                 guestIp: user ? null : (Array.isArray(requesterIp) ? requesterIp[0] : requesterIp),
-                archetype: reportData.label || 'Unknown',
-                label: reportData.label,
-                trajectorySummary: reportData.trajectory_summary,
-                recruiterSummary: reportData.recruiter_summary,
-                meritPoints: reportData.highlights as any,
+                archetype: reportData.label || 'THE PRACTICAL BUILDER',
+                label: reportData.label || 'THE PRACTICAL BUILDER',
+                trajectorySummary: reportData.trajectory_summary || 'Trajectory analysis pending.',
+                recruiterSummary: reportData.recruiter_summary || 'Detailed analysis pending.',
+                meritPoints: (reportData.highlights || []) as any,
                 confidence: 100,
                 repoName: primaryRepo,
                 metadata: {

@@ -336,12 +336,10 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     forkRatio: 0
   };
 
-  if (!topRepos || topRepos.length === 0) throw new Error('No public repositories found');
-
-  // 2. Extra Signals
-  const qualitySignals = await Promise.all(
-    topRepos.slice(0, 3).map(r => fetchCodeQualitySignals(token, username, r.name))
-  );
+  // 2. Extra Signals (only if repos exist)
+  const qualitySignals = topRepos.length > 0
+    ? await Promise.all(topRepos.slice(0, 3).map(r => fetchCodeQualitySignals(token, username, r.name)))
+    : [];
 
   // 3. Maintainer Status for Titans
   await Promise.all(topRepos.map(async (repo: any) => {

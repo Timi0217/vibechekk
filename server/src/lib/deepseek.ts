@@ -113,6 +113,23 @@ Based on star thresholds, you MUST return:
 Do NOT deviate from this classification.
 ` : ''}
 
+### OUTPUT STRUCTURE:
+Return a JSON object:
+{
+  "label": "THE [LABEL NAME]",
+  "rarity": "LEGENDARY" | "RARE" | "UNCOMMON" | "COMMON",
+  "rarity_badge": "🟡" | "🟣" | "🔵" | "⚪",
+  "rarity_percentile": "Top X%",
+  "trajectory_summary": "1 sentence evolution summary.",
+  "recruiter_summary": "3 detailed paragraphs analysis.",
+  "highlights": [
+    { "title": "...", "detail": "..." }
+  ],
+  "technical_signal": "Short technical proof.",
+  "technical_signal_detailed": "Evidence-backed deep dive.",
+  "verified_skills": ["Skill | Level | Evidence"]
+}
+
 Return JSON matching the structure exactly.
 `;
 
@@ -151,6 +168,15 @@ If the user message includes a LOCKED classification, you MUST return that exact
         }
 
         const analysis = JSON.parse(data.choices[0].message?.content || '{}');
+
+        // ENSURE REQUIRED FIELDS EXIST (Safety against AI omission)
+        analysis.label = analysis.label || (typeLock || 'THE PRACTICAL BUILDER');
+        analysis.trajectory_summary = analysis.trajectory_summary || `Evolved through ${globalMetadata.topRepos.length} repositories with a focus on ${globalMetadata.userStats?.languages?.[0] || 'software engineering'}.`;
+        analysis.recruiter_summary = analysis.recruiter_summary || analysis.trajectory_summary;
+        analysis.highlights = analysis.highlights || [
+            { title: "Technical Impact", detail: `Built projects with ${highestStars} peak stars.` },
+            { title: "Language Diversity", detail: `Proficient in ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.` }
+        ];
 
         // POST-VALIDATION: Override if DeepSeek violated constraints
         if (typeLock && analysis.label !== typeLock) {
