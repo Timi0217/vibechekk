@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, CheckCircle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award } from 'lucide-react'
+import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -432,10 +432,9 @@ function App() {
                         setCopiedId('summary');
                         setTimeout(() => setCopiedId(null), 2000);
                       }}
-                      title={copiedId === 'summary' ? "Copied!" : "Copy summary"}
                     >
                       {copiedId === 'summary' ? (
-                        <CheckCircle size={14} strokeWidth={2} color="#10b981" />
+                        <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
                       ) : (
                         <Copy size={14} strokeWidth={2} />
                       )}
@@ -488,10 +487,9 @@ function App() {
                           setCopiedId('signal');
                           setTimeout(() => setCopiedId(null), 2000);
                         }}
-                        title={copiedId === 'signal' ? "Copied!" : "Copy signal"}
                       >
                         {copiedId === 'signal' ? (
-                          <CheckCircle size={14} strokeWidth={2} color="#10b981" />
+                          <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
                         ) : (
                           <Copy size={14} strokeWidth={2} />
                         )}
@@ -510,51 +508,54 @@ function App() {
                   </div>
                 )}
               </div>
-            )}
+            )
+            }
 
-            {selectedReport.metadata?.verified_skills && (
-              <div className="detail-section">
-                <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
-                <div
-                  className="section-header-btn"
-                  onClick={() => setShowSkills(!showSkills)}
-                  style={{ marginBottom: '8px' }}
-                >
-                  <h3 className="section-title">SKILLS VERIFIED FROM CODE</h3>
-                  {showSkills ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                </div>
-                {showSkills && (
-                  <div className="merit-grid scrollable">
-                    {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
-                      const isExpanded = expandedSkills.includes(i);
-                      const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
-
-                      const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
-                      const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
-                      const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
-
-                      return (
-                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                          <div className="merit-header">
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                              <span className="merit-title">{name}</span>
-                            </div>
-                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
-                          </div>
-                          {isExpanded && (
-                            <div className="merit-detail">
-                              {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
-                              {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+            {
+              selectedReport.metadata?.verified_skills && (
+                <div className="detail-section">
+                  <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
+                  <div
+                    className="section-header-btn"
+                    onClick={() => setShowSkills(!showSkills)}
+                    style={{ marginBottom: '8px' }}
+                  >
+                    <h3 className="section-title">SKILLS VERIFIED FROM CODE</h3>
+                    {showSkills ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                   </div>
-                )}
-              </div>
-            )}
+                  {showSkills && (
+                    <div className="merit-grid scrollable">
+                      {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
+                        const isExpanded = expandedSkills.includes(i);
+                        const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
+
+                        const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
+                        const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
+                        const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
+
+                        return (
+                          <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                            <div className="merit-header">
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                                <span className="merit-title">{name}</span>
+                              </div>
+                              {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                            </div>
+                            {isExpanded && (
+                              <div className="merit-detail">
+                                {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
+                                {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
 
 
             <div className="detail-section">
@@ -621,7 +622,7 @@ function App() {
                 DOWNLOAD REPORT CARD
               </button>
             </div>
-          </div>
+          </div >
         ) : (
           <>
             {activeTab === 'analyze' && (
@@ -903,8 +904,9 @@ function App() {
               </div>
             )}
           </>
-        )}
-      </main>
+        )
+        }
+      </main >
     </div >
   )
 }

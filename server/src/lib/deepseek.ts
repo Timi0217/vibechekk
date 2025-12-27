@@ -136,7 +136,7 @@ Using the code samples above, you MUST identify:
 5. **Security practices** - Input validation? Auth patterns? SQL injection prevention?
 
 Use SPECIFIC EXAMPLES from the code diffs to back up your claims.
-⚠️ CRITICAL OVERRIDE ⚠️
+${typeLock ? `⚠️ CRITICAL OVERRIDE ⚠️
 Based on pre-classification logic, you MUST return:
 {
   "label": "${typeLock}",
@@ -145,8 +145,7 @@ Based on pre-classification logic, you MUST return:
   ...
 }
 Do NOT deviate from this classification.
-` : ''
-}
+` : ''}
 
 ### OUTPUT STRUCTURE:
 Return a JSON object with this exact structure:
@@ -189,7 +188,7 @@ Return ONLY valid JSON matching this structure.
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${ apiKey } `
+                'Authorization': `Bearer ${apiKey} `
             },
             body: JSON.stringify({
                 model: 'deepseek-chat',
@@ -228,87 +227,87 @@ Be forensic in finding technical debt.Every developer has weaknesses - find them
             try {
                 let cleaned = text.trim();
                 if (cleaned.startsWith('```')) {
-cleaned = cleaned.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+                    cleaned = cleaned.replace(/^```json\n?/, '').replace(/\n?```$/, '');
                 }
-cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
-return JSON.parse(cleaned);
+                cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
+                return JSON.parse(cleaned);
             } catch (e) {
-    try {
-        const firstBrace = text.indexOf('{');
-        const lastBrace = text.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) {
-            return JSON.parse(text.substring(firstBrace, lastBrace + 1));
-        }
-    } catch (e2) { }
-    throw e;
-}
+                try {
+                    const firstBrace = text.indexOf('{');
+                    const lastBrace = text.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1) {
+                        return JSON.parse(text.substring(firstBrace, lastBrace + 1));
+                    }
+                } catch (e2) { }
+                throw e;
+            }
         };
 
-let analysis;
-try {
-    analysis = cleanJsonResponse(rawContent);
-} catch (error) {
-    console.error('[DeepSeek] Fatal JSON Error:', error);
-    // FAILSAFE: Return a basic template
-    analysis = {
-        label: typeLock || 'THE TINKERER',
-        rarity: tierLock || 'COMMON',
-        rarity_badge: tierLock === 'LEGENDARY' ? '🟡' : tierLock === 'RARE' ? '🟣' : tierLock === 'UNCOMMON' ? '🔵' : '⚪',
-        trajectory_summary: 'Technical profile analysis exceeded token limits or contained invalid characters.',
-        recruiter_summary: 'Unable to parse detailed AI summary due to response format error.',
-        highlights: []
-    };
-}
+        let analysis;
+        try {
+            analysis = cleanJsonResponse(rawContent);
+        } catch (error) {
+            console.error('[DeepSeek] Fatal JSON Error:', error);
+            // FAILSAFE: Return a basic template
+            analysis = {
+                label: typeLock || 'THE TINKERER',
+                rarity: tierLock || 'COMMON',
+                rarity_badge: tierLock === 'LEGENDARY' ? '🟡' : tierLock === 'RARE' ? '🟣' : tierLock === 'UNCOMMON' ? '🔵' : '⚪',
+                trajectory_summary: 'Technical profile analysis exceeded token limits or contained invalid characters.',
+                recruiter_summary: 'Unable to parse detailed AI summary due to response format error.',
+                highlights: []
+            };
+        }
 
-// ENSURE REQUIRED FIELDS EXIST
-analysis.label = analysis.label || (typeLock || 'THE TINKERER');
-analysis.rarity = analysis.rarity || (tierLock || 'COMMON');
-analysis.rarity_badge = analysis.rarity_badge || '⚪';
-analysis.trajectory_summary = analysis.trajectory_summary || `Evolved through ${globalMetadata.topRepos.length} repositories with a focus on ${globalMetadata.userStats?.languages?.[0] || 'software engineering'}.`;
-analysis.recruiter_summary = analysis.recruiter_summary || analysis.trajectory_summary;
+        // ENSURE REQUIRED FIELDS EXIST
+        analysis.label = analysis.label || (typeLock || 'THE TINKERER');
+        analysis.rarity = analysis.rarity || (tierLock || 'COMMON');
+        analysis.rarity_badge = analysis.rarity_badge || '⚪';
+        analysis.trajectory_summary = analysis.trajectory_summary || `Evolved through ${globalMetadata.topRepos.length} repositories with a focus on ${globalMetadata.userStats?.languages?.[0] || 'software engineering'}.`;
+        analysis.recruiter_summary = analysis.recruiter_summary || analysis.trajectory_summary;
 
-// **POST-PROCESS HIGHLIGHTS**: Enforce distribution
-const highlights = analysis.highlights || [];
-let positives = highlights.filter((h: any) => h.type === 'positive');
-let negatives = highlights.filter((h: any) => h.type === 'negative');
+        // **POST-PROCESS HIGHLIGHTS**: Enforce distribution
+        const highlights = analysis.highlights || [];
+        let positives = highlights.filter((h: any) => h.type === 'positive');
+        let negatives = highlights.filter((h: any) => h.type === 'negative');
 
-// Enforce 3 positives, 1-2 negatives
-if (positives.length > 3) positives = positives.slice(0, 3);
-if (positives.length < 3) {
-    // Add generic positives if needed
-    while (positives.length < 3) {
-        positives.push({
-            title: "Technical Range",
-            detail: `Works across ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.`,
-            type: "positive"
-        });
-    }
-}
+        // Enforce 3 positives, 1-2 negatives
+        if (positives.length > 3) positives = positives.slice(0, 3);
+        if (positives.length < 3) {
+            // Add generic positives if needed
+            while (positives.length < 3) {
+                positives.push({
+                    title: "Technical Range",
+                    detail: `Works across ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.`,
+                    type: "positive"
+                });
+            }
+        }
 
-if (negatives.length === 0) {
-    // FORCE at least one negative
-    negatives.push({
-        title: "Documentation Gaps",
-        detail: "Limited README content or missing contributor guidelines in public repositories.",
-        type: "negative"
-    });
-}
-if (negatives.length > 2) negatives = negatives.slice(0, 2);
+        if (negatives.length === 0) {
+            // FORCE at least one negative
+            negatives.push({
+                title: "Documentation Gaps",
+                detail: "Limited README content or missing contributor guidelines in public repositories.",
+                type: "negative"
+            });
+        }
+        if (negatives.length > 2) negatives = negatives.slice(0, 2);
 
-analysis.highlights = [...positives, ...negatives];
+        analysis.highlights = [...positives, ...negatives];
 
-// POST-VALIDATION: Override if DeepSeek violated constraints
-if (typeLock && analysis.label !== typeLock) {
-    console.warn(`[Override] DeepSeek returned "${analysis.label}", forcing to "${typeLock}"`);
-    analysis.label = typeLock;
-    analysis.rarity = tierLock;
-    analysis.rarity_badge = tierLock === 'LEGENDARY' ? '🟡' : tierLock === 'RARE' ? '🟣' : tierLock === 'UNCOMMON' ? '🔵' : '⚪';
-    analysis.rarity_percentile = tierLock === 'LEGENDARY' ? 'Top 5%' : tierLock === 'RARE' ? 'Top 15%' : tierLock === 'UNCOMMON' ? 'Top 30%' : 'Bottom 50%';
-}
+        // POST-VALIDATION: Override if DeepSeek violated constraints
+        if (typeLock && analysis.label !== typeLock) {
+            console.warn(`[Override] DeepSeek returned "${analysis.label}", forcing to "${typeLock}"`);
+            analysis.label = typeLock;
+            analysis.rarity = tierLock;
+            analysis.rarity_badge = tierLock === 'LEGENDARY' ? '🟡' : tierLock === 'RARE' ? '🟣' : tierLock === 'UNCOMMON' ? '🔵' : '⚪';
+            analysis.rarity_percentile = tierLock === 'LEGENDARY' ? 'Top 5%' : tierLock === 'RARE' ? 'Top 15%' : tierLock === 'UNCOMMON' ? 'Top 30%' : 'Bottom 50%';
+        }
 
-return analysis;
+        return analysis;
     } catch (error) {
-    console.error('[DeepSeek] Analysis error:', error);
-    throw error;
-}
+        console.error('[DeepSeek] Analysis error:', error);
+        throw error;
+    }
 };
