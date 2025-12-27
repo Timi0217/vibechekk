@@ -178,7 +178,11 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     };
 
     // Check if high stars are from non-code work (curated lists, tutorials, etc.)
-    const isViralNonCode = highestStars >= 500 && (topRepo?.educationalMeta?.isEducational || topRepo?.educationalMeta?.isLikelyGuide) && qualitySignals.avgFileCount < 20;
+    // BUT: massive stars (100K+) = genuine impact regardless of type
+    // AND: 25K+ educational stars = THE PROFESSOR, not blocked
+    const isViralNonCode = highestStars >= 500 && highestStars < 25000 &&
+        (topRepo?.educationalMeta?.isEducational || topRepo?.educationalMeta?.isLikelyGuide) &&
+        qualitySignals.avgFileCount < 20;
 
     console.log(`[Visibility vs Skill] Stars: ${visibilityScore.level}, Quality: ${skillScore.codeQuality}, Domain: ${skillScore.domainDepth}`);
 
@@ -214,16 +218,40 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const domainExpertiseCount = Object.values(domains).filter(count => count >= 2).length;
     const hasMultiDomainExpertise = domainExpertiseCount >= 3; // Expert in 3+ domains
 
+    // ═══════════════════════════════════════════════════════════════════════════
     // HYPER RARE: True industry legends - should be EXTREMELY rare
-    // PATH 1: Massive stars (25K+) with quality
-    if (highestStars >= 25000 && !isViralNonCode && hasQualityPractices) {
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // PATH 0: MASSIVE educational impact (100K+ stars) = THE PROFESSOR (HYPER RARE)
+    if (highestStars >= 100000 && isEducationalContent) {
+        tier = 'HYPER RARE';
+        tierBadge = '🌟🌟🌟';
+        percentile = 'Top 1%';
+        archetype = 'THE PROFESSOR';
+        classificationReason = 'Industry-defining educational impact reaching millions';
+    }
+    // PATH 1: Massive code stars (100K+) = THE 10X ENGINEER
+    else if (highestStars >= 100000 && !isEducationalContent) {
         tier = 'HYPER RARE';
         tierBadge = '🌟🌟🌟';
         percentile = 'Top 1%';
         archetype = 'THE 10X ENGINEER';
-        classificationReason = 'Industry-defining impact with widely-adopted tools';
+        classificationReason = 'Industry-defining tools used by millions';
     }
-    // PATH 2: High stars (10K+) with production-ready quality + active + specialized
+    // PATH 2: High stars (25K+) with quality code work
+    else if (highestStars >= 25000 && !isViralNonCode && hasQualityPractices) {
+        tier = 'HYPER RARE';
+        tierBadge = '🌟🌟🌟';
+        percentile = 'Top 1%';
+        if (isEducationalContent) {
+            archetype = 'THE PROFESSOR';
+            classificationReason = 'Major educational influence reaching hundreds of thousands';
+        } else {
+            archetype = 'THE 10X ENGINEER';
+            classificationReason = 'Industry-defining impact with widely-adopted tools';
+        }
+    }
+    // PATH 3: 10K+ stars with production-ready quality + active + specialized
     else if (highestStars >= 10000 && !isViralNonCode && qualityTier === 'production-ready' && isRecentlyActive && hasSpecialization) {
         tier = 'HYPER RARE';
         tierBadge = '🌟🌟🌟';
