@@ -437,6 +437,7 @@ export const findTopRepos = async (token: string, username: string) => {
       forks: repo.forkCount,
       updatedAt: repo.updatedAt,
       isFork: repo.isFork,
+      isMaintainer: false, // Will be updated in analyzeGitHubProfile
       totalCommits: repo.defaultBranchRef?.target?.history?.totalCount || 0,
       commits: repo.defaultBranchRef?.target?.history?.nodes || []
     }));
