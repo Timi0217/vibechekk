@@ -79,19 +79,16 @@ function App() {
   const [tokens, setTokens] = useState({ github: '', deepseek: '', vibeToken: '' })
   const [history, setHistory] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [atsInput, setAtsInput] = useState({ key: '', type: 'ashby' as 'ashby' | 'greenhouse' })
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [selectedReport, setSelectedReport] = useState<any>(null)
   const [authStep, setAuthStep] = useState<'none' | 'ashby' | 'greenhouse'>('none')
-  const [expandedMerits, setExpandedMerits] = useState<number[]>([])
   const [showFullSummary, setShowFullSummary] = useState(false)
   const [showDetailedSummary, setShowDetailedSummary] = useState(false)
   const [showTechnicalSignal, setShowTechnicalSignal] = useState(false)
   const [showDetailedTechnical, setShowDetailedTechnical] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [expandedSkills, setExpandedSkills] = useState<number[]>([])
   const [loadingStep, setLoadingStep] = useState(0)
   const activeTabRef = useRef(activeTab)
 
@@ -105,8 +102,6 @@ function App() {
     setShowDetailedSummary(false)
     setShowTechnicalSignal(false)
     setShowDetailedTechnical(false)
-    setExpandedSkills([])
-    setExpandedMerits([])
   }
 
   useEffect(() => {
@@ -297,7 +292,7 @@ function App() {
         <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
           <div style={{ position: 'relative' }}>
             <Clock size={14} strokeWidth={2} />
-            {isLoading && (
+            {pendingHandles.length > 0 && (
               <div style={{
                 position: 'absolute',
                 top: '-6px',
@@ -514,28 +509,22 @@ function App() {
                   <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>SKILLS VERIFIED FROM CODE</h3>
                   <div className="merit-grid scrollable">
                     {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
-                      const isExpanded = expandedSkills.includes(i);
-                      const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
-
                       const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
                       const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
                       const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
 
                       return (
-                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                        <div key={i} className="merit-card expanded" style={{ cursor: 'default' }}>
                           <div className="merit-header">
                             <div style={{ display: 'flex', alignItems: 'center' }}>
                               <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
                               <span className="merit-title">{name}</span>
                             </div>
-                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                           </div>
-                          {isExpanded && (
-                            <div className="merit-detail">
-                              {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
-                              {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
-                            </div>
-                          )}
+                          <div className="merit-detail">
+                            {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
+                            {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                          </div>
                         </div>
                       );
                     })}
@@ -550,15 +539,9 @@ function App() {
               <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
               <div className="merit-grid">
                 {selectedReport.meritPoints.map((point: any, i: number) => {
-                  const isExpanded = expandedMerits.includes(i);
                   const isNegative = point.type === 'negative';
-                  const toggle = () => {
-                    setExpandedMerits((prev: number[]) =>
-                      prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
-                    );
-                  };
                   return (
-                    <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                    <div key={i} className={`merit-card expanded ${isNegative ? 'negative' : ''}`} style={{ cursor: 'default' }}>
                       <div className="merit-header">
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           {isNegative ? (
@@ -568,29 +551,26 @@ function App() {
                           )}
                           <span className="merit-title">{point.title || point}</span>
                         </div>
-                        {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                       </div>
-                      {isExpanded && (
-                        <div className="merit-detail">
-                          <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
+                      <div className="merit-detail">
+                        <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
 
-                          {point.business_impact && (
-                            <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
-                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
-                              <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
-                            </div>
-                          )}
+                        {point.business_impact && (
+                          <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
+                            <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
+                            <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
+                          </div>
+                        )}
 
-                          {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
-                            <div>
-                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
-                              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                        {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
+                          <div>
+                            <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
+                            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
