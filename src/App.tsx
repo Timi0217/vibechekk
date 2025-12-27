@@ -79,6 +79,17 @@ const getRarityClass = (rarity: string) => {
   return 'common';
 }
 
+const pluralizeArchetype = (name: string) => {
+  if (!name) return name;
+  // Strip "THE " prefix
+  let cleaned = name.replace(/^THE\s+/i, '');
+  const upper = cleaned.toUpperCase();
+  if (upper.includes('CRAFTSPERSON')) return cleaned.replace(/CRAFTSPERSON/i, 'CRAFTSPEOPLE');
+  if (upper.includes('HIDDEN GEM')) return cleaned.replace(/HIDDEN GEM/i, 'HIDDEN GEMS');
+  if (upper.endsWith('S') || upper.endsWith('X')) return cleaned + 'ES';
+  return cleaned + 'S';
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('analyze')
   const [manualUrl, setManualUrl] = useState('')
@@ -716,7 +727,7 @@ function App() {
               <div className="history-list">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h2 className="section-title" style={{ margin: 0 }}>
-                    {archetypeFilter ? `${archetypeFilter}` : 'History'}
+                    {archetypeFilter ? pluralizeArchetype(archetypeFilter) : 'History'}
                   </h2>
                   {archetypeFilter && (
                     <button
@@ -885,7 +896,7 @@ function App() {
                                       <div className="archetype-icon-small">
                                         <ArchetypeIcon label={arch} size={14} />
                                       </div>
-                                      <span className="stat-arch-name">{arch}</span>
+                                      <span className="stat-arch-name">{pluralizeArchetype(arch)}</span>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                       <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
