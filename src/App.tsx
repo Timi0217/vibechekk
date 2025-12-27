@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award } from 'lucide-react'
+import { Clock, Sliders, Search, TrendingUp, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -84,10 +84,6 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [selectedReport, setSelectedReport] = useState<any>(null)
   const [authStep, setAuthStep] = useState<'none' | 'ashby' | 'greenhouse'>('none')
-  const [showFullSummary, setShowFullSummary] = useState(false)
-  const [showDetailedSummary, setShowDetailedSummary] = useState(false)
-  const [showTechnicalSignal, setShowTechnicalSignal] = useState(false)
-  const [showDetailedTechnical, setShowDetailedTechnical] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [loadingStep, setLoadingStep] = useState(0)
   const activeTabRef = useRef(activeTab)
@@ -98,10 +94,6 @@ function App() {
 
   const handleOpenReport = (report: any) => {
     setSelectedReport(report)
-    setShowFullSummary(false)
-    setShowDetailedSummary(false)
-    setShowTechnicalSignal(false)
-    setShowDetailedTechnical(false)
   }
 
   useEffect(() => {
@@ -391,116 +383,57 @@ function App() {
               </div>
             </div>
 
-            <div className="detail-section">
-              <button
-                onClick={() => {
-                  setShowFullSummary(!showFullSummary);
-                  if (!showFullSummary) setShowDetailedSummary(false);
-                }}
-                className="section-header-btn"
-              >
-                <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
-                {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
-              </button>
-
-              {showFullSummary && (
-                <div className="trajectory-box expanded">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                    <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
-                      {showDetailedSummary
-                        ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                        : (selectedReport.trajectorySummary || selectedReport.trajectory)
-                      }
-                    </p>
-                    <button
-                      className="copy-icon-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const text = showDetailedSummary
-                          ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                          : selectedReport.trajectorySummary;
-                        navigator.clipboard.writeText(text);
-                        setCopiedId('summary');
-                        setTimeout(() => setCopiedId(null), 2000);
-                      }}
-                    >
-                      {copiedId === 'summary' ? (
-                        <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
-                      ) : (
-                        <Copy size={14} strokeWidth={2} />
-                      )}
-                    </button>
-                  </div>
-
-                  {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
-                    <button
-                      className="view-more-btn"
-                      onClick={() => setShowDetailedSummary(!showDetailedSummary)}
-                      style={{ marginTop: '12px' }}
-                    >
-                      {showDetailedSummary ? 'view less' : 'view more'}
-                    </button>
+            <div className="trajectory-box expanded" style={{ marginTop: '4px' }}>
+              <h3 className="section-title" style={{ marginBottom: '12px', textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
+                  {selectedReport.recruiterSummary || selectedReport.recruiter_summary || selectedReport.trajectorySummary || selectedReport.trajectory}
+                </p>
+                <button
+                  className="copy-icon-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const text = selectedReport.recruiterSummary || selectedReport.recruiter_summary || selectedReport.trajectorySummary;
+                    navigator.clipboard.writeText(text);
+                    setCopiedId('summary');
+                    setTimeout(() => setCopiedId(null), 2000);
+                  }}
+                >
+                  {copiedId === 'summary' ? (
+                    <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
+                  ) : (
+                    <Copy size={14} strokeWidth={2} />
                   )}
-                </div>
-              )}
+                </button>
+              </div>
             </div>
 
             {selectedReport.metadata?.technical_signal && (
-              <div className="detail-section">
-                <button
-                  onClick={() => {
-                    setShowTechnicalSignal(!showTechnicalSignal);
-                    if (!showTechnicalSignal) setShowDetailedTechnical(false);
-                  }}
-                  className="section-header-btn"
-                >
-                  <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
-                  {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
-                </button>
-
-                {showTechnicalSignal && (
-                  <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                      <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
-                        {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                          ? selectedReport.metadata.technical_signal_detailed
-                          : selectedReport.metadata.technical_signal
-                        }
-                      </p>
-                      <button
-                        className="copy-icon-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                            ? selectedReport.metadata.technical_signal_detailed
-                            : selectedReport.metadata.technical_signal;
-                          navigator.clipboard.writeText(text);
-                          setCopiedId('signal');
-                          setTimeout(() => setCopiedId(null), 2000);
-                        }}
-                      >
-                        {copiedId === 'signal' ? (
-                          <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
-                        ) : (
-                          <Copy size={14} strokeWidth={2} />
-                        )}
-                      </button>
-                    </div>
-
-                    {selectedReport.metadata.technical_signal_detailed && (
-                      <button
-                        className="view-more-btn"
-                        onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
-                        style={{ marginTop: '12px' }}
-                      >
-                        {showDetailedTechnical ? 'view less' : 'view more'}
-                      </button>
+              <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)', marginTop: '8px' }}>
+                <h3 className="section-title" style={{ marginBottom: '12px', textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
+                    {selectedReport.metadata.technical_signal_detailed || selectedReport.metadata.technical_signal}
+                  </p>
+                  <button
+                    className="copy-icon-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const text = selectedReport.metadata.technical_signal_detailed || selectedReport.metadata.technical_signal;
+                      navigator.clipboard.writeText(text);
+                      setCopiedId('signal');
+                      setTimeout(() => setCopiedId(null), 2000);
+                    }}
+                  >
+                    {copiedId === 'signal' ? (
+                      <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
+                    ) : (
+                      <Copy size={14} strokeWidth={2} />
                     )}
-                  </div>
-                )}
+                  </button>
+                </div>
               </div>
-            )
-            }
+            )}
 
             {
               selectedReport.metadata?.verified_skills && (
@@ -579,7 +512,7 @@ function App() {
                 <FileDown size={16} />
                 DOWNLOAD REPORT CARD
               </button>
-            </div>
+            </div >
           </div >
         ) : (
           <>
