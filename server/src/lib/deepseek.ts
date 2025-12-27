@@ -212,114 +212,78 @@ ${typeLock ? `🔒 CLASSIFICATION LOCKED: "${typeLock}" 🔒
 Reason: ${lockReason}
 You MUST return this exact label and rarity_badge. No exceptions.
 
-` : ''}Analyze this developer using the 15-ARCHETYPE system with EXACT classification rules.
+` : ''}You are analyzing a developer's GitHub profile. Use the internal metrics below ONLY for classification. DO NOT expose raw numbers in your output.
 
-### AGGREGATE STATS:
-- IMPACT_SCORE: ${impactScore.toFixed(0)} / 1000
-- QUALITY_SCORE: ${qualityScore}/10
-- SKILL_COMPLEXITY: ${skillComplexityScore.totalComplexity} (Adv: ${skillComplexityScore.advanced}, Int: ${skillComplexityScore.intermediate}, Beg: ${skillComplexityScore.beginner})
-- TOTAL_STARS: ${totalStars}
-- LAST_90_DAYS_COMMITS: ${last90DaysCommits}
-- ACCOUNT_AGE: ${accountAgeYears.toFixed(1)} years
-- EXTERNAL_CONTRIBS: ${externalContribs}
-
-### AI CODE USAGE ANALYSIS:
-- AI_LIKELIHOOD: ${avgAILikelihood.toFixed(1)}% (0-20: Natural, 20-50: Moderate, 50-80: Heavy, 80-100: AI-dependent)
-- QUALITY_VALIDATION: ${qualityScore >= 7 ? 'VALIDATED (tests/CI present)' : 'UNVALIDATED'}
-${globalMetadata.aiCodeAnalysis?.slice(0, 3).map((a: any) => `
-Repo "${a.repo}":
-  - Explicit AI markers: ${a.signals.explicitMarkers}
-  - AI in commits: ${a.signals.commitAIReferences}
-  - Comment density: ${(a.signals.commentDensity * 100).toFixed(0)}%
-  - AI likelihood: ${a.signals.aiLikelihoodScore}%
-`).join('') || ''}
-
-### AI USAGE INTERPRETATION FOR HIGHLIGHTS:
-
-**POSITIVE SIGNAL (use when applicable):**
-- AI 20-60% + Quality ≥7 → "Effective AI Tool Usage"
-  Title: "Modern Development Workflow"
-  Detail: "Leverages AI coding assistants effectively with ${qualityScore}/10 quality score. Tests and CI validate AI-generated code."
-  Type: positive
-
-**NEGATIVE SIGNAL (use when applicable):**
-- AI >70% + Quality <5 → "Heavy AI Reliance Without Validation"
-  Title: "AI Code Without Quality Gates"
-  Detail: "${avgAILikelihood.toFixed(0)}% AI-generated patterns with limited testing/CI validation."
-  Type: negative
-
-- AI >80% + No tests/CI → "Unvalidated AI Scaffolding"
-  Title: "Copy-Paste AI Development"
-  Detail: "Extensive AI boilerplate without code review or testing evidence."
-  Type: negative
-
-**RECRUITER_SUMMARY AI CONTEXT:**
-- If AI 20-60% + Quality ≥7: Mention in paragraph 2 as "pragmatic use of modern AI tools with proper validation"
-- If AI >70% + Quality <5: Flag in paragraph 2 as "recommend assessing hands-on coding ability during interview"
+### INTERNAL METRICS (for classification only - DO NOT include these numbers in output):
+- Impact: ${impactScore.toFixed(0)}/1000
+- Quality: ${qualityScore}/10
+- Complexity: ${skillComplexityScore.totalComplexity}
+- Stars: ${totalStars}
+- Recent Activity: ${last90DaysCommits} commits in 90 days
+- Account Age: ${accountAgeYears.toFixed(1)} years
+- AI Likelihood: ${avgAILikelihood.toFixed(0)}%
+- Has Tests/CI: ${qualityScore >= 7 ? 'Yes' : 'No'}
 
 ### TOP REPOSITORIES:
 ${globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => {
         const quality = globalMetadata.qualitySignals[i];
-        return `
-${i + 1}. "${r.name}" 
-   - Stars: ${r.stars}
-   - Quality: Tests=${quality?.hasTests}, CI=${quality?.hasCI}, Complexity=${quality?.complexity}
-`;
-    }).join('')}
+        return `${i + 1}. "${r.name}" - ${r.stars} stars, ${r.language || 'Unknown'} ${quality?.hasTests ? '✓ Tests' : ''} ${quality?.hasCI ? '✓ CI' : ''}`;
+    }).join('\n')}
 
-### EXACT CLASSIFICATION RULES:
+### 15-ARCHETYPE SYSTEM:
+**🌟🌟🌟 HYPER RARE** - THE 10X ENGINEER (industry-defining impact)
+**🌟🌟 ULTRA RARE** - THE ARCHITECT (infrastructure builders), THE PROFESSOR (educators)
+**⭐ RARE** - THE SPECIALIST (deep expertise), THE SYSTEMS THINKER (distributed systems)
+**◆ UNCOMMON** - THE MAINTAINER, THE BUILDER, THE CONTRIBUTOR, THE CRAFTSPERSON, THE HIDDEN GEM
+**● COMMON** - THE TINKERER, THE GRINDER, THE HOBBYIST, THE EXPLORER, THE APPRENTICE
 
-**🌟🌟🌟 HYPER RARE (Top 1%)**
-- THE 10X ENGINEER: Impact ≥700 OR Stars ≥10K OR (Complexity ≥25 + Quality ≥8)
-
-**🌟🌟 ULTRA RARE (Top 5%)**
-- THE ARCHITECT: Impact 500-699, production tools
-- THE PROFESSOR: Impact 500-699, educational content
-
-**⭐ RARE (Top 15%)**
-- THE SPECIALIST: Complexity ≥15 OR niche domain (ML, crypto, compilers)
-- THE SYSTEMS THINKER: Complexity ≥12 + 2+ distributed keywords
-
-**◆ UNCOMMON (Top 30%)**
-- THE MAINTAINER: Maintainer + 100+ stars
-- THE BUILDER: 100-500 stars, shipping
-- THE CONTRIBUTOR: 100+ external contribs
-- THE CRAFTSPERSON: Quality ≥7 + Complexity ≥7
-- THE HIDDEN GEM: Quality ≥8 + Complexity ≥8 + Stars <100
-
-**● COMMON (50%)**
-- THE TINKERER: Complexity 5-10
-- THE GRINDER: Complexity 3-5, 40+ commits/90d OR 3+ repos
-- THE HOBBYIST: Complexity 4-7, <30 commits/90d, 1yr+ account
-- THE EXPLORER: 6+ languages + Complexity 3-7
-- THE APPRENTICE: Complexity <3
+### AI TOOL USAGE CONTEXT:
+${avgAILikelihood > 70 ? `⚠️ HIGH AI PATTERNS DETECTED - Many code samples show AI-generated characteristics (verbose comments, boilerplate patterns). ${qualityScore >= 7 ? 'However, quality gates (tests/CI) are present.' : 'No testing infrastructure to validate AI code.'}` : avgAILikelihood > 30 ? `✓ MODERATE AI USAGE - Developer uses AI tools pragmatically alongside manual coding. ${qualityScore >= 7 ? 'Quality validation present.' : ''}` : '✓ NATURAL CODING STYLE - Minimal AI-generated patterns detected.'}
 
 ### Code Samples:
 ${codeSamples}
 
-Return ONLY JSON:
+### OUTPUT REQUIREMENTS:
+
+**CRITICAL RULES FOR ALL TEXT FIELDS:**
+1. NEVER mention internal scores (complexity, quality, impact numbers)
+2. NEVER say "X/10" or "X%" or "score of Y"
+3. Describe abilities in plain English: "strong testing practices" not "quality score 8"
+4. Reference specific repos/technologies as evidence
+5. Write for a technical recruiter who doesn't know our scoring system
+
+**trajectory_summary**: 1-2 sentences describing their evolution as a developer. Reference actual technologies and projects.
+
+**recruiter_summary**: 3 paragraphs:
+- Paragraph 1: Technical strengths and areas of expertise. What can they build?
+- Paragraph 2: Code quality observations and development practices. ${avgAILikelihood > 70 ? 'Note: Address AI tool usage concerns if applicable - recommend hands-on coding assessment.' : avgAILikelihood > 30 && qualityScore >= 7 ? 'Note: They use AI tools effectively with proper validation.' : ''}
+- Paragraph 3: Collaboration signals and team fit indicators.
+
+**highlights**: 4-5 items with concrete evidence from their repos:
+- At least 3 positive highlights (specific achievements, technologies, patterns)
+- At least 1 negative highlight (gaps, missing practices, concerns)
+- ${avgAILikelihood > 70 && qualityScore < 7 ? 'MUST include a negative highlight about unvalidated AI-generated code patterns' : ''}
+- NEVER use raw numbers. Say "lacks comprehensive testing" not "0/10 test coverage"
+
+**technical_signal**: One sentence proving technical depth with a specific example.
+
+**technical_signal_detailed**: 2-3 paragraphs analyzing their code architecture, patterns, and problem-solving approach based on the code samples.
+
+**verified_skills**: List skills with evidence from their repos. Levels: Beginner, Intermediate, Advanced, Expert.
+
+Return ONLY this JSON structure:
 {
-  "label": "THE [NAME]",
+  "label": "THE [ARCHETYPE NAME]",
   "rarity": "HYPER RARE" | "ULTRA RARE" | "RARE" | "UNCOMMON" | "COMMON",
   "rarity_badge": "🌟🌟🌟" | "🌟🌟" | "⭐" | "◆" | "●",
-  "rarity_percentile": "Top X%",
-  "impact_score": ${impactScore.toFixed(0)},
-  "ai_usage": {
-    "likelihood": ${avgAILikelihood.toFixed(1)},
-    "interpretation": "${avgAILikelihood < 20 ? 'low' : avgAILikelihood < 50 ? 'moderate' : avgAILikelihood < 80 ? 'high' : 'very_high'}",
-    "quality_validated": ${qualityScore >= 7},
-    "badge": "${avgAILikelihood > 80 ? 'AI-HEAVY' : avgAILikelihood > 50 ? 'AI-ASSISTED' : avgAILikelihood > 20 ? 'AI-ENHANCED' : 'NATURAL'}",
-    "badge_color": "${avgAILikelihood > 70 && qualityScore < 5 ? 'orange' : avgAILikelihood > 20 && qualityScore >= 7 ? 'blue' : 'green'}"
-  },
-  "trajectory_summary": "1-2 sentence evolution",
-  "recruiter_summary": "3 paragraphs: (1) strengths, (2) quality + AI usage context, (3) collaboration",
+  "rarity_percentile": "Top 1%" | "Top 5%" | "Top 15%" | "Top 30%" | "Top 50%",
+  "trajectory_summary": "...",
+  "recruiter_summary": "...",
   "highlights": [{"title": "...", "detail": "...", "type": "positive"|"negative"}],
-  "technical_signal": "One sentence proof",
-  "technical_signal_detailed": "2-3 paragraphs deep dive",
-  "verified_skills": [{"name": "...", "level": "Beginner|Intermediate|Advanced|Expert", "evidence": "..."}]
+  "technical_signal": "...",
+  "technical_signal_detailed": "...",
+  "verified_skills": [{"name": "...", "level": "...", "evidence": "..."}]
 }
-
-CRITICAL: Include at least 1 negative highlight. If AI >50%, address it in highlights and recruiter_summary.
 `;
 
     try {
@@ -334,24 +298,25 @@ CRITICAL: Include at least 1 negative highlight. If AI >50%, address it in highl
                 messages: [
                     {
                         role: 'system',
-                        content: `Strict 15-Archetype Engineer Classifier with AI awareness.
+                        content: `You are a senior technical recruiter writing developer assessments. 
 
-CORE RULES:
-1. Impact 700+ = THE 10X ENGINEER
-2. Complexity 15+ OR 2+ systems keywords = THE SPECIALIST or THE SYSTEMS THINKER
-3. Quality 8+ + Complexity 8+ + Stars<100 = THE HIDDEN GEM
-4. Complexity 5-10 = THE TINKERER
-5. Complexity 3-5 + 40+ commits/90d = THE GRINDER
-6. Complexity 4-7 + <30 commits/90d + 1yr+ = THE HOBBYIST
-7. Complexity <3 = THE APPRENTICE
+CLASSIFICATION: Use the locked archetype from the user message. The 15 archetypes range from HYPER RARE (industry legends) to COMMON (emerging developers).
 
-AI USAGE RULES:
-- AI 20-60% + Quality ≥7 = POSITIVE highlight ("Modern Development Workflow")
-- AI >70% + Quality <5 = NEGATIVE highlight ("AI Code Without Quality Gates")
-- AI >80% + No tests = NEGATIVE highlight ("Unvalidated AI Scaffolding")
-- ALWAYS mention AI in recruiter_summary paragraph 2 if likelihood >50%
+WRITING STYLE:
+- Write for technical recruiters, not data scientists
+- NEVER mention internal scores, percentages, or metrics
+- Describe skills naturally: "strong backend expertise" not "complexity score 15"
+- Reference specific technologies, repos, and code patterns as evidence
+- Be specific and concrete, avoid generic statements
 
-Forensic analysis: Find at least one negative highlight (technical debt, missing tests, AI without validation, etc).`
+REQUIRED OUTPUTS:
+- trajectory_summary: Their developer journey in 1-2 sentences
+- recruiter_summary: 3 paragraphs (strengths, practices, team fit)
+- highlights: 4-5 items with evidence (at least 1 negative)
+- technical_signal: One proof of technical depth
+- verified_skills: Skills with concrete evidence
+
+Find real gaps: missing tests, no CI, stale dependencies, AI-heavy code without validation, etc.`
                     },
                     { role: 'user', content: prompt }
                 ],
