@@ -79,7 +79,6 @@ function App() {
   const [tokens, setTokens] = useState({ github: '', deepseek: '', vibeToken: '' })
   const [history, setHistory] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [atsInput, setAtsInput] = useState({ key: '', type: 'ashby' as 'ashby' | 'greenhouse' })
   const [isLoggingIn, setIsLoggingIn] = useState(false)
@@ -297,7 +296,7 @@ function App() {
         <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
           <div style={{ position: 'relative' }}>
             <Clock size={14} strokeWidth={2} />
-            {isLoading && (
+            {pendingHandles.length > 0 && (
               <div style={{
                 position: 'absolute',
                 top: '-6px',
