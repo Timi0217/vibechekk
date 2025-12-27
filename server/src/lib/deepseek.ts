@@ -9,7 +9,7 @@
  * 
  * The 15 Archetypes (by market rarity):
  * 
- * 🌟🌟🌟 HYPER RARE (Top 1%) - Industry-defining talent
+ * 🌟🌟🌟 LEGENDARY (Top 1%) - Industry-defining talent
  *   - THE 10X ENGINEER: Builds tools/frameworks used by thousands. Think: library authors, core contributors.
  * 
  * 🌟🌟 ULTRA RARE (Top 5%) - Senior+ leadership material  
@@ -326,9 +326,9 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         tierBadge = '◆';
         percentile = 'Top 30%';
 
-        if (qualityPoints >= 15 && visibilityPoints <= 5) {
+        if (qualityPoints >= 15 && visibilityPoints <= 5 && activityPoints >= 10) {
             archetype = 'THE HIDDEN GEM';
-            classificationReason = 'Strong code quality with low public visibility';
+            classificationReason = 'Strong quality and active development with low public visibility';
         } else if (externalContribs >= 20) {
             archetype = 'THE CONTRIBUTOR';
             classificationReason = 'Active open-source collaborator';
