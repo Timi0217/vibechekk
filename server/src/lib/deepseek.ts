@@ -507,6 +507,7 @@ Return ONLY valid JSON matching this structure:
   "rarity": "${tier}",
   "rarity_badge": "${tierBadge}",
   "rarity_percentile": "${percentile}",
+  "archetype_reason": "1-2 sentences explaining why this specific developer got this archetype based on their repos and behavior",
   "trajectory_summary": "...",
   "recruiter_summary": "...",
   "highlights": [

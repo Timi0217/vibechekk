@@ -70,6 +70,30 @@ const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: s
   return <Icon size={size} color={color} />
 }
 
+const archetypeDescriptions: Record<string, string> = {
+  '10x engineer': 'Industry legend with massive impact. High stars, quality code, and proven track record of shipping projects that developers love.',
+  'architect': 'Systems designer who builds scalable infrastructure. Strong focus on clean architecture, documentation, and long-term maintainability.',
+  'professor': 'Educator and knowledge sharer. Creates tutorials, maintains learning resources, and helps others grow through detailed documentation.',
+  'specialist': 'Deep expertise in a specific domain. Laser-focused on one stack or technology with demonstrated mastery and specialization.',
+  'systems thinker': 'Infrastructure and DevOps expert. Works on the systems that power applications—CI/CD, monitoring, performance.',
+  'maintainer': 'Open source steward. Keeps projects alive through consistent maintenance, issue triage, and community support.',
+  'builder': 'Ships products that solve problems. Focus on practical applications and getting things done rather than perfection.',
+  'contributor': 'Active collaborator across projects. Opens PRs, contributes to others\' repos, and helps improve the ecosystem.',
+  'craftsperson': 'Quality-focused developer. Writes clean, tested code with attention to best practices and code review.',
+  'hidden gem': 'Underrated talent with strong fundamentals. Low stars but high code quality—worth a closer look.',
+  'tinkerer': 'Practical problem solver. Experiments with different tools and approaches, always learning by building.',
+  'grinder': 'High activity developer. Lots of commits and contributions showing consistent effort and dedication.',
+  'hobbyist': 'Passion project creator. Builds for fun and learning with diverse interests across technologies.',
+  'explorer': 'Curious generalist. Tries many languages and frameworks, always exploring new territories.',
+  'apprentice': 'Early career developer. Growing their skills with enthusiasm and showing learning momentum.',
+};
+
+const getArchetypeDescription = (label: string) => {
+  if (!label) return '';
+  const normalized = label.toLowerCase().replace(/^the\s+/i, '').trim();
+  return archetypeDescriptions[normalized] || 'Developer profile based on GitHub activity and code analysis.';
+};
+
 const getRarityClass = (rarity: string) => {
   const r = rarity?.toUpperCase();
   if (r === 'LEGENDARY') return 'legendary';
@@ -394,8 +418,14 @@ function App() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity} size={14} />
-                          <div className={`archetype-badge ${getRarityClass(selectedReport.rarity)}`}>
-                            {stripThe(selectedReport.label) || 'Profile'}
+                          <div className="archetype-tooltip-wrapper">
+                            <div className={`archetype-badge ${getRarityClass(selectedReport.rarity)}`}>
+                              {stripThe(selectedReport.label) || 'Profile'}
+                            </div>
+                            <div className="archetype-tooltip">
+                              <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
+                              {selectedReport.archetype_reason || getArchetypeDescription(selectedReport.label)}
+                            </div>
                           </div>
                           {selectedReport.rarity_percentile && (
                             <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
