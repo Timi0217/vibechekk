@@ -144,6 +144,64 @@ export const detectEducationalContent = (repo: any) => {
   };
 };
 
+// NEW: AI Code Detection
+export const detectAICodeSignals = (codeContent: string, commits: any[]) => {
+  const aiSignatures = {
+    copilot: /github copilot|@copilot|ai-generated|auto-?completed/gi,
+    cursor: /cursor ai|ai-?assisted|cursor completion/gi,
+    chatgpt: /chatgpt|gpt-?4|claude|ai helper/gi,
+    aiCommitPatterns: /with (copilot|cursor|ai|chatgpt)|ai-?assisted|auto-?generated/gi,
+    verboseComments: /\/\*\*[\s\S]{200,}\*\//g,
+    explanatoryComments: /\/\/ (here's how|this (function|method|class)|note that|important:)/gi,
+    errorHandlingDensity: /try\s*{[\s\S]*?}\s*catch/g,
+  };
+
+  const codeLines = codeContent.split('\n');
+  const commentLines = codeLines.filter(line =>
+    line.trim().startsWith('//') || line.trim().startsWith('/*') || line.trim().startsWith('*')
+  );
+
+  const explicitMarkers =
+    (codeContent.match(aiSignatures.copilot) || []).length +
+    (codeContent.match(aiSignatures.cursor) || []).length +
+    (codeContent.match(aiSignatures.chatgpt) || []).length;
+
+  const commitAIReferences = commits.filter((c: any) =>
+    aiSignatures.aiCommitPatterns.test(c.message)
+  ).length;
+
+  const commentDensity = commentLines.length / Math.max(codeLines.length, 1);
+  const hasExcessiveComments = commentDensity > 0.3;
+
+  const verboseJSDoc = (codeContent.match(aiSignatures.verboseComments) || []).length;
+  const explanatoryStyle = (codeContent.match(aiSignatures.explanatoryComments) || []).length;
+  const errorHandlingCount = (codeContent.match(aiSignatures.errorHandlingDensity) || []).length;
+
+  const hasScaffoldingPattern = commits.some((c: any) =>
+    (c.additions || 0) > 200 && (c.changedFilesIfAvailable || 1) === 1
+  );
+
+  return {
+    explicitMarkers,
+    commitAIReferences,
+    commentDensity: parseFloat(commentDensity.toFixed(2)),
+    hasExcessiveComments,
+    verboseJSDoc,
+    explanatoryStyle,
+    errorHandlingCount,
+    hasScaffoldingPattern,
+    aiLikelihoodScore: Math.min(
+      (explicitMarkers * 30) +
+      (commitAIReferences * 20) +
+      (hasExcessiveComments ? 15 : 0) +
+      (verboseJSDoc * 10) +
+      (explanatoryStyle * 5) +
+      (hasScaffoldingPattern ? 10 : 0),
+      100
+    )
+  };
+};
+
 export const analyzeContributionDepth = (repo: any) => {
   if (!repo.isFork) return { type: 'original', depth: 'high' };
 
@@ -170,7 +228,6 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
   const octokit = new Octokit({ auth: token });
   const allDiffs: string[] = [];
 
-  // Top 5 repos for maximum signal
   for (const repo of repos.slice(0, 5)) {
     const topCommits = [...(repo.commits || [])]
       .sort((a: any, b: any) => {
@@ -178,7 +235,7 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
         const bImpact = (b.additions || 0) + (b.deletions || 0);
         return bImpact - aImpact;
       })
-      .slice(0, 3); // Top 3 commits per repo
+      .slice(0, 3);
 
     try {
       for (const commit of topCommits) {
@@ -190,7 +247,6 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
 
         const files = data.files || [];
 
-        // Prioritize code files, filter out config noise
         const codeFiles = files
           .filter((f: any) => {
             if (!f.patch) return false;
@@ -210,7 +266,7 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
 
             return codeExtensions.some(ext => f.filename.endsWith(ext));
           })
-          .slice(0, 5); // Up to 5 files per commit
+          .slice(0, 5);
 
         const codeSnippets = codeFiles
           .map((f: any) => {
@@ -246,7 +302,6 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
     return 'No meaningful code samples available. Analysis based on repository metadata only.';
   }
 
-  // DeepSeek can handle 64K tokens - truncate at ~10K chars
   return result.length > 10000 ? result.substring(0, 10000) + '\n\n[...truncated for token efficiency]' : result;
 };
 
@@ -404,16 +459,16 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     totalRepos: 0,
     totalCommits: 0,
     externalContributions: 0,
+    last90DaysCommits: 0,
+    createdAt: new Date().toISOString(),
     languages: [],
     forkRatio: 0
   };
 
-  // Analyze top 5 repos
   const qualitySignals = topRepos.length > 0
     ? await Promise.all(topRepos.slice(0, 5).map(r => fetchCodeQualitySignals(token, username, r.name)))
     : [];
 
-  // Maintainer status for high-star repos
   await Promise.all(topRepos.map(async (repo: any) => {
     if (repo.stars >= 1000) {
       repo.isMaintainer = await checkMaintainerStatus(token, username, repo.name, username);
@@ -423,6 +478,16 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
   }));
 
   const codeSamples = await fetchSmartDiffs(token, username, topRepos);
+
+  // NEW: AI Code Analysis
+  const aiCodeAnalysis = topRepos.slice(0, 5).map((repo: any) => ({
+    repo: repo.name,
+    signals: detectAICodeSignals(codeSamples, repo.commits || [])
+  }));
+
+  const avgAILikelihood = aiCodeAnalysis.reduce((sum, r) =>
+    sum + r.signals.aiLikelihoodScore, 0
+  ) / Math.max(aiCodeAnalysis.length, 1);
 
   const distribution = calculateStarDistribution(topRepos);
   distribution.total_stars = stats.totalStars || distribution.total_stars;
@@ -437,6 +502,8 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     starDistribution: distribution,
     trajectory: trajectoryData,
     trajectoryNarrative: generateTrajectoryNarrative(trajectoryData),
-    codeSamples
+    codeSamples,
+    aiCodeAnalysis,
+    avgAILikelihood
   };
-}; 
+};

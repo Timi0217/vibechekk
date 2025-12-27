@@ -76,37 +76,50 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const externalContribs = globalMetadata.userStats?.externalContributions || 0;
     const isMaintainer = globalMetadata.topRepos.some((r: any) => r.isMaintainer && r.stars >= 100);
 
-    // FIX 1: Use actual recent activity data
     const last90DaysCommits = globalMetadata.userStats?.last90DaysCommits || 0;
     const accountCreatedAt = globalMetadata.userStats?.createdAt;
     const accountAgeYears = accountCreatedAt
         ? (Date.now() - new Date(accountCreatedAt).getTime()) / (365 * 24 * 60 * 60 * 1000)
         : 0;
 
-    // impactScore formula: stars=30%, complexity=33x, quality=50x
-    let impactScore = (
-        (totalStars * 0.3) +                   // 1. Visibility (30%)
-        (skillComplexityScore.totalComplexity * 10) + // 2. Skill signals (33x weight)
-        (qualityScore * 15) +                  // 3. Code quality (50x weight)
-        (totalCommits * 0.1) +                 // 4. Sustained effort
-        (externalContribs * 2) +               // 5. Ecosystem contrib
-        (isMaintainer ? 100 : 0)               // 6. Maintainer bonus
-    );
-    impactScore = Math.min(impactScore, 1000);
+    // AI Usage Analysis
+    const avgAILikelihood = globalMetadata.avgAILikelihood || 0;
 
-    console.log(`[Impact Score] Total: ${impactScore.toFixed(1)}, Complexity: ${skillComplexityScore.totalComplexity}, Quality: ${qualityScore}, Last90Days: ${last90DaysCommits}`);
+    // AI modifier: penalize high AI without quality, reward moderate AI with quality
+    let aiModifier = 0;
+    if (avgAILikelihood > 80 && qualityScore < 5) {
+        aiModifier = -50; // High AI without validation
+    } else if (avgAILikelihood > 50 && qualityScore >= 7) {
+        aiModifier = 0; // High AI with quality = neutral (already in quality score)
+    } else if (avgAILikelihood > 20 && avgAILikelihood <= 50 && qualityScore >= 6) {
+        aiModifier = +10; // Moderate AI with decent quality = modern dev
+    }
+
+    // impactScore formula with AI awareness
+    let impactScore = (
+        (totalStars * 0.3) +
+        (skillComplexityScore.totalComplexity * 10) +
+        (qualityScore * 15) +
+        (totalCommits * 0.1) +
+        (externalContribs * 2) +
+        (isMaintainer ? 100 : 0) +
+        aiModifier
+    );
+    impactScore = Math.min(Math.max(impactScore, 0), 1000);
+
+    console.log(`[Impact Score] Total: ${impactScore.toFixed(1)}, AI Likelihood: ${avgAILikelihood.toFixed(1)}%, AI Modifier: ${aiModifier}`);
 
     let tierLock: string | null = null;
     let typeLock: string | null = null;
     let lockReason: string = '';
 
-    // TIER 1: HYPER RARE 🌟🌟🌟 (Top 1%)
+    // TIER 1: HYPER RARE 🌟🌟🌟
     if (impactScore >= 700 || highestStars >= 10000 || (skillComplexityScore.totalComplexity >= 25 && qualityScore >= 8)) {
         tierLock = 'HYPER RARE';
         typeLock = 'THE 10X ENGINEER';
         lockReason = `Elite impact score (${impactScore.toFixed(0)}) or massive project footprint`;
     }
-    // TIER 2: ULTRA RARE 🌟🌟 (Top 5%)
+    // TIER 2: ULTRA RARE 🌟🌟
     else if (impactScore >= 500 || highestStars >= 5000) {
         tierLock = 'ULTRA RARE';
         const isEdu = topRepo?.educationalMeta?.isLikelyGuide || topRepo?.educationalMeta?.isEducational;
@@ -118,7 +131,7 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             lockReason = `Infrastructure/Tooling architect with high impact`;
         }
     }
-    // TIER 3: RARE ⭐ (Top 15%) - FIX 3: Better SYSTEMS THINKER vs SPECIALIST
+    // TIER 3: RARE ⭐
     else if (impactScore >= 300 || skillComplexityScore.totalComplexity >= 12) {
         tierLock = 'RARE';
         const allText = [
@@ -126,31 +139,24 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             codeSamples
         ].join(' ').toLowerCase();
 
-        // Critical systems keywords require multiple matches
         const criticalSystems = ['distributed', 'kubernetes', 'microservices', 'scaling', 'concurrency'];
         const systemsCount = criticalSystems.filter(s => allText.includes(s)).length;
 
-        // Advanced keywords for specialist domains
         const specialistDomains = ['machine learning', 'ml', 'compiler', 'cryptography', 'blockchain'];
         const specialistCount = specialistDomains.filter(s => allText.includes(s)).length;
 
-        // SYSTEMS THINKER: Multiple systems signals OR complexity 12+ with distributed focus
         if (systemsCount >= 2 || (allText.includes('distributed') && skillComplexityScore.totalComplexity >= 12)) {
             typeLock = 'THE SYSTEMS THINKER';
             lockReason = `Systems architecture focus: ${systemsCount} distributed signals`;
-        }
-        // SPECIALIST: Niche domain OR very high complexity
-        else if (specialistCount >= 1 || skillComplexityScore.totalComplexity >= 15) {
+        } else if (specialistCount >= 1 || skillComplexityScore.totalComplexity >= 15) {
             typeLock = 'THE SPECIALIST';
             lockReason = `Deep domain expertise (complexity ${skillComplexityScore.totalComplexity})`;
-        }
-        // Fallback for RARE tier
-        else {
+        } else {
             typeLock = 'THE SYSTEMS THINKER';
             lockReason = `Advanced engineering (impact ${impactScore.toFixed(0)})`;
         }
     }
-    // TIER 4: UNCOMMON ◆ (Top 30%)
+    // TIER 4: UNCOMMON ◆
     else if (impactScore >= 150) {
         tierLock = 'UNCOMMON';
         if (qualityScore >= 8 && skillComplexityScore.totalComplexity >= 8 && highestStars < 100) {
@@ -170,46 +176,37 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             lockReason = `Consistently shipping functional products`;
         }
     }
-    // TIER 5: COMMON ● (Bottom 50%) - FIX 2: Accurate HOBBYIST detection
+    // TIER 5: COMMON ●
     else {
         tierLock = 'COMMON';
         const languages = globalMetadata.userStats?.languages || [];
 
         if (skillComplexityScore.totalComplexity >= 5 && skillComplexityScore.totalComplexity <= 10) {
             typeLock = 'THE TINKERER';
-            lockReason = `Practical dev solving real problems (complexity ${skillComplexityScore.totalComplexity})`;
-        }
-        else if (skillComplexityScore.totalComplexity >= 3 && skillComplexityScore.totalComplexity < 5) {
-            // THE GRINDER: High velocity
+            lockReason = `Practical dev solving real problems`;
+        } else if (skillComplexityScore.totalComplexity >= 3 && skillComplexityScore.totalComplexity < 5) {
             if (last90DaysCommits >= 40 || globalMetadata.topRepos.length >= 3) {
                 typeLock = 'THE GRINDER';
                 lockReason = `High velocity: ${last90DaysCommits} commits in 90 days`;
-            }
-            // THE HOBBYIST: Low velocity but sustained
-            else if (accountAgeYears >= 1 && last90DaysCommits < 30) {
+            } else if (accountAgeYears >= 1 && last90DaysCommits < 30) {
                 typeLock = 'THE HOBBYIST';
-                lockReason = `Sustained ${accountAgeYears.toFixed(1)}-year passion coder with low velocity`;
-            }
-            else {
+                lockReason = `Sustained ${accountAgeYears.toFixed(1)}-year passion coder`;
+            } else {
                 typeLock = 'THE GRINDER';
                 lockReason = `Emerging skills, moderate activity`;
             }
-        }
-        else if (languages.length >= 6 && skillComplexityScore.totalComplexity >= 3) {
+        } else if (languages.length >= 6 && skillComplexityScore.totalComplexity >= 3) {
             typeLock = 'THE EXPLORER';
             lockReason = `Polyglot explorer of ${languages.length} stacks`;
-        }
-        else if (skillComplexityScore.totalComplexity < 3 && last90DaysCommits < 40) {
+        } else if (skillComplexityScore.totalComplexity < 3 && last90DaysCommits < 40) {
             typeLock = 'THE APPRENTICE';
             lockReason = `Building fundamental technical foundations`;
-        }
-        else {
+        } else {
             typeLock = 'THE TINKERER';
             lockReason = `Generalist intermediate developer`;
         }
     }
 
-    // FIX 4: Precise DeepSeek prompt with exact thresholds
     const prompt = `
 ${typeLock ? `🔒 CLASSIFICATION LOCKED: "${typeLock}" 🔒
 Reason: ${lockReason}
@@ -225,6 +222,40 @@ You MUST return this exact label and rarity_badge. No exceptions.
 - LAST_90_DAYS_COMMITS: ${last90DaysCommits}
 - ACCOUNT_AGE: ${accountAgeYears.toFixed(1)} years
 - EXTERNAL_CONTRIBS: ${externalContribs}
+
+### AI CODE USAGE ANALYSIS:
+- AI_LIKELIHOOD: ${avgAILikelihood.toFixed(1)}% (0-20: Natural, 20-50: Moderate, 50-80: Heavy, 80-100: AI-dependent)
+- QUALITY_VALIDATION: ${qualityScore >= 7 ? 'VALIDATED (tests/CI present)' : 'UNVALIDATED'}
+${globalMetadata.aiCodeAnalysis?.slice(0, 3).map((a: any) => `
+Repo "${a.repo}":
+  - Explicit AI markers: ${a.signals.explicitMarkers}
+  - AI in commits: ${a.signals.commitAIReferences}
+  - Comment density: ${(a.signals.commentDensity * 100).toFixed(0)}%
+  - AI likelihood: ${a.signals.aiLikelihoodScore}%
+`).join('') || ''}
+
+### AI USAGE INTERPRETATION FOR HIGHLIGHTS:
+
+**POSITIVE SIGNAL (use when applicable):**
+- AI 20-60% + Quality ≥7 → "Effective AI Tool Usage"
+  Title: "Modern Development Workflow"
+  Detail: "Leverages AI coding assistants effectively with ${qualityScore}/10 quality score. Tests and CI validate AI-generated code."
+  Type: positive
+
+**NEGATIVE SIGNAL (use when applicable):**
+- AI >70% + Quality <5 → "Heavy AI Reliance Without Validation"
+  Title: "AI Code Without Quality Gates"
+  Detail: "${avgAILikelihood.toFixed(0)}% AI-generated patterns with limited testing/CI validation."
+  Type: negative
+
+- AI >80% + No tests/CI → "Unvalidated AI Scaffolding"
+  Title: "Copy-Paste AI Development"
+  Detail: "Extensive AI boilerplate without code review or testing evidence."
+  Type: negative
+
+**RECRUITER_SUMMARY AI CONTEXT:**
+- If AI 20-60% + Quality ≥7: Mention in paragraph 2 as "pragmatic use of modern AI tools with proper validation"
+- If AI >70% + Quality <5: Flag in paragraph 2 as "recommend assessing hands-on coding ability during interview"
 
 ### TOP REPOSITORIES:
 ${globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => {
@@ -246,22 +277,22 @@ ${i + 1}. "${r.name}"
 - THE PROFESSOR: Impact 500-699, educational content
 
 **⭐ RARE (Top 15%)**
-- THE SPECIALIST: Complexity ≥15 OR niche domain expertise (ML, crypto, compilers)
-- THE SYSTEMS THINKER: Complexity ≥12 + 2+ distributed systems keywords
+- THE SPECIALIST: Complexity ≥15 OR niche domain (ML, crypto, compilers)
+- THE SYSTEMS THINKER: Complexity ≥12 + 2+ distributed keywords
 
 **◆ UNCOMMON (Top 30%)**
-- THE MAINTAINER: Maintainer status + 100+ stars
-- THE BUILDER: 100-500 stars, shipping products
-- THE CONTRIBUTOR: 100+ external contributions
+- THE MAINTAINER: Maintainer + 100+ stars
+- THE BUILDER: 100-500 stars, shipping
+- THE CONTRIBUTOR: 100+ external contribs
 - THE CRAFTSPERSON: Quality ≥7 + Complexity ≥7
 - THE HIDDEN GEM: Quality ≥8 + Complexity ≥8 + Stars <100
 
 **● COMMON (50%)**
-- THE TINKERER: Complexity 5-10, Impact 50-149
-- THE GRINDER: Complexity 3-5, 40+ commits/90d OR 3+ active repos, Impact 40-149
-- THE HOBBYIST: Complexity 4-7, <30 commits/90d, account age ≥1 year, Impact 50-149
-- THE EXPLORER: 6+ languages + Complexity 3-7, Impact 30-149
-- THE APPRENTICE: Complexity <3, Impact <50
+- THE TINKERER: Complexity 5-10
+- THE GRINDER: Complexity 3-5, 40+ commits/90d OR 3+ repos
+- THE HOBBYIST: Complexity 4-7, <30 commits/90d, 1yr+ account
+- THE EXPLORER: 6+ languages + Complexity 3-7
+- THE APPRENTICE: Complexity <3
 
 ### Code Samples:
 ${codeSamples}
@@ -273,13 +304,22 @@ Return ONLY JSON:
   "rarity_badge": "🌟🌟🌟" | "🌟🌟" | "⭐" | "◆" | "●",
   "rarity_percentile": "Top X%",
   "impact_score": ${impactScore.toFixed(0)},
+  "ai_usage": {
+    "likelihood": ${avgAILikelihood.toFixed(1)},
+    "interpretation": "${avgAILikelihood < 20 ? 'low' : avgAILikelihood < 50 ? 'moderate' : avgAILikelihood < 80 ? 'high' : 'very_high'}",
+    "quality_validated": ${qualityScore >= 7},
+    "badge": "${avgAILikelihood > 80 ? 'AI-HEAVY' : avgAILikelihood > 50 ? 'AI-ASSISTED' : avgAILikelihood > 20 ? 'AI-ENHANCED' : 'NATURAL'}",
+    "badge_color": "${avgAILikelihood > 70 && qualityScore < 5 ? 'orange' : avgAILikelihood > 20 && qualityScore >= 7 ? 'blue' : 'green'}"
+  },
   "trajectory_summary": "1-2 sentence evolution",
-  "recruiter_summary": "3 paragraphs: strengths, quality, collaboration",
+  "recruiter_summary": "3 paragraphs: (1) strengths, (2) quality + AI usage context, (3) collaboration",
   "highlights": [{"title": "...", "detail": "...", "type": "positive"|"negative"}],
   "technical_signal": "One sentence proof",
   "technical_signal_detailed": "2-3 paragraphs deep dive",
   "verified_skills": [{"name": "...", "level": "Beginner|Intermediate|Advanced|Expert", "evidence": "..."}]
 }
+
+CRITICAL: Include at least 1 negative highlight. If AI >50%, address it in highlights and recruiter_summary.
 `;
 
     try {
@@ -294,18 +334,24 @@ Return ONLY JSON:
                 messages: [
                     {
                         role: 'system',
-                        content: `Strict 15-Archetype Engineer Classifier with exact thresholds.
-Rules:
-1. Impact Score 700+ = THE 10X ENGINEER (HYPER RARE)
-2. Impact 500-699 = THE ARCHITECT or THE PROFESSOR (ULTRA RARE)
-3. Complexity 15+ OR 2+ systems keywords = THE SYSTEMS THINKER or THE SPECIALIST (RARE)
-4. Quality 8+ + Complexity 8+ + Stars<100 = THE HIDDEN GEM (UNCOMMON)
-5. Complexity 5-10 = THE TINKERER (COMMON)
-6. Complexity 3-5 + 40+ commits/90d = THE GRINDER (COMMON)
-7. Complexity 4-7 + <30 commits/90d + account 1yr+ = THE HOBBYIST (COMMON)
-8. Complexity <3 = THE APPRENTICE (COMMON)
+                        content: `Strict 15-Archetype Engineer Classifier with AI awareness.
 
-Forensic debt analysis: Always include at least one negative highlight.`
+CORE RULES:
+1. Impact 700+ = THE 10X ENGINEER
+2. Complexity 15+ OR 2+ systems keywords = THE SPECIALIST or THE SYSTEMS THINKER
+3. Quality 8+ + Complexity 8+ + Stars<100 = THE HIDDEN GEM
+4. Complexity 5-10 = THE TINKERER
+5. Complexity 3-5 + 40+ commits/90d = THE GRINDER
+6. Complexity 4-7 + <30 commits/90d + 1yr+ = THE HOBBYIST
+7. Complexity <3 = THE APPRENTICE
+
+AI USAGE RULES:
+- AI 20-60% + Quality ≥7 = POSITIVE highlight ("Modern Development Workflow")
+- AI >70% + Quality <5 = NEGATIVE highlight ("AI Code Without Quality Gates")
+- AI >80% + No tests = NEGATIVE highlight ("Unvalidated AI Scaffolding")
+- ALWAYS mention AI in recruiter_summary paragraph 2 if likelihood >50%
+
+Forensic analysis: Find at least one negative highlight (technical debt, missing tests, AI without validation, etc).`
                     },
                     { role: 'user', content: prompt }
                 ],
@@ -346,13 +392,31 @@ Forensic debt analysis: Always include at least one negative highlight.`
                 label: typeLock || 'THE TINKERER',
                 rarity: tierLock || 'COMMON',
                 rarity_badge: tierLock === 'HYPER RARE' ? '🌟🌟🌟' : tierLock === 'ULTRA RARE' ? '🌟🌟' : tierLock === 'RARE' ? '⭐' : tierLock === 'UNCOMMON' ? '◆' : '●',
-                trajectory_summary: 'Technical profile analysis exceeded token limits or contained invalid characters.',
-                recruiter_summary: 'Unable to parse detailed AI summary due to response format error.',
-                highlights: []
+                trajectory_summary: 'Technical profile analysis exceeded token limits.',
+                recruiter_summary: 'Unable to parse detailed AI summary.',
+                highlights: [],
+                ai_usage: {
+                    likelihood: avgAILikelihood,
+                    interpretation: avgAILikelihood < 20 ? 'low' : avgAILikelihood < 50 ? 'moderate' : 'high',
+                    quality_validated: qualityScore >= 7,
+                    badge: avgAILikelihood > 50 ? 'AI-ASSISTED' : 'NATURAL',
+                    badge_color: 'blue'
+                }
             };
         }
 
-        // Post-validation: Override if DeepSeek violated constraints
+        // Ensure AI usage is present
+        if (!analysis.ai_usage) {
+            analysis.ai_usage = {
+                likelihood: avgAILikelihood,
+                interpretation: avgAILikelihood < 20 ? 'low' : avgAILikelihood < 50 ? 'moderate' : avgAILikelihood < 80 ? 'high' : 'very_high',
+                quality_validated: qualityScore >= 7,
+                badge: avgAILikelihood > 80 ? 'AI-HEAVY' : avgAILikelihood > 50 ? 'AI-ASSISTED' : avgAILikelihood > 20 ? 'AI-ENHANCED' : 'NATURAL',
+                badge_color: avgAILikelihood > 70 && qualityScore < 5 ? 'orange' : avgAILikelihood > 20 && qualityScore >= 7 ? 'blue' : 'green'
+            };
+        }
+
+        // Post-validation
         if (typeLock && analysis.label !== typeLock) {
             console.warn(`[Override] DeepSeek returned "${analysis.label}", forcing to "${typeLock}"`);
             analysis.label = typeLock;
