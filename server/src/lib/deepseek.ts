@@ -106,7 +106,8 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     };
 
     const primaryDomain = Object.entries(domains).sort((a, b) => b[1] - a[1])[0];
-    const hasSpecialization = primaryDomain[1] >= 3;
+    const hasSpecialization = primaryDomain[1] >= 5; // Raised from 3 - must have DEEP expertise
+    const hasDeepExpertise = primaryDomain[1] >= 4; // Mid-level expertise
     const isFullStack = domains.web >= 2 && domains.backend >= 2;
 
     // Experience level signals
@@ -247,7 +248,7 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         classificationReason = 'Elite technical depth across multiple domains with production-grade practices';
     }
     // ULTRA RARE: Strong visibility with matching skill
-    else if ((highestStars >= 5000 && !isViralNonCode && hasQualityPractices) || (highestStars >= 3000 && isMaintainer && qualityTier === 'production-ready')) {
+    else if ((highestStars >= 8000 && !isViralNonCode && hasQualityPractices) || (highestStars >= 5000 && isMaintainer && qualityTier === 'production-ready')) {
         tier = 'ULTRA RARE';
         tierBadge = '🌟🌟';
         percentile = 'Top 5%';
@@ -259,20 +260,19 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             classificationReason = 'Designs and maintains systems used by many';
         }
     }
-    // RARE: Either high visibility OR exceptional skill (skill-first path!)
+    // RARE: High visibility OR genuine deep specialization - NOT just basic quality
     else if (
-        (highestStars >= 500 && !isViralNonCode) ||
-        hasSpecialization ||
-        (qualityTier === 'production-ready' && experienceSignals.projectScale !== 'small') ||
-        (domains.systems >= 3 || domains.lowLevel >= 2 || domains.ml >= 2)
+        (highestStars >= 1000 && !isViralNonCode && hasQualityPractices) ||
+        (hasSpecialization && qualityTier === 'production-ready') ||
+        (domains.systems >= 4 || domains.lowLevel >= 3 || domains.ml >= 3)
     ) {
         tier = 'RARE';
         tierBadge = '⭐';
         percentile = 'Top 15%';
-        if (domains.systems >= 3 || domains.lowLevel >= 2) {
+        if (domains.systems >= 4 || domains.lowLevel >= 3) {
             archetype = 'THE SYSTEMS THINKER';
             classificationReason = 'Deep infrastructure and systems expertise';
-        } else if (domains.ml >= 2 || domains.security >= 2) {
+        } else if (domains.ml >= 3 || domains.security >= 3) {
             archetype = 'THE SPECIALIST';
             classificationReason = `Deep expertise in ${primaryDomain[0]}`;
         } else {
