@@ -131,8 +131,11 @@ Return a JSON object:
 }
 
 ### HIGHLIGHT RULES:
-- Use "type": "negative" for: Low test coverage, high complexity warnings, lack of documentation, or stale repositories.
-- Use "type": "positive" for: High quality signals, complex project ownership, and strong community impact.
+- MANDATORY DISTRIBUTION: You MUST return between 3 and 5 total highlights.
+- REQUIRED MIX: Exactly 2-4 items MUST be "type": "positive" AND exactly 1-3 items MUST be "type": "negative".
+- FORENSIC AUDIT: You are not a hype-man. You MUST find technical debt, missing documentation, or lack of testing to serve as negative highlights.
+- "type": "negative" (Orange in UI): For low test coverage, high complexity, manual deployment, or stale code.
+- "type": "positive" (Green in UI): For complex features, community adoption, clean architecture, or consistent maintenance.
 
 Return JSON matching the structure exactly.
 `;
@@ -222,7 +225,8 @@ If the user message includes a LOCKED classification, you MUST return that exact
         analysis.recruiter_summary = analysis.recruiter_summary || analysis.trajectory_summary;
         analysis.highlights = analysis.highlights || [
             { title: "Technical Impact", detail: `Built projects with ${highestStars} peak stars.`, type: "positive" },
-            { title: "Language Diversity", detail: `Proficient in ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.`, type: "positive" }
+            { title: "Language Diversity", detail: `Proficient in ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.`, type: "positive" },
+            { title: "Forensic Observation", detail: "Automated test coverage or CI/CD signals are limited in public samples.", type: "negative" }
         ];
 
         // POST-VALIDATION: Override if DeepSeek violated constraints
