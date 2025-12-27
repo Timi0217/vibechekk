@@ -34,6 +34,9 @@ body {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  /* FIX: Prevents layout shift/thinning when scrollbar appears */
 }
 
 .popup-container {
