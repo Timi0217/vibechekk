@@ -231,14 +231,15 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         archetype = 'THE 10X ENGINEER';
         classificationReason = 'High-impact engineer with exceptional quality practices';
     }
-    // PATH 3: PURE SKILL (no stars required) - for enterprise/private devs
-    // Requires: production-ready + multi-domain expertise + large projects + very active + long tenure
+    // PATH 3: PURE SKILL (no stars required) - extremely strict for enterprise/private devs
+    // Requires: production-ready + multi-domain expertise + large projects + very active + long tenure + deep specialization
     else if (
         qualityTier === 'production-ready' &&
         hasMultiDomainExpertise &&
+        hasSpecialization &&
         experienceSignals.projectScale === 'large' &&
         isRecentlyActive &&
-        accountAgeYears >= 5 &&
+        accountAgeYears >= 7 &&
         experienceSignals.commitDepth === 'extensive'
     ) {
         tier = 'HYPER RARE';
@@ -292,11 +293,11 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         tierBadge = '◆';
         percentile = 'Top 30%';
 
-        // HIDDEN GEM: High skill, low visibility (the most important archetype for recruiters!)
-        // This surfaces enterprise devs, private contributors, and introverted experts
-        if ((qualityTier === 'production-ready' || (qualityTier === 'professional' && hasSpecialization)) && highestStars < 200) {
+        // HIDDEN GEM: ONLY ONE PATH - production-ready quality + very low stars
+        // This is for genuine hidden talent, not just old accounts
+        if (qualityTier === 'production-ready' && highestStars < 100) {
             archetype = 'THE HIDDEN GEM';
-            classificationReason = 'Strong code quality and practices, low public visibility - likely enterprise experience';
+            classificationReason = 'Production-grade code quality with minimal public visibility - likely enterprise experience';
         } else if (isMaintainer) {
             archetype = 'THE MAINTAINER';
             classificationReason = 'Actively maintains production repositories';
@@ -306,36 +307,28 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         } else if (qualityTier === 'professional' || qualityTier === 'production-ready') {
             archetype = 'THE CRAFTSPERSON';
             classificationReason = 'Focuses on code quality and best practices';
-        } else if (accountAgeYears >= 7 && experienceSignals.recentlyActive !== 'dormant') {
-            // VETERAN CHECK: 7+ years with any recent activity = HIDDEN GEM (likely private/enterprise work)
-            archetype = 'THE HIDDEN GEM';
-            classificationReason = `${accountAgeYears.toFixed(0)}-year veteran with sustained activity - likely enterprise/private work`;
         } else {
             archetype = 'THE BUILDER';
             classificationReason = 'Ships working products consistently';
         }
     }
-    // COMMON: Early-mid career OR truly quiet accounts
+    // COMMON: General tier - most developers land here
     else {
         tier = 'COMMON';
         tierBadge = '●';
         percentile = 'Top 50%';
 
-        // VETERAN ESCAPE HATCH: Long-tenured devs shouldn't be in COMMON tier
-        if (accountAgeYears >= 7 && (experienceSignals.recentlyActive !== 'dormant' || totalCommits > 200)) {
-            // Bump to UNCOMMON - they're clearly experienced, just low public visibility
-            tier = 'UNCOMMON';
-            tierBadge = '◆';
-            percentile = 'Top 30%';
-            archetype = 'THE HIDDEN GEM';
-            classificationReason = `${accountAgeYears.toFixed(0)}-year veteran - experienced dev with low public visibility`;
-        } else if (isFullStack || (domains.web >= 2 && domains.backend >= 1)) {
+        // No more veteran escape hatch - account age alone doesn't make you special
+        if (isFullStack || (domains.web >= 2 && domains.backend >= 1)) {
             archetype = 'THE TINKERER';
             classificationReason = 'Practical problem solver building real applications';
         } else if ((experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active') && accountAgeYears < 4) {
-            // GRINDER is for early-career hustle, NOT 12-year veterans
             archetype = 'THE GRINDER';
             classificationReason = 'Early career with high activity - building experience fast';
+        } else if (accountAgeYears >= 5 && experienceSignals.recentlyActive !== 'dormant') {
+            // Veterans with activity but no quality signals = experienced hobbyist
+            archetype = 'THE HOBBYIST';
+            classificationReason = `${accountAgeYears.toFixed(0)} years of coding - experienced with varied interests`;
         } else if (languages.length >= 5) {
             archetype = 'THE EXPLORER';
             classificationReason = 'Exploring multiple technologies, broad exposure';
