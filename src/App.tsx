@@ -514,9 +514,10 @@ function App() {
                 <h3 className="section-title" style={{ marginBottom: '8px', textTransform: 'uppercase' }}>SKILLS VERIFIED FROM CODE</h3>
                 <div className="merit-grid scrollable">
                   {selectedReport.metadata.verified_skills.map((skill: string, i: number) => {
-                    const match = skill.match(/^(.*?)\s*\((.*)\)$/);
-                    const title = match ? match[1] : skill;
-                    const detail = match ? match[2] : '';
+                    const parts = skill.split('|').map(s => s.trim());
+                    const title = parts[0];
+                    const level = parts[1];
+                    const evidence = parts[2];
                     const isExpanded = expandedSkills.includes(i);
                     const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
 
@@ -525,19 +526,20 @@ function App() {
                         <div className="merit-header">
                           <div style={{ display: 'flex', alignItems: 'center' }}>
                             <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                            <span className="merit-title" style={{ fontWeight: 700 }}>{title}</span>
+                            <span className="merit-title">{title}</span>
                           </div>
                           {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                         </div>
-                        {isExpanded && detail && (
+                        {isExpanded && (
                           <div className="merit-detail">
-                            <div style={{ marginBottom: '8px' }}>{detail}</div>
-                            {skill.includes('|') && (
+                            {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
+                            {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                            {parts.length > 3 && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {skill.split('|').slice(1).map((part, idx) => (
+                                {parts.slice(3).map((part, idx) => (
                                   <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', opacity: 0.8 }}>
                                     <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent)' }}></div>
-                                    <span>{part.trim()}</span>
+                                    <span>{part}</span>
                                   </div>
                                 ))}
                               </div>
