@@ -181,6 +181,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 userId: user?.id || null,
                 guestIp: user ? null : (Array.isArray(requesterIp) ? requesterIp[0] : requesterIp),
                 archetype: reportData.label || 'THE PRACTICAL BUILDER',
+                tier: reportData.rarity || 'COMMON',
                 label: reportData.label || 'THE PRACTICAL BUILDER',
                 trajectorySummary: reportData.trajectory_summary || 'Trajectory analysis pending.',
                 recruiterSummary: reportData.recruiter_summary || 'Detailed analysis pending.',
@@ -231,14 +232,39 @@ app.get('/api/history', async (req, res) => {
 
 app.get('/api/analytics', async (req, res) => {
     try {
-        const counts = await prisma.vibeReport.groupBy({ by: ['archetype'], _count: { id: true } });
+        const tierFilter = req.query.tier as string | undefined;
+
+        // Build where clause for filtering
+        const whereClause = tierFilter ? { tier: tierFilter } : {};
+
+        // Get archetype distribution (with optional tier filter)
+        const archetypeCounts = await prisma.vibeReport.groupBy({
+            by: ['archetype'],
+            where: whereClause,
+            _count: { id: true }
+        });
+
+        // Get tier distribution (no filter for overview)
+        const tierCounts = await prisma.vibeReport.groupBy({
+            by: ['tier'],
+            _count: { id: true }
+        });
+
+        const filteredTotal = await prisma.vibeReport.count({ where: whereClause });
         const total = await prisma.vibeReport.count();
+
         res.json({
             success: true,
             data: {
                 totalChecks: total,
-                distribution: counts.reduce((acc: any, curr) => {
+                filteredTotal: filteredTotal,
+                activeFilter: tierFilter || null,
+                distribution: archetypeCounts.reduce((acc: any, curr) => {
                     acc[curr.archetype] = curr._count.id;
+                    return acc;
+                }, {}),
+                tierBreakdown: tierCounts.reduce((acc: any, curr) => {
+                    acc[curr.tier] = curr._count.id;
                     return acc;
                 }, {})
             }

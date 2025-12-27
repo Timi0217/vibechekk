@@ -1,7 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Award, Navigation, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
+
+const rarityColors: Record<string, string> = {
+  'HYPER RARE': '#f59e0b',    // Gold/Amber for top 1%
+  'ULTRA RARE': '#8b5cf6',    // Purple for top 5%
+  'RARE': '#3b82f6',          // Blue for top 15%
+  'UNCOMMON': '#10b981',      // Green for top 30%
+  'COMMON': '#64748b'         // Gray for bottom 50%
+}
 
 type Tab = 'analyze' | 'history' | 'analytics' | 'settings'
 
@@ -54,13 +62,6 @@ const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: s
     'the apprentice': Zap,            // Zap for energy/learning/beginners
   }
 
-  const rarityColors: Record<string, string> = {
-    'HYPER RARE': '#f59e0b',    // Gold/Amber for top 1%
-    'ULTRA RARE': '#8b5cf6',    // Purple for top 5%
-    'RARE': '#3b82f6',          // Blue for top 15%
-    'UNCOMMON': '#10b981',      // Green for top 30%
-    'COMMON': '#64748b'         // Gray for bottom 50%
-  }
 
   const normalizedLabel = label?.toLowerCase().trim().replace(/^the\s+/, '');
   const Icon = ArchetypeMap[label?.toLowerCase().trim()] || ArchetypeMap['the ' + normalizedLabel] || ArchetypeMap[normalizedLabel] || Zap
@@ -97,6 +98,7 @@ function App() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [expandedSkills, setExpandedSkills] = useState<number[]>([])
   const [loadingStep, setLoadingStep] = useState(0)
+  const [tierFilter, setTierFilter] = useState<string | null>(null)
   const activeTabRef = useRef(activeTab)
 
   useEffect(() => {
@@ -136,7 +138,7 @@ function App() {
     if (activeTab === 'analytics') fetchAnalytics()
 
     return () => chrome.runtime.onMessage.removeListener(handleKeyDetected)
-  }, [activeTab])
+  }, [activeTab, tierFilter])
 
   const fetchHistory = async () => {
     try {
@@ -150,7 +152,10 @@ function App() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/analytics`)
+      const url = tierFilter
+        ? `${BACKEND_URL}/api/analytics?tier=${encodeURIComponent(tierFilter)}`
+        : `${BACKEND_URL}/api/analytics`
+      const res = await fetch(url)
       const data = await res.json()
       if (data.success) setAnalytics(data.data)
     } catch (e) {
@@ -767,44 +772,103 @@ function App() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div className="stat-card hero" style={{ padding: '20px', background: 'white' }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                        <div className="stat-value" style={{ fontSize: '38px' }}>{analytics.totalChecks}</div>
+                        <div className="stat-value" style={{ fontSize: '38px' }}>
+                          {tierFilter ? analytics.filteredTotal : analytics.totalChecks}
+                        </div>
                         <TrendingUp size={16} color="var(--accent)" strokeWidth={3} style={{ marginBottom: '4px' }} />
                       </div>
-                      <div className="stat-label" style={{ opacity: 0.7 }}>TOTAL PROFILES PROCESSED</div>
+                      <div className="stat-label" style={{ opacity: 0.7 }}>
+                        {tierFilter ? `${tierFilter} PROFILES` : 'TOTAL PROFILES PROCESSED'}
+                      </div>
+                    </div>
+
+                    <div className="filter-section">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>FILTER BY TIER</h3>
+                        {tierFilter && (
+                          <button
+                            onClick={() => setTierFilter(null)}
+                            style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: 'var(--accent)', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            CLEAR
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+                        {['HYPER RARE', 'ULTRA RARE', 'RARE', 'UNCOMMON', 'COMMON'].map(tier => {
+                          const isActive = tierFilter === tier;
+                          const count = analytics.tierBreakdown?.[tier] || 0;
+                          return (
+                            <button
+                              key={tier}
+                              onClick={() => setTierFilter(isActive ? null : tier)}
+                              style={{
+                                flexShrink: 0,
+                                padding: '6px 10px',
+                                borderRadius: '20px',
+                                border: `1px solid ${isActive ? rarityColors[tier] : 'var(--border-light)'}`,
+                                background: isActive ? rarityColors[tier] : 'white',
+                                color: isActive ? 'white' : 'var(--text-main)',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              {tier}
+                              <span style={{ opacity: 0.7, fontSize: '9px' }}>{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="detail-section">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>PROFILE DISTRIBUTION</h3>
+                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>
+                          {tierFilter ? `${tierFilter} DISTRIBUTION` : 'PROFILE DISTRIBUTION'}
+                        </h3>
                         <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>BY ARCHETYPE</span>
                       </div>
 
                       <div className="history-list" style={{ gap: '10px' }}>
-                        {Object.entries(analytics.distribution).map(([arch, count]: any) => {
-                          const percentage = Math.round((count / analytics.totalChecks) * 100);
-                          return (
-                            <div key={arch} className="stat-card compact" style={{ background: 'white' }}>
-                              <div className="stat-info">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                  <div className="archetype-icon-small">
-                                    <ArchetypeIcon label={arch} size={14} />
+                        {Object.entries(analytics.distribution).length > 0 ? (
+                          Object.entries(analytics.distribution)
+                            .sort(([, a]: any, [, b]: any) => b - a)
+                            .map(([arch, count]: any) => {
+                              const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
+                              const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
+                              return (
+                                <div key={arch} className="stat-card compact" style={{ background: 'white' }}>
+                                  <div className="stat-info">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <div className="archetype-icon-small">
+                                        <ArchetypeIcon label={arch} size={14} />
+                                      </div>
+                                      <span className="stat-arch-name">{arch}</span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
+                                      <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
+                                    </div>
                                   </div>
-                                  <span className="stat-arch-name">{arch}</span>
+                                  <div className="percentage-bar-bg" style={{ height: '4px' }}>
+                                    <div
+                                      className="percentage-bar-fill"
+                                      style={{ width: `${percentage}%` }}
+                                    />
+                                  </div>
                                 </div>
-                                <div style={{ textAlign: 'right' }}>
-                                  <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
-                                  <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
-                                </div>
-                              </div>
-                              <div className="percentage-bar-bg" style={{ height: '4px' }}>
-                                <div
-                                  className="percentage-bar-fill"
-                                  style={{ width: `${percentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
+                              );
+                            })
+                        ) : (
+                          <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-dim)', padding: '20px 0' }}>
+                            No profiles found in this tier.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

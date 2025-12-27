@@ -32,6 +32,7 @@ model VibeReport {
   userId            String?
   guestIp           String?
   archetype         String
+  tier              String    @default("COMMON")
   label             String
   trajectorySummary String
   meritPoints       Json
