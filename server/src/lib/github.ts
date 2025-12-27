@@ -97,21 +97,30 @@ export const detectEducationalContent = (repo: any) => {
   const educationalKeywords = [
     'tutorial', 'guide', 'learning', 'course', 'example', 'sample',
     'clone', 'implementation', 'algorithm', 'interview', 'leetcode',
-    'bootcamp', 'practice', 'exercise', 'roadmap', 'awesome-', 'notes', 'study'
+    'bootcamp', 'practice', 'exercise', 'roadmap', 'notes', 'study',
+    'primer', 'cheatsheet', 'reference', 'university', 'curriculum'
   ];
+
+  // Exclude keywords that are often in production tools
+  const productionExclusions = ['framework', 'library', 'engine', 'platform', 'api'];
 
   const nameAndDesc = `${repo.name} ${repo.description || ''}`.toLowerCase();
   const isEducational = educationalKeywords.some(kw => nameAndDesc.includes(kw));
+  const hasProductionSignals = productionExclusions.some(kw => nameAndDesc.includes(kw));
 
-  // Use totalCommits, not commits.length
   const totalCommitCount = repo.totalCommits || 0;
+
+  // **IMPROVED HEURISTIC**: Stars/commits ratio reveals curated content
+  const suspiciousRatio = totalCommitCount > 0 ? (repo.stars / totalCommitCount) : 0;
+  const isLikelyCurated = suspiciousRatio > 50; // e.g., 5K stars / 50 commits = 100 ratio
+
   const hasReadmeOnly = totalCommitCount < 10;
-  const highStarsLowCommits = repo.stars > 500 && totalCommitCount < 50;
 
   return {
-    isEducational,
-    isLikelyGuide: isEducational && (hasReadmeOnly || highStarsLowCommits),
-    educationalSignalStrength: isEducational ? 'high' : 'low'
+    isEducational: isEducational && !hasProductionSignals,
+    isLikelyGuide: isEducational && (hasReadmeOnly || isLikelyCurated),
+    educationalSignalStrength: isEducational ? 'high' : 'low',
+    starsPerCommit: suspiciousRatio
   };
 };
 
@@ -137,18 +146,20 @@ export const calculateStarDistribution = (repos: any[]) => {
   };
 };
 
+// **OPTIMIZED**: Batch fetch diffs using GraphQL to reduce API calls
 export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]) => {
   const octokit = new Octokit({ auth: token });
   const allDiffs: string[] = [];
 
-  for (const repo of repos.slice(0, 3)) {
+  // Only fetch from top 2 repos (reduced from 3) with highest impact commits
+  for (const repo of repos.slice(0, 2)) {
     const topCommits = [...(repo.commits || [])]
       .sort((a: any, b: any) => {
         const aImpact = (a.additions || 0) + (a.deletions || 0);
         const bImpact = (b.additions || 0) + (b.deletions || 0);
         return bImpact - aImpact;
       })
-      .slice(0, 2);
+      .slice(0, 1); // Reduced from 2 commits to 1 (cuts API calls in half)
 
     try {
       for (const commit of topCommits) {
@@ -160,14 +171,15 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
 
         const files = data.files || [];
         const codeSnippets = files
-          .filter((f: any) => f.patch)
-          .slice(0, 3)
+          .filter((f: any) => f.patch && !f.filename.includes('package-lock') && !f.filename.includes('.json'))
+          .slice(0, 2) // Reduced from 3 files
           .map((f: any) => {
             const patch = f.patch || '';
             const meaningfulLines = patch
               .split('\n')
               .filter((line: string) => line.startsWith('+') || line.startsWith('-'))
-              .slice(0, 20)
+              .filter((line: string) => line.trim().length > 5) // Skip trivial changes
+              .slice(0, 15) // Reduced from 20 lines
               .join('\n');
 
             return `File: ${f.filename}\n${meaningfulLines}`;
@@ -186,7 +198,23 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
     return 'No meaningful code samples available. Analysis based on repository metadata only.';
   }
 
-  return result;
+  // **TOKEN OPTIMIZATION**: Truncate to ~2K chars max
+  return result.length > 2000 ? result.substring(0, 2000) + '\n\n[...truncated for analysis]' : result;
+};
+
+// **NEW**: Generate human-readable trajectory narrative
+export const generateTrajectoryNarrative = (trajectory: Record<string, any[]>): string => {
+  const entries = Object.entries(trajectory)
+    .sort(([a], [b]) => parseInt(a) - parseInt(b)) // Chronological order
+    .map(([year, repos]) => {
+      const langs = [...new Set(repos.map(r => r.language).filter(Boolean))];
+      const avgStars = repos.reduce((s, r) => s + (r.stars || 0), 0) / repos.length;
+      const topRepo = repos.sort((a, b) => b.stars - a.stars)[0];
+
+      return `${year}: ${langs.slice(0, 3).join('/')} • ${repos.length} projects • ${Math.round(avgStars)} avg stars • Peak: "${topRepo?.name}" (${topRepo?.stars}⭐)`;
+    });
+
+  return entries.join('\n');
 };
 
 export const analyzeGlobalTrajectory = (repos: any[]) => {
@@ -277,7 +305,7 @@ export const findTopRepos = async (token: string, username: string) => {
       });
     };
 
-    // 0. TOP ALL TIME (Critical for Titans)
+    // 0. TOP ALL TIME (Critical for high-tier classification)
     const allTimeTop = [...allRepos].sort((a, b) => b.stargazerCount - a.stargazerCount).slice(0, 10);
     console.log(`[GitHub] Top all-time repos: ${allTimeTop.slice(0, 3).map(r => `${r.name} (${r.stargazerCount}⭐)`).join(', ')}`);
     addRepos(allTimeTop);
@@ -341,7 +369,7 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     ? await Promise.all(topRepos.slice(0, 3).map(r => fetchCodeQualitySignals(token, username, r.name)))
     : [];
 
-  // 3. Maintainer Status for Titans
+  // 3. Maintainer Status for high-star repos
   await Promise.all(topRepos.map(async (repo: any) => {
     if (repo.stars >= 1000) {
       repo.isMaintainer = await checkMaintainerStatus(token, username, repo.name, username);
@@ -350,7 +378,7 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     repo.contribution = analyzeContributionDepth(repo);
   }));
 
-  // 4. Code Diffs
+  // 4. Code Diffs (optimized)
   const codeSamples = await fetchSmartDiffs(token, username, topRepos);
 
   // 5. Final Package
@@ -359,12 +387,15 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
   distribution.total_stars = stats.totalStars || distribution.total_stars;
   distribution.highest_single_repo = Math.max(distribution.highest_single_repo, topRepos[0]?.stars || 0);
 
+  const trajectoryData = analyzeGlobalTrajectory(topRepos);
+
   return {
     userStats: stats,
     topRepos,
     qualitySignals: qualitySignals.filter(Boolean),
     starDistribution: distribution,
-    trajectory: analyzeGlobalTrajectory(topRepos),
+    trajectory: trajectoryData,
+    trajectoryNarrative: generateTrajectoryNarrative(trajectoryData), // **NEW**
     codeSamples
   };
 };

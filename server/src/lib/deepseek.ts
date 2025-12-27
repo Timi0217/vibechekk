@@ -1,29 +1,12 @@
 export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, codeSamples: string) => {
     const highestStars = globalMetadata.starDistribution.highest_single_repo;
     const totalStars = globalMetadata.starDistribution.total_stars;
+    const topRepo = globalMetadata.topRepos[0];
 
     // PRE-CLASSIFICATION: Determine if tier/type should be locked
     let tierLock: string | null = null;
     let typeLock: string | null = null;
     let lockReason: string = '';
-
-    if (highestStars >= 5000) {
-        tierLock = 'LEGENDARY';
-        const topRepo = globalMetadata.topRepos[0];
-        if (topRepo?.educationalMeta?.isLikelyGuide || topRepo?.educationalMeta?.isEducational) {
-            typeLock = 'THE TECHNICAL TITAN';
-            lockReason = `${highestStars} stars + educational content detected`;
-        } else {
-            typeLock = 'THE FOUNDATION BUILDER';
-            lockReason = `${highestStars} stars + production tool detected`;
-        }
-        console.log(`[Pre-Check] LEGENDARY locked: ${typeLock} (${lockReason})`);
-    } else if (highestStars < 10 && totalStars < 10) {
-        tierLock = 'COMMON';
-        typeLock = 'THE BEGINNER STUDENT';
-        lockReason = `Only ${totalStars} total stars`;
-        console.log(`[Pre-Check] BEGINNER locked: ${typeLock} (${lockReason})`);
-    }
 
     const qualityScore = globalMetadata.qualitySignals.reduce((score: number, q: any) => {
         if (!q) return score;
@@ -35,111 +18,151 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             + (q.complexity === 'high' ? 2 : q.complexity === 'medium' ? 1 : 0);
     }, 0);
 
+    // **LEGENDARY TIER**: 5K+ stars with quality gate
+    if (highestStars >= 5000) {
+        tierLock = 'LEGENDARY';
+
+        if (topRepo?.educationalMeta?.isLikelyGuide || topRepo?.educationalMeta?.isEducational) {
+            typeLock = 'THE PROFESSOR';
+            lockReason = `${highestStars} stars on educational content`;
+        } else {
+            typeLock = 'THE ARCHITECT';
+            lockReason = `${highestStars} stars on production infrastructure`;
+        }
+
+        // **QUALITY GATE**: Flag if legendary status but poor code quality
+        if (qualityScore < 4) {
+            lockReason += ` ⚠️ Low quality score (${qualityScore}/10)`;
+        }
+
+        console.log(`[Pre-Check] LEGENDARY locked: ${typeLock} (${lockReason})`);
+    }
+    // **BEGINNER TIER**: <10 total stars
+    else if (highestStars < 10 && totalStars < 10) {
+        tierLock = 'COMMON';
+        typeLock = 'THE LEARNER';
+        lockReason = `Only ${totalStars} total stars`;
+        console.log(`[Pre-Check] BEGINNER locked: ${typeLock} (${lockReason})`);
+    }
+    // **HIDDEN GEM**: Elite quality, low visibility
+    else if (qualityScore >= 8 && highestStars < 100) {
+        tierLock = 'COMMON';
+        typeLock = 'THE HIDDEN GEM';
+        lockReason = `Quality score ${qualityScore}/10 but only ${highestStars} stars`;
+        console.log(`[Pre-Check] HIDDEN GEM locked: ${typeLock} (${lockReason})`);
+    }
+
     const prompt = `
 ${typeLock ? `🔒 CLASSIFICATION LOCKED: "${typeLock}" 🔒
 Reason: ${lockReason}
 You MUST return this exact label. No exceptions.
 
-` : ''}Analyze this developer and return a JSON classification.
+` : ''}Analyze this developer and return a JSON classification using our PERSONA system.
 
 ### AGGREGATE STATS:
 - PEAK_PROJECT_STARS: ${highestStars} ${highestStars >= 5000 ? '⬅️ LEGENDARY THRESHOLD MET' : ''}
 - TOTAL_STARS: ${totalStars}
 - QUALITY_SCORE: ${qualityScore}/10
 - EXTERNAL_CONTRIBS: ${globalMetadata.userStats?.externalContributions || 0}
+- MAINTAINER_OF_1K_PLUS: ${globalMetadata.topRepos.filter((r: any) => r.stars >= 1000 && r.isMaintainer).length > 0 ? 'YES' : 'NO'}
 
 ### TOP REPOSITORIES:
 ${globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => `
 ${i + 1}. "${r.name}" 
    - Stars: ${r.stars}
    - Educational: ${r.educationalMeta?.isEducational ? 'YES' : 'NO'}
-   - Likely Guide/Tutorial: ${r.educationalMeta?.isLikelyGuide ? 'YES' : 'NO'}
+   - Likely Guide/Curated: ${r.educationalMeta?.isLikelyGuide ? 'YES' : 'NO'}
+   - Stars/Commit Ratio: ${r.educationalMeta?.starsPerCommit?.toFixed(1) || 'N/A'} ${r.educationalMeta?.starsPerCommit > 50 ? '⬅️ CURATED CONTENT SIGNAL' : ''}
    - Maintainer: ${r.isMaintainer ? 'YES' : 'NO'}
 `).join('')}
 
+### TRAJECTORY EVOLUTION:
+${globalMetadata.trajectoryNarrative || 'No historical data available'}
+
 ### MANDATORY CLASSIFICATION LOGIC:
 
-TIER DETERMINATION (CHECK FIRST):
-1. IF PEAK_PROJECT_STARS >= 5,000 → MUST be LEGENDARY tier
-   - If top repo has educational keywords → THE TECHNICAL TITAN
-   - If top repo is production tool → THE FOUNDATION BUILDER
+**TIER 1: LEGENDARY 🟡 (Top 5%)**
+- THE ARCHITECT - Built infrastructure used by thousands (5K+ stars, production tools/libraries)
+- THE PROFESSOR - Created educational content that defined how people learn (5K+ stars, tutorials/guides/courses)
+
+**TIER 2: RARE 🟣 (Top 15%)**
+- THE MAINTAINER - Keeps critical OSS alive (1K+ stars, consistent maintenance)
+- THE SPECIALIST - Deep expertise in niche domains (300-1K stars, ML/compilers/crypto/systems)
+- THE SYSTEMS THINKER - Distributed systems, databases, performance-critical code (500-3K stars)
+
+**TIER 3: UNCOMMON 🔵 (Top 30%)**
+- THE BUILDER - Ships products people use (100-500 stars, production features)
+- THE CONTRIBUTOR - 100+ meaningful PRs to external projects (50-300 stars on own work)
+- THE CRAFTSPERSON - High-quality code with tests/CI (100-300 stars, quality score >= 6)
+
+**TIER 4: COMMON ⚪ (Bottom 50%)**
+- THE HIDDEN GEM - Elite code quality but low visibility (<100 stars, quality score >= 8)
+- THE TINKERER - Useful scripts and tools (10-50 stars, practical projects)
+- THE EXPLORER - Trying new languages/frameworks (<20 stars, 6+ languages)
+- THE LEARNER - Building foundations (0-10 total stars)
+
+### CLASSIFICATION RULES:
+1. If PEAK_PROJECT_STARS >= 5,000 → MUST be LEGENDARY tier
+   - Educational/curated content → THE PROFESSOR
+   - Production tools/libraries → THE ARCHITECT
    
-2. IF PEAK_PROJECT_STARS >= 1,000 → MUST be RARE tier minimum
+2. If PEAK_PROJECT_STARS >= 1,000 AND user is maintainer → THE MAINTAINER (RARE tier)
 
-3. IF PEAK_PROJECT_STARS < 10 AND TOTAL_STARS < 10 → MUST be THE BEGINNER STUDENT
+3. If QUALITY_SCORE >= 8 AND PEAK_PROJECT_STARS < 100 → THE HIDDEN GEM
 
-SPECIAL CASES:
-- IF QUALITY_SCORE >= 7 AND PEAK_PROJECT_STARS < 100 → THE HIDDEN GEM
+4. If PEAK_PROJECT_STARS < 10 AND TOTAL_STARS < 10 → THE LEARNER
 
-### AVAILABLE LABELS BY TIER:
+5. If EXTERNAL_CONTRIBS >= 100 → Consider THE CONTRIBUTOR
 
-LEGENDARY 🟡 (Top 5%):
-- THE FOUNDATION BUILDER - Production libraries/tools with 5,000+ stars
-- THE TECHNICAL TITAN - Educational content/tutorials with 5,000+ stars
-
-RARE 🟣 (Top 15%):
-- THE OPEN SOURCE CHAMPION - Maintainer of 1,000+ star projects
-- THE SYSTEM ARCHITECT - Complex distributed systems (500-3,000 stars)
-- THE DEEP SPECIALIST - Niche expertise (ML, compilers, crypto) 300-1,000 stars
-
-UNCOMMON 🔵 (Top 30%):
-- THE OPEN SOURCE CONTRIBUTOR - 100+ external contributions, 50-300 stars
-- THE INDEPENDENT BUILDER - Multiple shipped products, 100-300 stars
-- THE PRODUCT ENGINEER - User-facing features, 50-150 stars
-
-COMMON ⚪ (Bottom 50%):
-- THE HIDDEN GEM - <100 stars BUT quality score >= 7/10 (Tests, CI, TS)
-- THE PRACTICAL BUILDER - Useful tools, 10-50 stars
-- THE EXPERIMENTAL DEVELOPER - 6+ languages, <20 stars
-- THE BEGINNER STUDENT - Learning phase, 0-10 stars total
-
----
-
-Annual Timeline:
-${JSON.stringify(globalMetadata.trajectory, null, 2)}
-
-Code Samples:
-${codeSamples}
+### Code Samples (Truncated for Token Efficiency):
+${codeSamples.substring(0, 1500)}
 
 ${typeLock ? `
 ⚠️ CRITICAL OVERRIDE ⚠️
-Based on star thresholds, you MUST return:
+Based on pre-classification logic, you MUST return:
 {
   "label": "${typeLock}",
   "rarity": "${tierLock}",
-  "rarity_badge": "${tierLock === 'LEGENDARY' ? '🟡' : '⚪'}",
+  "rarity_badge": "${tierLock === 'LEGENDARY' ? '🟡' : tierLock === 'RARE' ? '🟣' : tierLock === 'UNCOMMON' ? '🔵' : '⚪'}",
   ...
 }
 Do NOT deviate from this classification.
 ` : ''}
 
 ### OUTPUT STRUCTURE:
-Return a JSON object:
+Return a JSON object with this exact structure:
 {
-  "label": "THE [LABEL NAME]",
+  "label": "THE [PERSONA NAME]",
   "rarity": "LEGENDARY" | "RARE" | "UNCOMMON" | "COMMON",
   "rarity_badge": "🟡" | "🟣" | "🔵" | "⚪",
   "rarity_percentile": "Top X%",
-  "trajectory_summary": "1 sentence evolution summary.",
-  "recruiter_summary": "3 detailed paragraphs analysis.",
+  "trajectory_summary": "1-2 sentence evolution summary from early work to current focus.",
+  "recruiter_summary": "3 detailed paragraphs: (1) Technical strengths & impact, (2) Code quality & practices, (3) Collaboration & community engagement.",
   "highlights": [
     { "title": "...", "detail": "...", "type": "positive" | "negative" }
   ],
-  "technical_signal": "Short technical proof.",
-  "technical_signal_detailed": "Evidence-backed deep dive.",
+  "technical_signal": "One sentence proof of technical depth.",
+  "technical_signal_detailed": "2-3 paragraphs diving into architectural decisions, code patterns, or technical challenges solved.",
   "verified_skills": [
-    { "name": "...", "level": "Beginner|Intermediate|Advanced", "evidence": "..." }
+    { "name": "Skill Name", "level": "Beginner|Intermediate|Advanced|Expert", "evidence": "Concrete example from repos" }
   ]
 }
 
-### HIGHLIGHT RULES:
-- MANDATORY DISTRIBUTION: You MUST return between 3 and 5 total highlights.
-- REQUIRED MIX: Exactly 2-4 items MUST be "type": "positive" AND exactly 1-3 items MUST be "type": "negative".
-- FORENSIC AUDIT: You are not a hype-man. You MUST find technical debt, missing documentation, or lack of testing to serve as negative highlights.
-- "type": "negative" (Orange in UI): For low test coverage, high complexity, manual deployment, or stale code.
-- "type": "positive" (Green in UI): For complex features, community adoption, clean architecture, or consistent maintenance.
+### HIGHLIGHT REQUIREMENTS (CRITICAL):
+- **MANDATORY COUNT**: Return exactly 4-5 highlights total
+- **REQUIRED MIX**: 
+  - 3 items with "type": "positive" (Green in UI)
+  - 1-2 items with "type": "negative" (Orange in UI)
+- **Forensic Mindset**: You MUST identify real technical debt:
+  - Missing test coverage
+  - No CI/CD automation
+  - Stale dependencies
+  - Lack of documentation
+  - High code complexity without comments
+  - Manual deployment processes
+- **NO GENERIC FLUFF**: Each highlight needs specific evidence from repos
 
-Return JSON matching the structure exactly.
+Return ONLY valid JSON matching this structure.
 `;
 
     try {
@@ -154,20 +177,23 @@ Return JSON matching the structure exactly.
                 messages: [
                     {
                         role: 'system',
-                        content: `You are a strict engineering classifier.
+                        content: `You are a strict engineering classifier using a PERSONA-based categorization system.
 
 CRITICAL RULES:
-1. Stars >= 5,000 on one repo = LEGENDARY tier (Technical Titan or Foundation Builder ONLY)
-2. Stars < 10 total = THE BEGINNER STUDENT ONLY
-3. Never use "Tutorial Follower" - that term doesn't exist
-4. Educational content with 5,000+ stars = THE TECHNICAL TITAN (not beginner)
+1. Stars >= 5,000 on one repo = LEGENDARY tier (Professor or Architect ONLY)
+2. Stars < 10 total = THE LEARNER ONLY
+3. Quality score >= 8 with <100 stars = THE HIDDEN GEM
+4. Educational content (guides, tutorials, curated lists) with 5K+ stars = THE PROFESSOR
+5. Production infrastructure (libraries, tools, frameworks) with 5K+ stars = THE ARCHITECT
 
-If the user message includes a LOCKED classification, you MUST return that exact label.`
+If the user message includes a LOCKED classification, return that exact label with no deviation.
+
+Be forensic in finding technical debt. Every developer has weaknesses - find them and include as negative highlights.`
                     },
                     { role: 'user', content: prompt }
                 ],
                 response_format: { type: 'json_object' },
-                temperature: 0.1  // Lower temperature for more deterministic outputs
+                temperature: 0.1
             })
         });
 
@@ -181,19 +207,13 @@ If the user message includes a LOCKED classification, you MUST return that exact
         // --- ROBUST JSON CLEANING ---
         const cleanJsonResponse = (text: string) => {
             try {
-                // 1. Strip potential Markdown code blocks
                 let cleaned = text.trim();
                 if (cleaned.startsWith('```')) {
                     cleaned = cleaned.replace(/^```json\n?/, '').replace(/\n?```$/, '');
                 }
-
-                // 2. Fix common trailing comma issues
                 cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
-
-                // Attempt parse
                 return JSON.parse(cleaned);
             } catch (e) {
-                // Last ditch effort: try to find the first '{' and last '}'
                 try {
                     const firstBrace = text.indexOf('{');
                     const lastBrace = text.lastIndexOf('}');
@@ -210,26 +230,53 @@ If the user message includes a LOCKED classification, you MUST return that exact
             analysis = cleanJsonResponse(rawContent);
         } catch (error) {
             console.error('[DeepSeek] Fatal JSON Error:', error);
-            // FAILSAFE: Return a basic template so the database operation doesn't crash
+            // FAILSAFE: Return a basic template
             analysis = {
-                label: typeLock || 'THE PRACTICAL BUILDER',
+                label: typeLock || 'THE TINKERER',
                 rarity: tierLock || 'COMMON',
-                rarity_badge: tierLock === 'LEGENDARY' ? '🟡' : '⚪',
+                rarity_badge: tierLock === 'LEGENDARY' ? '🟡' : tierLock === 'RARE' ? '🟣' : tierLock === 'UNCOMMON' ? '🔵' : '⚪',
                 trajectory_summary: 'Technical profile analysis exceeded token limits or contained invalid characters.',
-                recruiter_summary: 'Unable to parse detailed AI summary.',
+                recruiter_summary: 'Unable to parse detailed AI summary due to response format error.',
                 highlights: []
             };
         }
 
-        // ENSURE REQUIRED FIELDS EXIST (Safety against AI omission)
-        analysis.label = analysis.label || (typeLock || 'THE PRACTICAL BUILDER');
+        // ENSURE REQUIRED FIELDS EXIST
+        analysis.label = analysis.label || (typeLock || 'THE TINKERER');
+        analysis.rarity = analysis.rarity || (tierLock || 'COMMON');
+        analysis.rarity_badge = analysis.rarity_badge || '⚪';
         analysis.trajectory_summary = analysis.trajectory_summary || `Evolved through ${globalMetadata.topRepos.length} repositories with a focus on ${globalMetadata.userStats?.languages?.[0] || 'software engineering'}.`;
         analysis.recruiter_summary = analysis.recruiter_summary || analysis.trajectory_summary;
-        analysis.highlights = analysis.highlights || [
-            { title: "Technical Impact", detail: `Built projects with ${highestStars} peak stars.`, type: "positive" },
-            { title: "Language Diversity", detail: `Proficient in ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.`, type: "positive" },
-            { title: "Forensic Observation", detail: "Automated test coverage or CI/CD signals are limited in public samples.", type: "negative" }
-        ];
+
+        // **POST-PROCESS HIGHLIGHTS**: Enforce distribution
+        const highlights = analysis.highlights || [];
+        let positives = highlights.filter((h: any) => h.type === 'positive');
+        let negatives = highlights.filter((h: any) => h.type === 'negative');
+
+        // Enforce 3 positives, 1-2 negatives
+        if (positives.length > 3) positives = positives.slice(0, 3);
+        if (positives.length < 3) {
+            // Add generic positives if needed
+            while (positives.length < 3) {
+                positives.push({
+                    title: "Technical Range",
+                    detail: `Works across ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.`,
+                    type: "positive"
+                });
+            }
+        }
+
+        if (negatives.length === 0) {
+            // FORCE at least one negative
+            negatives.push({
+                title: "Documentation Gaps",
+                detail: "Limited README content or missing contributor guidelines in public repositories.",
+                type: "negative"
+            });
+        }
+        if (negatives.length > 2) negatives = negatives.slice(0, 2);
+
+        analysis.highlights = [...positives, ...negatives];
 
         // POST-VALIDATION: Override if DeepSeek violated constraints
         if (typeLock && analysis.label !== typeLock) {
