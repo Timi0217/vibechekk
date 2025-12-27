@@ -50,10 +50,11 @@ const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: s
   }
 
   const rarityColors: Record<string, string> = {
-    'LEGENDARY': '#b45309',
-    'RARE': '#7c3aed',
-    'UNCOMMON': '#2563eb',
-    'COMMON': '#64748b'
+    'HYPER RARE': '#f59e0b',    // Gold/Amber for top 1%
+    'ULTRA RARE': '#8b5cf6',    // Purple for top 5%
+    'RARE': '#3b82f6',          // Blue for top 15%
+    'UNCOMMON': '#10b981',      // Green for top 30%
+    'COMMON': '#64748b'         // Gray for bottom 50%
   }
 
   const normalizedLabel = label?.toLowerCase().trim().replace(/^the\s+/, '');
@@ -65,7 +66,8 @@ const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: s
 
 const getRarityClass = (rarity: string) => {
   const r = rarity?.toUpperCase();
-  if (r === 'LEGENDARY') return 'legendary';
+  if (r === 'HYPER RARE') return 'hyper-rare';
+  if (r === 'ULTRA RARE') return 'ultra-rare';
   if (r === 'RARE') return 'rare';
   if (r === 'UNCOMMON') return 'uncommon';
   return 'common';
