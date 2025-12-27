@@ -150,35 +150,35 @@ Do NOT deviate from this classification.
 ### OUTPUT STRUCTURE:
 Return a JSON object with this exact structure:
 {
-    "label": "THE [PERSONA NAME]",
-        "rarity": "LEGENDARY" | "RARE" | "UNCOMMON" | "COMMON",
-            "rarity_badge": "🟡" | "🟣" | "🔵" | "⚪",
-                "rarity_percentile": "Top X%",
-                    "trajectory_summary": "1-2 sentence evolution summary from early work to current focus.",
-                        "recruiter_summary": "3 detailed paragraphs: (1) Technical strengths & impact, (2) Code quality & practices, (3) Collaboration & community engagement.",
-                            "highlights": [
-                                { "title": "...", "detail": "...", "type": "positive" | "negative" }
-                            ],
-                                "technical_signal": "One sentence proof of technical depth.",
-                                    "technical_signal_detailed": "2-3 paragraphs diving into architectural decisions, code patterns, or technical challenges solved.",
-                                        "verified_skills": [
-                                            { "name": "Skill Name", "level": "Beginner|Intermediate|Advanced|Expert", "evidence": "Concrete example from repos" }
-                                        ]
+  "label": "THE [PERSONA NAME]",
+  "rarity": "LEGENDARY" | "RARE" | "UNCOMMON" | "COMMON",
+  "rarity_badge": "🟡" | "🟣" | "🔵" | "⚪",
+  "rarity_percentile": "Top X%",
+  "trajectory_summary": "1-2 sentence evolution summary from early work to current focus.",
+  "recruiter_summary": "3 detailed paragraphs: (1) Technical strengths & impact, (2) Code quality & practices, (3) Collaboration & community engagement.",
+  "highlights": [
+    { "title": "...", "detail": "...", "type": "positive" | "negative" }
+  ],
+  "technical_signal": "One sentence proof of technical depth.",
+  "technical_signal_detailed": "2-3 paragraphs diving into architectural decisions, code patterns, or technical challenges solved.",
+  "verified_skills": [
+    { "name": "Skill Name", "level": "Beginner|Intermediate|Advanced|Expert", "evidence": "Concrete example from repos" }
+  ]
 }
 
-### HIGHLIGHT REQUIREMENTS(CRITICAL):
-- ** MANDATORY COUNT **: Return exactly 4 - 5 highlights total
-    - ** REQUIRED MIX **:
-- 3 items with "type": "positive"(Green in UI)
-    - 1 - 2 items with "type": "negative"(Orange in UI)
-        - ** Forensic Mindset **: You MUST identify real technical debt:
-- Missing test coverage
-    - No CI / CD automation
-        - Stale dependencies
-            - Lack of documentation
-                - High code complexity without comments
-                    - Manual deployment processes
-                        - ** NO GENERIC FLUFF **: Each highlight needs specific evidence from repos
+### HIGHLIGHT REQUIREMENTS (CRITICAL):
+- **MANDATORY COUNT**: Return exactly 4-5 highlights total
+- **REQUIRED MIX**: 
+  - 3 items with "type": "positive" (Green in UI)
+  - 1-2 items with "type": "negative" (Orange in UI)
+- **Forensic Mindset**: You MUST identify real technical debt:
+  - Missing test coverage
+  - No CI/CD automation
+  - Stale dependencies
+  - Lack of documentation
+  - High code complexity without comments
+  - Manual deployment processes
+- **NO GENERIC FLUFF**: Each highlight needs specific evidence from repos
 
 Return ONLY valid JSON matching this structure.
 `;
@@ -188,7 +188,7 @@ Return ONLY valid JSON matching this structure.
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey} `
+                'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model: 'deepseek-chat',
@@ -198,15 +198,15 @@ Return ONLY valid JSON matching this structure.
                         content: `You are a strict engineering classifier using a PERSONA-based categorization system.
 
 CRITICAL RULES:
-1. Stars >= 5,000 on one repo = LEGENDARY tier(Professor or Architect ONLY)
+1. Stars >= 5,000 on one repo = LEGENDARY tier (Professor or Architect ONLY)
 2. Stars < 10 total = THE LEARNER ONLY
 3. Quality score >= 8 with <100 stars = THE HIDDEN GEM
-4. Educational content(guides, tutorials, curated lists) with 5K + stars = THE PROFESSOR
-5. Production infrastructure(libraries, tools, frameworks) with 5K + stars = THE ARCHITECT
+4. Educational content (guides, tutorials, curated lists) with 5K+ stars = THE PROFESSOR
+5. Production infrastructure (libraries, tools, frameworks) with 5K+ stars = THE ARCHITECT
 
 If the user message includes a LOCKED classification, return that exact label with no deviation.
 
-Be forensic in finding technical debt.Every developer has weaknesses - find them and include as negative highlights.`
+Be forensic in finding technical debt. Every developer has weaknesses - find them and include as negative highlights.`
                     },
                     { role: 'user', content: prompt }
                 ],

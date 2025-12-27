@@ -56,12 +56,11 @@ export const fetchCodeQualitySignals = async (token: string, owner: string, repo
 
     const paths = tree.tree.map((item: any) => item.path);
 
-    // **NEW**: Extract README for context
+    // Extract README for context
     let readmePreview = '';
     try {
       const { data: readme } = await octokit.rest.repos.getReadme({ owner, repo });
       const content = Buffer.from(readme.content, 'base64').toString('utf-8');
-      // Get first 500 chars for project description context
       readmePreview = content.substring(0, 500);
     } catch {
       readmePreview = 'No README found';
@@ -86,7 +85,6 @@ export const checkMaintainerStatus = async (token: string, username: string, rep
   const octokit = new Octokit({ auth: token });
 
   try {
-    // If user is owner, they are maintainer
     if (username.toLowerCase() === owner.toLowerCase()) return true;
 
     const { data: collaborators } = await octokit.rest.repos.listCollaborators({
@@ -113,7 +111,6 @@ export const detectEducationalContent = (repo: any) => {
     'primer', 'cheatsheet', 'reference', 'university', 'curriculum'
   ];
 
-  // Exclude keywords that are often in production tools
   const productionExclusions = ['framework', 'library', 'engine', 'platform', 'api'];
 
   const nameAndDesc = `${repo.name} ${repo.description || ''}`.toLowerCase();
@@ -121,11 +118,8 @@ export const detectEducationalContent = (repo: any) => {
   const hasProductionSignals = productionExclusions.some(kw => nameAndDesc.includes(kw));
 
   const totalCommitCount = repo.totalCommits || 0;
-
-  // **IMPROVED HEURISTIC**: Stars/commits ratio reveals curated content
   const suspiciousRatio = totalCommitCount > 0 ? (repo.stars / totalCommitCount) : 0;
-  const isLikelyCurated = suspiciousRatio > 50; // e.g., 5K stars / 50 commits = 100 ratio
-
+  const isLikelyCurated = suspiciousRatio > 50;
   const hasReadmeOnly = totalCommitCount < 10;
 
   return {
@@ -158,12 +152,11 @@ export const calculateStarDistribution = (repos: any[]) => {
   };
 };
 
-// **RICH DATA EXTRACTION**: Get comprehensive code samples from top repos
 export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]) => {
   const octokit = new Octokit({ auth: token });
   const allDiffs: string[] = [];
 
-  // Top 5 repos for maximum signal (was 2)
+  // Top 5 repos for maximum signal
   for (const repo of repos.slice(0, 5)) {
     const topCommits = [...(repo.commits || [])]
       .sort((a: any, b: any) => {
@@ -171,7 +164,7 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
         const bImpact = (b.additions || 0) + (b.deletions || 0);
         return bImpact - aImpact;
       })
-      .slice(0, 3); // Top 3 commits per repo (was 1)
+      .slice(0, 3); // Top 3 commits per repo
 
     try {
       for (const commit of topCommits) {
@@ -183,12 +176,11 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
 
         const files = data.files || [];
 
-        // **PRIORITIZE CODE FILES**: Filter out config noise
+        // Prioritize code files, filter out config noise
         const codeFiles = files
           .filter((f: any) => {
             if (!f.patch) return false;
 
-            // Skip lock files, generated code, and pure config
             const skipPatterns = [
               'package-lock.json', 'yarn.lock', 'Cargo.lock', 'poetry.lock',
               '.min.js', '.bundle.js', 'dist/', 'build/',
@@ -197,7 +189,6 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
 
             if (skipPatterns.some(p => f.filename.includes(p))) return false;
 
-            // Prioritize actual code files
             const codeExtensions = [
               '.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go',
               '.java', '.cpp', '.c', '.rb', '.php', '.swift', '.kt'
@@ -205,7 +196,7 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
 
             return codeExtensions.some(ext => f.filename.endsWith(ext));
           })
-          .slice(0, 5); // Up to 5 files per commit (was 2)
+          .slice(0, 5); // Up to 5 files per commit
 
         const codeSnippets = codeFiles
           .map((f: any) => {
@@ -213,16 +204,14 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
             const meaningfulLines = patch
               .split('\n')
               .filter((line: string) => {
-                // Get actual code changes, not just any +/-
                 const trimmed = line.trim();
                 if (!trimmed.startsWith('+') && !trimmed.startsWith('-')) return false;
-                if (trimmed.length < 10) return false; // Skip trivial lines
+                if (trimmed.length < 10) return false;
 
-                // Skip pure whitespace/bracket changes
                 const content = trimmed.substring(1).trim();
                 return content.length > 5 && !/^[{}()\[\];,]*$/.test(content);
               })
-              .slice(0, 30) // More lines per file (was 15)
+              .slice(0, 30)
               .join('\n');
 
             return `File: ${f.filename}\n${meaningfulLines}`;
@@ -243,15 +232,13 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
     return 'No meaningful code samples available. Analysis based on repository metadata only.';
   }
 
-  // DeepSeek can handle 64K tokens, so we're generous here
-  // Truncate at ~10K chars (~2500 tokens) to leave room for metadata
+  // DeepSeek can handle 64K tokens - truncate at ~10K chars
   return result.length > 10000 ? result.substring(0, 10000) + '\n\n[...truncated for token efficiency]' : result;
 };
 
-// **NEW**: Generate human-readable trajectory narrative
 export const generateTrajectoryNarrative = (trajectory: Record<string, any[]>): string => {
   const entries = Object.entries(trajectory)
-    .sort(([a], [b]) => parseInt(a) - parseInt(b)) // Chronological order
+    .sort(([a], [b]) => parseInt(a) - parseInt(b))
     .map(([year, repos]) => {
       const langs = [...new Set(repos.map(r => r.language).filter(Boolean))];
       const avgStars = repos.reduce((s, r) => s + (r.stars || 0), 0) / repos.length;
@@ -292,7 +279,6 @@ export const analyzeGlobalTrajectory = (repos: any[]) => {
 export const findTopRepos = async (token: string, username: string) => {
   const octokit = new Octokit({ auth: token });
 
-  // Rate Limit Check
   try {
     const { data: rateLimit } = await octokit.rest.rateLimit.get();
     if (rateLimit.resources.core.remaining < 100) {
@@ -351,7 +337,6 @@ export const findTopRepos = async (token: string, username: string) => {
       });
     };
 
-    // 0. TOP ALL TIME (Critical for high-tier classification)
     const allTimeTop = [...allRepos].sort((a, b) => b.stargazerCount - a.stargazerCount).slice(0, 10);
     console.log(`[GitHub] Top all-time repos: ${allTimeTop.slice(0, 3).map(r => `${r.name} (${r.stargazerCount}⭐)`).join(', ')}`);
     addRepos(allTimeTop);
@@ -395,7 +380,6 @@ export const findTopRepos = async (token: string, username: string) => {
 export const analyzeGitHubProfile = async (token: string, username: string) => {
   console.log(`[GitHub] Starting comprehensive analysis for ${username}`);
 
-  // 1. Core Data with fallback
   const [userStats, topRepos] = await Promise.all([
     fetchUserStats(token, username).catch(() => null),
     findTopRepos(token, username)
@@ -410,12 +394,12 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     forkRatio: 0
   };
 
-  // 2. Extra Signals - analyze top 5 repos (was 3)
+  // Analyze top 5 repos
   const qualitySignals = topRepos.length > 0
     ? await Promise.all(topRepos.slice(0, 5).map(r => fetchCodeQualitySignals(token, username, r.name)))
     : [];
 
-  // 3. Maintainer Status for high-star repos
+  // Maintainer status for high-star repos
   await Promise.all(topRepos.map(async (repo: any) => {
     if (repo.stars >= 1000) {
       repo.isMaintainer = await checkMaintainerStatus(token, username, repo.name, username);
@@ -424,12 +408,9 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     repo.contribution = analyzeContributionDepth(repo);
   }));
 
-  // 4. Code Diffs (optimized)
   const codeSamples = await fetchSmartDiffs(token, username, topRepos);
 
-  // 5. Final Package
   const distribution = calculateStarDistribution(topRepos);
-  // OVERRIDE with verified global stats from fetchUserStats
   distribution.total_stars = stats.totalStars || distribution.total_stars;
   distribution.highest_single_repo = Math.max(distribution.highest_single_repo, topRepos[0]?.stars || 0);
 
@@ -441,7 +422,7 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     qualitySignals: qualitySignals.filter(Boolean),
     starDistribution: distribution,
     trajectory: trajectoryData,
-    trajectoryNarrative: generateTrajectoryNarrative(trajectoryData), // **NEW**
+    trajectoryNarrative: generateTrajectoryNarrative(trajectoryData),
     codeSamples
   };
-};
+}; 
