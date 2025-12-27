@@ -24,11 +24,13 @@
 
 body {
   margin: 0;
+  padding: 0;
   background-color: var(--bg-gray);
   color: var(--text-main);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   min-height: 520px;
   width: 380px;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
