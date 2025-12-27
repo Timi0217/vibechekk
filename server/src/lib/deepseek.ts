@@ -127,7 +127,9 @@ Return a JSON object:
   ],
   "technical_signal": "Short technical proof.",
   "technical_signal_detailed": "Evidence-backed deep dive.",
-  "verified_skills": ["Skill | Level | Evidence"]
+  "verified_skills": [
+    { "name": "...", "level": "Beginner|Intermediate|Advanced", "evidence": "..." }
+  ]
 }
 
 ### HIGHLIGHT RULES:

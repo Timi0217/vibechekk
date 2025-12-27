@@ -92,6 +92,8 @@ function App() {
   const [showDetailedTechnical, setShowDetailedTechnical] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [expandedSkills, setExpandedSkills] = useState<number[]>([])
+  const [showSkills, setShowSkills] = useState(true)
+  const [showHighlights, setShowHighlights] = useState(true)
   const [loadingStep, setLoadingStep] = useState(0)
   const activeTabRef = useRef(activeTab)
 
@@ -107,6 +109,8 @@ function App() {
     setShowDetailedTechnical(false)
     setExpandedSkills([])
     setExpandedMerits([])
+    setShowSkills(true)
+    setShowHighlights(true)
   }
 
   useEffect(() => {
@@ -511,37 +515,98 @@ function App() {
             {selectedReport.metadata?.verified_skills && (
               <div className="detail-section">
                 <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
-                <h3 className="section-title" style={{ marginBottom: '8px', textTransform: 'uppercase' }}>SKILLS VERIFIED FROM CODE</h3>
-                <div className="merit-grid scrollable">
-                  {selectedReport.metadata.verified_skills.map((skill: string, i: number) => {
-                    const parts = skill.split('|').map(s => s.trim());
-                    const title = parts[0];
-                    const level = parts[1];
-                    const evidence = parts[2];
-                    const isExpanded = expandedSkills.includes(i);
-                    const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
+                <div
+                  className="section-header-btn"
+                  onClick={() => setShowSkills(!showSkills)}
+                  style={{ marginBottom: '8px' }}
+                >
+                  <h3 className="section-title">SKILLS VERIFIED FROM CODE</h3>
+                  {showSkills ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                </div>
+                {showSkills && (
+                  <div className="merit-grid scrollable">
+                    {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
+                      const isExpanded = expandedSkills.includes(i);
+                      const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
 
+                      const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
+                      const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
+                      const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
+
+                      return (
+                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                          <div className="merit-header">
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                              <span className="merit-title">{name}</span>
+                            </div>
+                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                          </div>
+                          {isExpanded && (
+                            <div className="merit-detail">
+                              {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
+                              {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+
+            <div className="detail-section">
+              <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
+              <div
+                className="section-header-btn"
+                onClick={() => setShowHighlights(!showHighlights)}
+                style={{ marginBottom: '8px' }}
+              >
+                <h3 className="section-title">HIGHLIGHTS</h3>
+                {showHighlights ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              </div>
+              {showHighlights && (
+                <div className="merit-grid">
+                  {selectedReport.meritPoints.map((point: any, i: number) => {
+                    const isExpanded = expandedMerits.includes(i);
+                    const isNegative = point.type === 'negative';
+                    const toggle = () => {
+                      setExpandedMerits((prev: number[]) =>
+                        prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
+                      );
+                    };
                     return (
-                      <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                      <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
                         <div className="merit-header">
                           <div style={{ display: 'flex', alignItems: 'center' }}>
-                            <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                            <span className="merit-title">{title}</span>
+                            {isNegative ? (
+                              <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
+                            ) : (
+                              <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                            )}
+                            <span className="merit-title">{point.title || point}</span>
                           </div>
                           {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                         </div>
                         {isExpanded && (
                           <div className="merit-detail">
-                            {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
-                            {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
-                            {parts.length > 3 && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {parts.slice(3).map((part, idx) => (
-                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', opacity: 0.8 }}>
-                                    <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent)' }}></div>
-                                    <span>{part}</span>
-                                  </div>
-                                ))}
+                            <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
+
+                            {point.business_impact && (
+                              <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
+                                <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
+                                <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
+                              </div>
+                            )}
+
+                            {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
+                              <div>
+                                <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
+                                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
+                                </ul>
                               </div>
                             )}
                           </div>
@@ -550,60 +615,7 @@ function App() {
                     );
                   })}
                 </div>
-              </div>
-            )}
-
-
-            <div className="detail-section">
-              <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
-              <h3 className="section-title" style={{ textTransform: 'uppercase' }}>HIGHLIGHTS</h3>
-              <div className="merit-grid">
-                {selectedReport.meritPoints.map((point: any, i: number) => {
-                  const isExpanded = expandedMerits.includes(i);
-                  const isNegative = point.type === 'negative';
-                  const toggle = () => {
-                    setExpandedMerits((prev: number[]) =>
-                      prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
-                    );
-                  };
-                  return (
-                    <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                      <div className="merit-header">
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          {isNegative ? (
-                            <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
-                          ) : (
-                            <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                          )}
-                          <span className="merit-title">{point.title || point}</span>
-                        </div>
-                        {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
-                      </div>
-                      {isExpanded && (
-                        <div className="merit-detail">
-                          <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
-
-                          {point.business_impact && (
-                            <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
-                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
-                              <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
-                            </div>
-                          )}
-
-                          {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
-                            <div>
-                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
-                              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              )}
               <button className="download-card-btn">
                 <FileDown size={16} />
                 DOWNLOAD REPORT CARD
