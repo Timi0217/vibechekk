@@ -1,290 +1,425 @@
+/**
+ * DeepSeek Analysis Module
+ * 
+ * Purpose: Classify developers into 15 archetypes and generate recruiter-ready assessments.
+ * 
+ * Designed for:
+ * - Technical Recruiters: Quick archetype understanding, red flags, team fit
+ * - Engineering Managers: Technical depth verification, production readiness, mentorship potential
+ * 
+ * The 15 Archetypes (by market rarity):
+ * 
+ * 🌟🌟🌟 HYPER RARE (Top 1%) - Industry-defining talent
+ *   - THE 10X ENGINEER: Builds tools/frameworks used by thousands. Think: library authors, core contributors.
+ * 
+ * 🌟🌟 ULTRA RARE (Top 5%) - Senior+ leadership material  
+ *   - THE ARCHITECT: Designs systems at scale. Can own technical direction.
+ *   - THE PROFESSOR: Exceptional at teaching. Creates learning resources others rely on.
+ * 
+ * ⭐ RARE (Top 15%) - Strong senior engineers
+ *   - THE SPECIALIST: Deep expertise in a niche (ML, security, compilers, etc.)
+ *   - THE SYSTEMS THINKER: Distributed systems, infrastructure, performance optimization.
+ * 
+ * ◆ UNCOMMON (Top 30%) - Solid mid-senior engineers
+ *   - THE MAINTAINER: Keeps open-source projects alive. Strong ownership mindset.
+ *   - THE BUILDER: Ships products. Pragmatic, gets things done.
+ *   - THE CONTRIBUTOR: Active in OSS. Good collaborator, learns from large codebases.
+ *   - THE CRAFTSPERSON: High code quality focus. Tests, documentation, clean code.
+ *   - THE HIDDEN GEM: Skilled but low GitHub visibility. Likely strong in private/enterprise work.
+ * 
+ * ● COMMON (Top 50%) - Early-mid career, high potential
+ *   - THE TINKERER: Practical problem solver. Building real things, learning by doing.
+ *   - THE GRINDER: High activity, putting in the hours. Motivated, coachable.
+ *   - THE HOBBYIST: Codes for passion, not volume. Side projects, personal interest.
+ *   - THE EXPLORER: Trying many languages/frameworks. Broad exposure, finding their niche.
+ *   - THE APPRENTICE: Early career. Tutorial projects, learning fundamentals.
+ */
+
 export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, codeSamples: string) => {
-    const highestStars = globalMetadata.starDistribution.highest_single_repo;
-    const totalStars = globalMetadata.starDistribution.total_stars;
-    const topRepo = globalMetadata.topRepos[0];
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 1: Extract key metrics from GitHub data
+    // ═══════════════════════════════════════════════════════════════════════════
 
-    // Quality score calculation
-    const qualityScore = globalMetadata.qualitySignals.reduce((score: number, q: any) => {
-        if (!q) return score;
+    const highestStars = globalMetadata.starDistribution?.highest_single_repo || 0;
+    const totalStars = globalMetadata.starDistribution?.total_stars || 0;
+    const topRepo = globalMetadata.topRepos?.[0];
+    const repoCount = globalMetadata.topRepos?.length || 0;
 
-        const hasReadme = q.readmePreview && q.readmePreview !== 'No README found';
-        const readmeIsSubstantial = hasReadme && q.readmePreview.length > 200;
-
-        return score
-            + (q.hasTests ? 2 : 0)
-            + (q.hasCI ? 2 : 0)
-            + (q.hasTypeScript ? 1 : 0)
-            + (q.hasLinting ? 1 : 0)
-            + (readmeIsSubstantial ? 1 : 0)
-            + (q.complexity === 'high' ? 2 : q.complexity === 'medium' ? 1 : 0);
-    }, 0);
-
-    // Calculate skill depth from repo metadata and code
-    const skillComplexityScore = (() => {
-        const allText = [
-            ...globalMetadata.topRepos.map((r: any) => `${r.name} ${r.description || ''}`),
-            codeSamples
-        ].join(' ').toLowerCase();
-
-        const advancedSignals = [
-            'distributed', 'microservices', 'kubernetes', 'docker', 'serverless',
-            'machine learning', 'ml', 'compiler', 'optimization', 'concurrency',
-            'websocket', 'graphql', 'postgresql', 'redis', 'system design',
-            'security', 'cryptography', 'parsing', 'interpreter', 'blockchain',
-            'performance', 'caching', 'indexing', 'algorithms', 'data structures',
-            'systems programming', 'c programming', 'rust', 'kernel', 'assembly'
-        ];
-
-        const intermediateSignals = [
-            'api', 'rest', 'authentication', 'auth', 'jwt', 'deployment', 'testing',
-            'state management', 'responsive', 'full-stack', 'backend', 'frontend',
-            'database', 'sql', 'nosql', 'react', 'vue', 'angular', 'node',
-            'express', 'flask', 'django', 'spring', 'typescript'
-        ];
-
-        const beginnerSignals = [
-            'tutorial', 'learning', 'practice', 'clone', 'sample',
-            'exercise', 'homework', 'bootcamp', 'beginner', 'intro',
-            'hello world', 'getting started', 'basic'
-        ];
-
-        const advancedCount = advancedSignals.filter(s => allText.includes(s)).length;
-        const intermediateCount = intermediateSignals.filter(s => allText.includes(s)).length;
-        const beginnerCount = beginnerSignals.filter(s => allText.includes(s)).length;
-
-        const avgFileCount = globalMetadata.qualitySignals.reduce((sum: number, q: any) =>
-            sum + (q?.fileCount || 0), 0) / Math.max(globalMetadata.qualitySignals.length, 1);
-
-        const avgCommits = globalMetadata.topRepos.reduce((sum: number, r: any) =>
-            sum + (r.totalCommits || 0), 0) / Math.max(globalMetadata.topRepos.length, 1);
-
-        const projectComplexity = avgFileCount > 100 ? 2 : avgFileCount > 30 ? 1 : 0;
-        const commitDepth = avgCommits > 50 ? 2 : avgCommits > 20 ? 1 : 0;
-
-        return {
-            advanced: advancedCount,
-            intermediate: intermediateCount,
-            beginner: beginnerCount,
-            totalComplexity: (advancedCount * 3) + (intermediateCount * 2) - (beginnerCount * 1) + projectComplexity + commitDepth
-        };
-    })();
-
-    console.log(`[Skill Analysis] Advanced: ${skillComplexityScore.advanced}, Intermediate: ${skillComplexityScore.intermediate}, Beginner: ${skillComplexityScore.beginner}, Total: ${skillComplexityScore.totalComplexity}`);
-
-    // PRE-CLASSIFICATION with Impact Score Logic
-    const totalCommits = globalMetadata.topRepos.reduce((sum: number, r: any) => sum + (r.totalCommits || 0), 0);
-    const externalContribs = globalMetadata.userStats?.externalContributions || 0;
-    const isMaintainer = globalMetadata.topRepos.some((r: any) => r.isMaintainer && r.stars >= 100);
-
+    // Account info
     const last90DaysCommits = globalMetadata.userStats?.last90DaysCommits || 0;
+    const totalCommits = globalMetadata.topRepos?.reduce((sum: number, r: any) => sum + (r.totalCommits || 0), 0) || 0;
+    const externalContribs = globalMetadata.userStats?.externalContributions || 0;
+    const languages = globalMetadata.userStats?.languages || [];
     const accountCreatedAt = globalMetadata.userStats?.createdAt;
     const accountAgeYears = accountCreatedAt
         ? (Date.now() - new Date(accountCreatedAt).getTime()) / (365 * 24 * 60 * 60 * 1000)
         : 0;
 
-    // AI Usage Analysis
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 2: Calculate Quality Score (What Engineering Managers care about)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const qualitySignals = {
+        hasTests: globalMetadata.qualitySignals?.some((q: any) => q?.hasTests) || false,
+        hasCI: globalMetadata.qualitySignals?.some((q: any) => q?.hasCI) || false,
+        hasTypeScript: globalMetadata.qualitySignals?.some((q: any) => q?.hasTypeScript) || false,
+        hasLinting: globalMetadata.qualitySignals?.some((q: any) => q?.hasLinting) || false,
+        hasDocs: globalMetadata.qualitySignals?.some((q: any) => q?.hasDocs) || false,
+        avgFileCount: globalMetadata.qualitySignals?.reduce((sum: number, q: any) =>
+            sum + (q?.fileCount || 0), 0) / Math.max(globalMetadata.qualitySignals?.length || 1, 1)
+    };
+
+    // Quality tiers for classification
+    const qualityTier = (() => {
+        let score = 0;
+        if (qualitySignals.hasTests) score += 3;
+        if (qualitySignals.hasCI) score += 3;
+        if (qualitySignals.hasTypeScript) score += 1;
+        if (qualitySignals.hasLinting) score += 1;
+        if (qualitySignals.hasDocs) score += 1;
+        if (qualitySignals.avgFileCount > 50) score += 1;
+
+        if (score >= 8) return 'production-ready';
+        if (score >= 5) return 'professional';
+        if (score >= 2) return 'developing';
+        return 'basic';
+    })();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 3: Analyze Technical Depth (What kind of work do they do?)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const allText = [
+        ...globalMetadata.topRepos.map((r: any) => `${r.name} ${r.description || ''} ${r.language || ''}`),
+        codeSamples
+    ].join(' ').toLowerCase();
+
+    // Domain expertise detection
+    const domains = {
+        systems: ['distributed', 'kubernetes', 'microservices', 'docker', 'infrastructure', 'devops', 'ci/cd', 'scaling', 'load balancing'].filter(s => allText.includes(s)).length,
+        ml: ['machine learning', 'ml', 'tensorflow', 'pytorch', 'neural', 'nlp', 'computer vision', 'data science'].filter(s => allText.includes(s)).length,
+        security: ['security', 'cryptography', 'authentication', 'oauth', 'encryption', 'vulnerability'].filter(s => allText.includes(s)).length,
+        lowLevel: ['compiler', 'kernel', 'assembly', 'llvm', 'rust', 'systems programming', 'memory management'].filter(s => allText.includes(s)).length,
+        web: ['react', 'vue', 'angular', 'nextjs', 'frontend', 'css', 'responsive', 'web'].filter(s => allText.includes(s)).length,
+        backend: ['api', 'rest', 'graphql', 'database', 'sql', 'postgresql', 'mongodb', 'redis', 'express', 'django', 'flask'].filter(s => allText.includes(s)).length,
+        mobile: ['ios', 'android', 'react native', 'flutter', 'swift', 'kotlin'].filter(s => allText.includes(s)).length
+    };
+
+    const primaryDomain = Object.entries(domains).sort((a, b) => b[1] - a[1])[0];
+    const hasSpecialization = primaryDomain[1] >= 3;
+    const isFullStack = domains.web >= 2 && domains.backend >= 2;
+
+    // Experience level signals
+    const experienceSignals = {
+        projectScale: qualitySignals.avgFileCount > 100 ? 'large' : qualitySignals.avgFileCount > 30 ? 'medium' : 'small',
+        commitDepth: totalCommits > 500 ? 'extensive' : totalCommits > 100 ? 'moderate' : 'light',
+        recentlyActive: last90DaysCommits > 50 ? 'very-active' : last90DaysCommits > 20 ? 'active' : last90DaysCommits > 5 ? 'occasional' : 'dormant',
+        collaborates: externalContribs > 50
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 4: AI Usage Analysis (Modern hiring concern)
+    // ═══════════════════════════════════════════════════════════════════════════
+
     const avgAILikelihood = globalMetadata.avgAILikelihood || 0;
 
-    // AI modifier: penalize high AI without quality, reward moderate AI with quality
-    let aiModifier = 0;
-    if (avgAILikelihood > 80 && qualityScore < 5) {
-        aiModifier = -50; // High AI without validation
-    } else if (avgAILikelihood > 50 && qualityScore >= 7) {
-        aiModifier = 0; // High AI with quality = neutral (already in quality score)
-    } else if (avgAILikelihood > 20 && avgAILikelihood <= 50 && qualityScore >= 6) {
-        aiModifier = +10; // Moderate AI with decent quality = modern dev
-    }
-
-    // impactScore formula with AI awareness
-    let impactScore = (
-        (totalStars * 0.3) +
-        (skillComplexityScore.totalComplexity * 10) +
-        (qualityScore * 15) +
-        (totalCommits * 0.1) +
-        (externalContribs * 2) +
-        (isMaintainer ? 100 : 0) +
-        aiModifier
-    );
-    impactScore = Math.min(Math.max(impactScore, 0), 1000);
-
-    console.log(`[Impact Score] Total: ${impactScore.toFixed(1)}, AI Likelihood: ${avgAILikelihood.toFixed(1)}%, AI Modifier: ${aiModifier}`);
-
-    let tierLock: string | null = null;
-    let typeLock: string | null = null;
-    let lockReason: string = '';
-
-    // TIER 1: HYPER RARE 🌟🌟🌟
-    if (impactScore >= 700 || highestStars >= 10000 || (skillComplexityScore.totalComplexity >= 25 && qualityScore >= 8)) {
-        tierLock = 'HYPER RARE';
-        typeLock = 'THE 10X ENGINEER';
-        lockReason = `Elite impact score (${impactScore.toFixed(0)}) or massive project footprint`;
-    }
-    // TIER 2: ULTRA RARE 🌟🌟
-    else if (impactScore >= 500 || highestStars >= 5000) {
-        tierLock = 'ULTRA RARE';
-        const isEdu = topRepo?.educationalMeta?.isLikelyGuide || topRepo?.educationalMeta?.isEducational;
-        if (isEdu) {
-            typeLock = 'THE PROFESSOR';
-            lockReason = `High-impact educational authority (${highestStars} stars)`;
+    const aiAssessment = (() => {
+        if (avgAILikelihood > 70 && qualityTier === 'basic') {
+            return {
+                level: 'concerning',
+                summary: 'Heavy AI patterns without quality validation',
+                recommendation: 'Recommend live coding assessment to verify hands-on ability'
+            };
+        } else if (avgAILikelihood > 70 && qualityTier !== 'basic') {
+            return {
+                level: 'pragmatic',
+                summary: 'Uses AI tools effectively with proper testing/CI',
+                recommendation: 'Modern tooling approach, verify architectural understanding'
+            };
+        } else if (avgAILikelihood > 30) {
+            return {
+                level: 'balanced',
+                summary: 'Healthy mix of AI assistance and manual coding',
+                recommendation: 'Standard technical interview process'
+            };
         } else {
-            typeLock = 'THE ARCHITECT';
-            lockReason = `Infrastructure/Tooling architect with high impact`;
+            return {
+                level: 'traditional',
+                summary: 'Primarily hand-written code',
+                recommendation: 'Standard technical interview process'
+            };
+        }
+    })();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 5: Separate VISIBILITY from SKILL (Critical nuance!)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // VISIBILITY SIGNALS (reach, marketing, luck - NOT skill indicators)
+    // - Stars can come from: great work, good marketing, viral content, curated lists
+    // - High stars ≠ high skill (could be a popular tutorial or curated list)
+    // - Low stars ≠ low skill (enterprise devs, private work, introverts)
+    const visibilityScore = {
+        stars: totalStars,
+        highestRepo: highestStars,
+        level: highestStars >= 1000 ? 'high' : highestStars >= 100 ? 'moderate' : highestStars >= 10 ? 'low' : 'minimal'
+    };
+
+    // SKILL SIGNALS (actual technical ability)
+    // These matter more than stars for hiring decisions
+    const skillScore = {
+        codeQuality: qualityTier,
+        domainDepth: hasSpecialization ? primaryDomain[0] : 'generalist',
+        projectComplexity: experienceSignals.projectScale,
+        sustainedWork: experienceSignals.commitDepth,
+        collaboration: externalContribs >= 30 ? 'strong' : externalContribs >= 10 ? 'some' : 'minimal',
+        modernPractices: qualitySignals.hasTests && qualitySignals.hasCI
+    };
+
+    // Check if high stars are from non-code work (curated lists, tutorials, etc.)
+    const isViralNonCode = highestStars >= 500 && (topRepo?.educationalMeta?.isEducational || topRepo?.educationalMeta?.isLikelyGuide) && qualitySignals.avgFileCount < 20;
+
+    console.log(`[Visibility vs Skill] Stars: ${visibilityScore.level}, Quality: ${skillScore.codeQuality}, Domain: ${skillScore.domainDepth}`);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 6: Archetype Classification (Balancing visibility and skill)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    let archetype: string;
+    let tier: string;
+    let tierBadge: string;
+    let percentile: string;
+    let classificationReason: string;
+
+    // Check for maintainer status on popular repos
+    const isMaintainer = globalMetadata.topRepos?.some((r: any) => r.isMaintainer && r.stars >= 100);
+    const isEducationalContent = topRepo?.educationalMeta?.isEducational || topRepo?.educationalMeta?.isLikelyGuide;
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CLASSIFICATION PHILOSOPHY:
+    // - Stars = reach/visibility (marketing, luck, timing)
+    // - Quality + Domain + Complexity = skill (what we actually hire for)
+    // - High visibility + high skill = rare unicorn
+    // - High visibility + low skill = lucky/marketing-savvy (flag this)
+    // - Low visibility + high skill = HIDDEN GEM (we want to surface these!)
+    // - Low visibility + low skill = early career / hobbyist
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    // HYPER RARE: Genuine industry impact (requires BOTH visibility AND skill)
+    if (highestStars >= 10000 && !isViralNonCode) {
+        tier = 'HYPER RARE';
+        tierBadge = '🌟🌟🌟';
+        percentile = 'Top 1%';
+        archetype = 'THE 10X ENGINEER';
+        classificationReason = 'Industry-level impact with widely-adopted tools';
+    }
+    // Can also reach HYPER RARE through exceptional skill without viral stars
+    else if (qualityTier === 'production-ready' && hasSpecialization && domains.systems >= 4 && experienceSignals.projectScale === 'large') {
+        tier = 'HYPER RARE';
+        tierBadge = '🌟🌟🌟';
+        percentile = 'Top 1%';
+        archetype = 'THE 10X ENGINEER';
+        classificationReason = 'Elite technical depth in systems engineering';
+    }
+    // ULTRA RARE: Strong visibility with matching skill
+    else if ((highestStars >= 5000 && !isViralNonCode) || (highestStars >= 2000 && isMaintainer && qualityTier === 'production-ready')) {
+        tier = 'ULTRA RARE';
+        tierBadge = '🌟🌟';
+        percentile = 'Top 5%';
+        if (isEducationalContent) {
+            archetype = 'THE PROFESSOR';
+            classificationReason = 'High-impact educational content with strong reach';
+        } else {
+            archetype = 'THE ARCHITECT';
+            classificationReason = 'Designs and maintains systems used by many';
         }
     }
-    // TIER 3: RARE ⭐
-    else if (impactScore >= 300 || skillComplexityScore.totalComplexity >= 12) {
-        tierLock = 'RARE';
-        const allText = [
-            ...globalMetadata.topRepos.map((r: any) => `${r.name} ${r.description || ''}`),
-            codeSamples
-        ].join(' ').toLowerCase();
-
-        const criticalSystems = ['distributed', 'kubernetes', 'microservices', 'scaling', 'concurrency'];
-        const systemsCount = criticalSystems.filter(s => allText.includes(s)).length;
-
-        const specialistDomains = ['machine learning', 'ml', 'compiler', 'cryptography', 'blockchain'];
-        const specialistCount = specialistDomains.filter(s => allText.includes(s)).length;
-
-        if (systemsCount >= 2 || (allText.includes('distributed') && skillComplexityScore.totalComplexity >= 12)) {
-            typeLock = 'THE SYSTEMS THINKER';
-            lockReason = `Systems architecture focus: ${systemsCount} distributed signals`;
-        } else if (specialistCount >= 1 || skillComplexityScore.totalComplexity >= 15) {
-            typeLock = 'THE SPECIALIST';
-            lockReason = `Deep domain expertise (complexity ${skillComplexityScore.totalComplexity})`;
+    // RARE: Either high visibility OR exceptional skill (skill-first path!)
+    else if (
+        (highestStars >= 500 && !isViralNonCode) ||
+        hasSpecialization ||
+        (qualityTier === 'production-ready' && experienceSignals.projectScale !== 'small') ||
+        (domains.systems >= 3 || domains.lowLevel >= 2 || domains.ml >= 2)
+    ) {
+        tier = 'RARE';
+        tierBadge = '⭐';
+        percentile = 'Top 15%';
+        if (domains.systems >= 3 || domains.lowLevel >= 2) {
+            archetype = 'THE SYSTEMS THINKER';
+            classificationReason = 'Deep infrastructure and systems expertise';
+        } else if (domains.ml >= 2 || domains.security >= 2) {
+            archetype = 'THE SPECIALIST';
+            classificationReason = `Deep expertise in ${primaryDomain[0]}`;
         } else {
-            typeLock = 'THE SYSTEMS THINKER';
-            lockReason = `Advanced engineering (impact ${impactScore.toFixed(0)})`;
+            archetype = 'THE SPECIALIST';
+            classificationReason = 'Strong technical depth in focused domain';
         }
     }
-    // TIER 4: UNCOMMON ◆
-    else if (impactScore >= 150) {
-        tierLock = 'UNCOMMON';
-        if (qualityScore >= 8 && skillComplexityScore.totalComplexity >= 8 && highestStars < 100) {
-            typeLock = 'THE HIDDEN GEM';
-            lockReason = `High skill/quality (${qualityScore}/10) with low social visibility`;
+    // UNCOMMON: Solid skill indicators, varying visibility
+    else if (
+        qualityTier === 'professional' ||
+        qualityTier === 'production-ready' ||
+        externalContribs >= 20 ||
+        experienceSignals.projectScale === 'medium' ||
+        highestStars >= 50
+    ) {
+        tier = 'UNCOMMON';
+        tierBadge = '◆';
+        percentile = 'Top 30%';
+
+        // HIDDEN GEM: High skill, low visibility (the most important archetype for recruiters!)
+        // This surfaces enterprise devs, private contributors, and introverted experts
+        if ((qualityTier === 'production-ready' || (qualityTier === 'professional' && hasSpecialization)) && highestStars < 200) {
+            archetype = 'THE HIDDEN GEM';
+            classificationReason = 'Strong code quality and practices, low public visibility - likely enterprise experience';
         } else if (isMaintainer) {
-            typeLock = 'THE MAINTAINER';
-            lockReason = `Maintainer of production repositories`;
-        } else if (externalContribs >= 100) {
-            typeLock = 'THE CONTRIBUTOR';
-            lockReason = `Broad impact via external contributions`;
-        } else if (qualityScore >= 7) {
-            typeLock = 'THE CRAFTSPERSON';
-            lockReason = `Superior code quality and maintainability`;
+            archetype = 'THE MAINTAINER';
+            classificationReason = 'Actively maintains production repositories';
+        } else if (externalContribs >= 40) {
+            archetype = 'THE CONTRIBUTOR';
+            classificationReason = 'Strong open-source collaboration track record';
+        } else if (qualityTier === 'professional' || qualityTier === 'production-ready') {
+            archetype = 'THE CRAFTSPERSON';
+            classificationReason = 'Focuses on code quality and best practices';
         } else {
-            typeLock = 'THE BUILDER';
-            lockReason = `Consistently shipping functional products`;
+            archetype = 'THE BUILDER';
+            classificationReason = 'Ships working products consistently';
         }
     }
-    // TIER 5: COMMON ●
+    // COMMON: Early-mid career, still developing
     else {
-        tierLock = 'COMMON';
-        const languages = globalMetadata.userStats?.languages || [];
+        tier = 'COMMON';
+        tierBadge = '●';
+        percentile = 'Top 50%';
 
-        if (skillComplexityScore.totalComplexity >= 5 && skillComplexityScore.totalComplexity <= 10) {
-            typeLock = 'THE TINKERER';
-            lockReason = `Practical dev solving real problems`;
-        } else if (skillComplexityScore.totalComplexity >= 3 && skillComplexityScore.totalComplexity < 5) {
-            if (last90DaysCommits >= 40 || globalMetadata.topRepos.length >= 3) {
-                typeLock = 'THE GRINDER';
-                lockReason = `High velocity: ${last90DaysCommits} commits in 90 days`;
-            } else if (accountAgeYears >= 1 && last90DaysCommits < 30) {
-                typeLock = 'THE HOBBYIST';
-                lockReason = `Sustained ${accountAgeYears.toFixed(1)}-year passion coder`;
-            } else {
-                typeLock = 'THE GRINDER';
-                lockReason = `Emerging skills, moderate activity`;
-            }
-        } else if (languages.length >= 6 && skillComplexityScore.totalComplexity >= 3) {
-            typeLock = 'THE EXPLORER';
-            lockReason = `Polyglot explorer of ${languages.length} stacks`;
-        } else if (skillComplexityScore.totalComplexity < 3 && last90DaysCommits < 40) {
-            typeLock = 'THE APPRENTICE';
-            lockReason = `Building fundamental technical foundations`;
+        if (isFullStack || (domains.web >= 2 && domains.backend >= 1)) {
+            archetype = 'THE TINKERER';
+            classificationReason = 'Practical problem solver building real applications';
+        } else if (experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active') {
+            archetype = 'THE GRINDER';
+            classificationReason = 'High activity level, actively developing skills';
+        } else if (languages.length >= 5) {
+            archetype = 'THE EXPLORER';
+            classificationReason = 'Exploring multiple technologies, broad exposure';
+        } else if (accountAgeYears >= 2 && experienceSignals.recentlyActive === 'occasional') {
+            archetype = 'THE HOBBYIST';
+            classificationReason = 'Codes for personal interest and passion projects';
         } else {
-            typeLock = 'THE TINKERER';
-            lockReason = `Generalist intermediate developer`;
+            archetype = 'THE APPRENTICE';
+            classificationReason = 'Early career, building foundational skills';
         }
     }
 
-    const prompt = `
-${typeLock ? `🔒 CLASSIFICATION LOCKED: "${typeLock}" 🔒
-Reason: ${lockReason}
-You MUST return this exact label and rarity_badge. No exceptions.
+    console.log(`[Classification] ${archetype} (${tier}) - ${classificationReason}`);
 
-` : ''}You are analyzing a developer's GitHub profile. Use the internal metrics below ONLY for classification. DO NOT expose raw numbers in your output.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 6: Build the DeepSeek Prompt
+    // ═══════════════════════════════════════════════════════════════════════════
 
-### INTERNAL METRICS (for classification only - DO NOT include these numbers in output):
-- Impact: ${impactScore.toFixed(0)}/1000
-- Quality: ${qualityScore}/10
-- Complexity: ${skillComplexityScore.totalComplexity}
-- Stars: ${totalStars}
-- Recent Activity: ${last90DaysCommits} commits in 90 days
-- Account Age: ${accountAgeYears.toFixed(1)} years
-- AI Likelihood: ${avgAILikelihood.toFixed(0)}%
-- Has Tests/CI: ${qualityScore >= 7 ? 'Yes' : 'No'}
+    const topReposSummary = globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => {
+        const qual = globalMetadata.qualitySignals?.[i];
+        const markers = [
+            qual?.hasTests ? '✓Tests' : '',
+            qual?.hasCI ? '✓CI' : '',
+            qual?.hasTypeScript ? 'TS' : '',
+        ].filter(Boolean).join(' ');
+        return `• ${r.name} (${r.stars}⭐, ${r.language || 'Unknown'}) ${markers}`;
+    }).join('\n');
 
-### TOP REPOSITORIES:
-${globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => {
-        const quality = globalMetadata.qualitySignals[i];
-        return `${i + 1}. "${r.name}" - ${r.stars} stars, ${r.language || 'Unknown'} ${quality?.hasTests ? '✓ Tests' : ''} ${quality?.hasCI ? '✓ CI' : ''}`;
-    }).join('\n')}
+    const prompt = `You are writing a developer assessment for a technical recruiter and engineering manager.
 
-### 15-ARCHETYPE SYSTEM:
-**🌟🌟🌟 HYPER RARE** - THE 10X ENGINEER (industry-defining impact)
-**🌟🌟 ULTRA RARE** - THE ARCHITECT (infrastructure builders), THE PROFESSOR (educators)
-**⭐ RARE** - THE SPECIALIST (deep expertise), THE SYSTEMS THINKER (distributed systems)
-**◆ UNCOMMON** - THE MAINTAINER, THE BUILDER, THE CONTRIBUTOR, THE CRAFTSPERSON, THE HIDDEN GEM
-**● COMMON** - THE TINKERER, THE GRINDER, THE HOBBYIST, THE EXPLORER, THE APPRENTICE
+## CANDIDATE CLASSIFICATION
+**Archetype:** ${archetype}
+**Tier:** ${tier} ${tierBadge} (${percentile})
+**Why:** ${classificationReason}
 
-### AI TOOL USAGE CONTEXT:
-${avgAILikelihood > 70 ? `⚠️ HIGH AI PATTERNS DETECTED - Many code samples show AI-generated characteristics (verbose comments, boilerplate patterns). ${qualityScore >= 7 ? 'However, quality gates (tests/CI) are present.' : 'No testing infrastructure to validate AI code.'}` : avgAILikelihood > 30 ? `✓ MODERATE AI USAGE - Developer uses AI tools pragmatically alongside manual coding. ${qualityScore >= 7 ? 'Quality validation present.' : ''}` : '✓ NATURAL CODING STYLE - Minimal AI-generated patterns detected.'}
+## GITHUB PROFILE SUMMARY
+- **Account Age:** ${accountAgeYears.toFixed(1)} years
+- **Total Stars:** ${totalStars} across ${repoCount} repositories
+- **Languages:** ${languages.slice(0, 5).join(', ') || 'Not detected'}
+- **Recent Activity:** ${last90DaysCommits} commits in last 90 days (${experienceSignals.recentlyActive})
+- **Code Quality:** ${qualityTier} (Tests: ${qualitySignals.hasTests ? 'Yes' : 'No'}, CI: ${qualitySignals.hasCI ? 'Yes' : 'No'})
+- **Primary Domain:** ${primaryDomain[0]} (${isFullStack ? 'full-stack' : 'specialized'})
 
-### Code Samples:
-${codeSamples}
+## TOP REPOSITORIES
+${topReposSummary}
 
-### OUTPUT REQUIREMENTS:
+## AI TOOL USAGE
+- **Level:** ${aiAssessment.level}
+- **Summary:** ${aiAssessment.summary}
+- **Hiring Note:** ${aiAssessment.recommendation}
 
-**CRITICAL RULES FOR ALL TEXT FIELDS:**
-1. NEVER mention internal scores (complexity, quality, impact numbers)
-2. NEVER say "X/10" or "X%" or "score of Y"
-3. Describe abilities in plain English: "strong testing practices" not "quality score 8"
-4. Reference specific repos/technologies as evidence
-5. Write for a technical recruiter who doesn't know our scoring system
+## CODE SAMPLES
+${codeSamples.length > 8000 ? codeSamples.substring(0, 8000) + '\n[truncated]' : codeSamples}
 
-**trajectory_summary**: 1-2 sentences describing their evolution as a developer. Reference actual technologies and projects.
+---
 
-**recruiter_summary**: 3 paragraphs:
-- Paragraph 1: Technical strengths and areas of expertise. What can they build?
-- Paragraph 2: Code quality observations and development practices. ${avgAILikelihood > 70 ? 'Note: Address AI tool usage concerns if applicable - recommend hands-on coding assessment.' : avgAILikelihood > 30 && qualityScore >= 7 ? 'Note: They use AI tools effectively with proper validation.' : ''}
-- Paragraph 3: Collaboration signals and team fit indicators.
+## YOUR TASK
 
-**highlights**: 4-5 items with concrete evidence from their repos:
-- At least 3 positive highlights (specific achievements, technologies, patterns)
-- At least 1 negative highlight (gaps, missing practices, concerns)
-- ${avgAILikelihood > 70 && qualityScore < 7 ? 'MUST include a negative highlight about unvalidated AI-generated code patterns' : ''}
-- NEVER use raw numbers. Say "lacks comprehensive testing" not "0/10 test coverage"
+Write a professional assessment following this EXACT structure:
 
-**technical_signal**: One sentence proving technical depth with a specific example.
+### 1. trajectory_summary (2-3 sentences)
+Describe their developer journey. Reference their primary technologies, how their work has evolved, and where they seem to be heading. Write for a recruiter who needs to quickly understand this candidate.
 
-**technical_signal_detailed**: 2-3 paragraphs analyzing their code architecture, patterns, and problem-solving approach based on the code samples.
+### 2. recruiter_summary (3 paragraphs)
+**Paragraph 1 - Technical Strengths:** What can this developer build? What technologies do they know well? What's their primary value to a team?
 
-**verified_skills**: List skills with evidence from their repos. Levels: Beginner, Intermediate, Advanced, Expert.
+**Paragraph 2 - Development Practices:** How do they approach code quality? ${aiAssessment.level === 'concerning' ? 'NOTE: Address the AI usage concern - recommend hands-on coding assessment.' : aiAssessment.level === 'pragmatic' ? 'NOTE: They use AI tools effectively with proper quality gates.' : ''} What does their testing/documentation look like?
 
-Return ONLY this JSON structure:
+**Paragraph 3 - Team Fit & Collaboration:** What kind of team would they thrive on? Do they collaborate well (based on external contributions)? What's their likely seniority level?
+
+### 3. highlights (exactly 5 items)
+Provide EXACTLY 5 highlights with concrete evidence from their repos:
+- **3-4 positive highlights** (type: "positive") - specific achievements, technologies, patterns
+- **1-2 concerns** (type: "negative") - gaps, missing practices, areas for growth
+
+Each highlight must have a "title" (short label) and "detail" (1-2 sentence explanation with specific evidence).
+
+DO NOT use raw numbers or internal metrics. Write naturally:
+- ✓ "Comprehensive test coverage across main projects" 
+- ✗ "Quality score of 8/10"
+- ✓ "Limited CI/CD automation"
+- ✗ "0 CI files detected"
+
+### 4. technical_signal (1 sentence)
+One specific, concrete example that proves their technical ability. Reference an actual repo, pattern, or technology choice.
+
+### 5. technical_signal_detailed (2-3 paragraphs)  
+Deep dive into their technical approach based on the code samples. What architectural patterns do they use? How do they handle errors? What does their code structure tell us about their experience level?
+
+### 6. verified_skills (5-8 skills)
+List their verified skills with:
+- name: The skill (e.g., "React", "PostgreSQL", "CI/CD")
+- level: "Beginner" | "Intermediate" | "Advanced" | "Expert"
+- evidence: Brief proof from their repos
+
+---
+
+Return ONLY valid JSON matching this structure:
 {
-  "label": "THE [ARCHETYPE NAME]",
-  "rarity": "HYPER RARE" | "ULTRA RARE" | "RARE" | "UNCOMMON" | "COMMON",
-  "rarity_badge": "🌟🌟🌟" | "🌟🌟" | "⭐" | "◆" | "●",
-  "rarity_percentile": "Top 1%" | "Top 5%" | "Top 15%" | "Top 30%" | "Top 50%",
+  "label": "${archetype}",
+  "rarity": "${tier}",
+  "rarity_badge": "${tierBadge}",
+  "rarity_percentile": "${percentile}",
   "trajectory_summary": "...",
   "recruiter_summary": "...",
-  "highlights": [{"title": "...", "detail": "...", "type": "positive"|"negative"}],
+  "highlights": [
+    {"title": "...", "detail": "...", "type": "positive"},
+    {"title": "...", "detail": "...", "type": "positive"},
+    {"title": "...", "detail": "...", "type": "positive"},
+    {"title": "...", "detail": "...", "type": "negative"},
+    {"title": "...", "detail": "...", "type": "negative"}
+  ],
   "technical_signal": "...",
   "technical_signal_detailed": "...",
-  "verified_skills": [{"name": "...", "level": "...", "evidence": "..."}]
-}
-`;
+  "verified_skills": [
+    {"name": "...", "level": "...", "evidence": "..."}
+  ]
+}`;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 7: Call DeepSeek API
+    // ═══════════════════════════════════════════════════════════════════════════
 
     try {
         const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -298,101 +433,130 @@ Return ONLY this JSON structure:
                 messages: [
                     {
                         role: 'system',
-                        content: `You are a senior technical recruiter writing developer assessments. 
+                        content: `You are a senior technical recruiter with 10 years of experience, partnering with an engineering manager to assess developer candidates.
 
-CLASSIFICATION: Use the locked archetype from the user message. The 15 archetypes range from HYPER RARE (industry legends) to COMMON (emerging developers).
+Your assessments are:
+- **Actionable**: Recruiters know what to discuss, managers know what to probe
+- **Evidence-based**: Every claim references specific repos, commits, or code patterns
+- **Balanced**: You find genuine strengths AND genuine concerns
+- **Professional**: Written for hiring decisions, not social media
 
-WRITING STYLE:
-- Write for technical recruiters, not data scientists
-- NEVER mention internal scores, percentages, or metrics
-- Describe skills naturally: "strong backend expertise" not "complexity score 15"
-- Reference specific technologies, repos, and code patterns as evidence
-- Be specific and concrete, avoid generic statements
-
-REQUIRED OUTPUTS:
-- trajectory_summary: Their developer journey in 1-2 sentences
-- recruiter_summary: 3 paragraphs (strengths, practices, team fit)
-- highlights: 4-5 items with evidence (at least 1 negative)
-- technical_signal: One proof of technical depth
-- verified_skills: Skills with concrete evidence
-
-Find real gaps: missing tests, no CI, stale dependencies, AI-heavy code without validation, etc.`
+Golden rules:
+1. NEVER mention internal scores, percentages, or metrics
+2. Always reference specific technologies and repositories
+3. Highlights must have 3-4 positives and 1-2 negatives (never all positive)
+4. Write as if this assessment goes directly to the hiring manager`
                     },
                     { role: 'user', content: prompt }
                 ],
                 response_format: { type: 'json_object' },
-                temperature: 0.1
+                temperature: 0.2
             })
         });
 
         const data: any = await response.json();
-        const rawContent = data.choices[0].message?.content || '{}';
 
-        const cleanJsonResponse = (text: string) => {
-            try {
-                let cleaned = text.trim();
-                if (cleaned.startsWith('```')) {
-                    cleaned = cleaned.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-                }
-                cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
-                return JSON.parse(cleaned);
-            } catch (e) {
-                try {
-                    const firstBrace = text.indexOf('{');
-                    const lastBrace = text.lastIndexOf('}');
-                    if (firstBrace !== -1 && lastBrace !== -1) {
-                        return JSON.parse(text.substring(firstBrace, lastBrace + 1));
-                    }
-                } catch (e2) { }
-                throw e;
-            }
-        };
+        if (!data.choices?.[0]?.message?.content) {
+            throw new Error('Empty response from DeepSeek');
+        }
 
+        const rawContent = data.choices[0].message.content;
+
+        // Parse JSON response
         let analysis;
         try {
-            analysis = cleanJsonResponse(rawContent);
-        } catch (error) {
-            console.error('[DeepSeek] Fatal JSON Error:', error);
-            analysis = {
-                label: typeLock || 'THE TINKERER',
-                rarity: tierLock || 'COMMON',
-                rarity_badge: tierLock === 'HYPER RARE' ? '🌟🌟🌟' : tierLock === 'ULTRA RARE' ? '🌟🌟' : tierLock === 'RARE' ? '⭐' : tierLock === 'UNCOMMON' ? '◆' : '●',
-                trajectory_summary: 'Technical profile analysis exceeded token limits.',
-                recruiter_summary: 'Unable to parse detailed AI summary.',
-                highlights: [],
-                ai_usage: {
-                    likelihood: avgAILikelihood,
-                    interpretation: avgAILikelihood < 20 ? 'low' : avgAILikelihood < 50 ? 'moderate' : 'high',
-                    quality_validated: qualityScore >= 7,
-                    badge: avgAILikelihood > 50 ? 'AI-ASSISTED' : 'NATURAL',
-                    badge_color: 'blue'
-                }
-            };
+            let cleaned = rawContent.trim();
+            if (cleaned.startsWith('```')) {
+                cleaned = cleaned.replace(/^```json?\n?/, '').replace(/\n?```$/, '');
+            }
+            analysis = JSON.parse(cleaned);
+        } catch (parseError) {
+            // Try to extract JSON from response
+            const firstBrace = rawContent.indexOf('{');
+            const lastBrace = rawContent.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1) {
+                analysis = JSON.parse(rawContent.substring(firstBrace, lastBrace + 1));
+            } else {
+                throw parseError;
+            }
         }
 
-        // Ensure AI usage is present
-        if (!analysis.ai_usage) {
-            analysis.ai_usage = {
-                likelihood: avgAILikelihood,
-                interpretation: avgAILikelihood < 20 ? 'low' : avgAILikelihood < 50 ? 'moderate' : avgAILikelihood < 80 ? 'high' : 'very_high',
-                quality_validated: qualityScore >= 7,
-                badge: avgAILikelihood > 80 ? 'AI-HEAVY' : avgAILikelihood > 50 ? 'AI-ASSISTED' : avgAILikelihood > 20 ? 'AI-ENHANCED' : 'NATURAL',
-                badge_color: avgAILikelihood > 70 && qualityScore < 5 ? 'orange' : avgAILikelihood > 20 && qualityScore >= 7 ? 'blue' : 'green'
-            };
+        // ═══════════════════════════════════════════════════════════════════════
+        // STEP 8: Validate and enforce our classification
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Enforce the archetype we determined (DeepSeek sometimes changes it)
+        analysis.label = archetype;
+        analysis.rarity = tier;
+        analysis.rarity_badge = tierBadge;
+        analysis.rarity_percentile = percentile;
+
+        // Ensure highlights have proper distribution
+        const positives = (analysis.highlights || []).filter((h: any) => h.type === 'positive');
+        const negatives = (analysis.highlights || []).filter((h: any) => h.type === 'negative');
+
+        // If no negatives, add a default one
+        if (negatives.length === 0) {
+            analysis.highlights = analysis.highlights || [];
+            if (!qualitySignals.hasTests) {
+                analysis.highlights.push({
+                    title: 'Testing Gaps',
+                    detail: 'Limited automated testing coverage across repositories. Adding tests would strengthen code reliability.',
+                    type: 'negative'
+                });
+            } else if (!qualitySignals.hasCI) {
+                analysis.highlights.push({
+                    title: 'CI/CD Automation',
+                    detail: 'No continuous integration pipelines detected. Automated builds and deployments would improve development workflow.',
+                    type: 'negative'
+                });
+            } else if (aiAssessment.level === 'concerning') {
+                analysis.highlights.push({
+                    title: 'AI Tool Reliance',
+                    detail: 'Code patterns suggest heavy AI assistance without comprehensive quality validation. Recommend hands-on assessment.',
+                    type: 'negative'
+                });
+            } else {
+                analysis.highlights.push({
+                    title: 'Documentation Coverage',
+                    detail: 'README and inline documentation could be expanded to improve maintainability.',
+                    type: 'negative'
+                });
+            }
         }
 
-        // Post-validation
-        if (typeLock && analysis.label !== typeLock) {
-            console.warn(`[Override] DeepSeek returned "${analysis.label}", forcing to "${typeLock}"`);
-            analysis.label = typeLock;
-            analysis.rarity = tierLock;
-            analysis.rarity_badge = tierLock === 'HYPER RARE' ? '🌟🌟🌟' : tierLock === 'ULTRA RARE' ? '🌟🌟' : tierLock === 'RARE' ? '⭐' : tierLock === 'UNCOMMON' ? '◆' : '●';
-            analysis.rarity_percentile = tierLock === 'HYPER RARE' ? 'Top 1%' : tierLock === 'ULTRA RARE' ? 'Top 5%' : tierLock === 'RARE' ? 'Top 15%' : tierLock === 'UNCOMMON' ? 'Top 30%' : 'Bottom 50%';
+        // Trim to exactly 5 highlights (3-4 positive, 1-2 negative)
+        if (analysis.highlights && analysis.highlights.length > 5) {
+            const pos = analysis.highlights.filter((h: any) => h.type === 'positive').slice(0, 4);
+            const neg = analysis.highlights.filter((h: any) => h.type === 'negative').slice(0, 2);
+            analysis.highlights = [...pos.slice(0, 5 - neg.length), ...neg];
         }
 
         return analysis;
+
     } catch (error) {
         console.error('[DeepSeek] Analysis error:', error);
-        throw error;
+
+        // Return a fallback response
+        return {
+            label: archetype,
+            rarity: tier,
+            rarity_badge: tierBadge,
+            rarity_percentile: percentile,
+            trajectory_summary: `Developer with ${accountAgeYears.toFixed(0)} years on GitHub, primarily working with ${languages.slice(0, 3).join(', ') || 'various technologies'}.`,
+            recruiter_summary: `This candidate shows ${experienceSignals.recentlyActive} activity on GitHub with ${repoCount} public repositories. Their primary focus appears to be ${primaryDomain[0]} development. ${qualityTier === 'production-ready' ? 'Code quality practices are strong with testing and CI present.' : 'Code quality practices could be strengthened.'}`,
+            highlights: [
+                { title: 'Active Developer', detail: `${last90DaysCommits} commits in the last 90 days`, type: 'positive' },
+                { title: 'Multi-language Experience', detail: `Works with ${languages.slice(0, 3).join(', ')}`, type: 'positive' },
+                { title: qualitySignals.hasTests ? 'Testing Present' : 'Testing Gaps', detail: qualitySignals.hasTests ? 'Automated tests detected in repositories' : 'Limited test coverage detected', type: qualitySignals.hasTests ? 'positive' : 'negative' }
+            ],
+            technical_signal: `Works primarily with ${primaryDomain[0]} technologies.`,
+            technical_signal_detailed: 'Unable to generate detailed analysis due to API limitations.',
+            verified_skills: languages.slice(0, 5).map((lang: string) => ({
+                name: lang,
+                level: 'Intermediate',
+                evidence: `Used in ${globalMetadata.topRepos.filter((r: any) => r.language === lang).length} repositories`
+            }))
+        };
     }
 };
