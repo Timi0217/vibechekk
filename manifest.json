@@ -4,9 +4,9 @@
     "version": "1.0.0",
     "description": "Trajectory of Merit for Developers",
     "icons": {
-        "16": "vibe-icon.svg",
-        "48": "vibe-icon.svg",
-        "128": "vibe-icon.svg"
+        "16": "vibe-icon.png",
+        "48": "vibe-icon.png",
+        "128": "vibe-icon.png"
     },
     "permissions": [
         "storage",
@@ -18,7 +18,7 @@
     },
     "action": {
         "default_title": "Open Vibechekk",
-        "default_icon": "vibe-icon.svg"
+        "default_icon": "vibe-icon.png"
     },
     "host_permissions": [
         "https://api.github.com/*",
