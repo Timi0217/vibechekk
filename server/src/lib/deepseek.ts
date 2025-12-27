@@ -45,6 +45,9 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const topRepo = globalMetadata.topRepos?.[0];
     const repoCount = globalMetadata.topRepos?.length || 0;
 
+    // DEBUG: Log star data
+    console.log(`[DeepSeek DEBUG] highestStars: ${highestStars}, totalStars: ${totalStars}, topRepo: ${topRepo?.name} (${topRepo?.stars}⭐)`);
+
     // Account info
     const last90DaysCommits = globalMetadata.userStats?.last90DaysCommits || 0;
     const totalCommits = globalMetadata.topRepos?.reduce((sum: number, r: any) => sum + (r.totalCommits || 0), 0) || 0;
