@@ -557,7 +557,7 @@ function App() {
             <div className="detail-section">
               <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
               <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
-              <div className="merit-grid">
+              <div className="merit-grid scrollable">
                 {selectedReport.meritPoints.map((point: any, i: number) => {
                   const isExpanded = expandedMerits.includes(i);
                   const isNegative = point.type === 'negative';

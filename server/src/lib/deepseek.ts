@@ -463,6 +463,7 @@ Describe their developer EVOLUTION - how they've changed over time. If they have
 Provide highlights with concrete evidence from their repos:
 - **2-4 positive highlights** (type: "positive") - prioritize RECENT achievements
 - **1-3 concerns** (type: "negative") - gaps, missing practices, areas for growth
+- **MANDATORY**: Mention AI tool usage trends (detected via LLM likelihood) if significant (e.g., heavy usage in recent repos, or a healthy mix).
 
 Do NOT treat old academic projects as current expertise. If someone has C from 7 years ago but TypeScript now, the highlight should be about TypeScript.
 
@@ -598,8 +599,8 @@ Golden rules:
                 });
             } else if (aiAssessment.level === 'concerning') {
                 analysis.highlights.push({
-                    title: 'AI Tool Reliance',
-                    detail: 'Code patterns suggest heavy AI assistance without comprehensive quality validation. Recommend hands-on assessment.',
+                    title: 'Heavy AI Dependency',
+                    detail: 'High likelihood of code generated via AI tools without significant evidence of manual testing or verification.',
                     type: 'negative'
                 });
             } else {
@@ -616,6 +617,20 @@ Golden rules:
             const pos = analysis.highlights.filter((h: any) => h.type === 'positive').slice(0, 4);
             const neg = analysis.highlights.filter((h: any) => h.type === 'negative').slice(0, 3);
             analysis.highlights = [...pos, ...neg];
+        }
+
+        // Always ensure AI usage is mentioned if significant (and not already highlighted)
+        const hasAIHighlight = (analysis.highlights || []).some((h: any) =>
+            h.title?.toLowerCase().includes('ai') || h.detail?.toLowerCase().includes('ai')
+        );
+
+        if (!hasAIHighlight && avgAILikelihood > 50) {
+            analysis.highlights = analysis.highlights || [];
+            analysis.highlights.push({
+                title: avgAILikelihood > 80 ? 'AI-First Workflow' : 'AI-Assisted Development',
+                detail: `High pattern of AI-assisted coding detected (${avgAILikelihood}% likelihood). ${aiAssessment.summary}.`,
+                type: (avgAILikelihood > 85 && qualityTier === 'basic') ? 'negative' : 'positive'
+            });
         }
 
         return analysis;
@@ -645,4 +660,4 @@ Golden rules:
             }))
         };
     }
-};
+}
