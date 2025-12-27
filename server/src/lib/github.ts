@@ -451,6 +451,7 @@ export const findTopRepos = async (token: string, username: string) => {
 export const analyzeGitHubProfile = async (token: string, username: string) => {
   console.log(`[GitHub] Starting comprehensive analysis for ${username}`);
   const startTime = Date.now();
+  const octokit = new Octokit({ auth: token });
 
   // Phase 1: Fetch user stats and repos in parallel
   const [userStats, topRepos] = await Promise.all([
@@ -458,6 +459,52 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     findTopRepos(token, username)
   ]);
   console.log(`[GitHub] Phase 1 (stats+repos): ${Date.now() - startTime}ms`);
+
+  // FALLBACK: If GraphQL didn't return high-star repos, try REST API
+  let peakStars = topRepos[0]?.stars || 0;
+  if (peakStars < 1000) {
+    console.log(`[GitHub] Low stars detected (${peakStars}), trying REST API fallback...`);
+    try {
+      const { data: restRepos } = await octokit.rest.repos.listForUser({
+        username,
+        sort: 'updated',
+        per_page: 100
+      });
+
+      const sortedRestRepos = restRepos
+        .filter((r: any) => !r.fork)
+        .sort((a: any, b: any) => (b.stargazers_count || 0) - (a.stargazers_count || 0));
+
+      if (sortedRestRepos.length > 0 && (sortedRestRepos[0].stargazers_count || 0) > peakStars) {
+        peakStars = sortedRestRepos[0].stargazers_count || 0;
+        console.log(`[GitHub] REST API found higher stars: ${sortedRestRepos[0].name} (${peakStars}⭐)`);
+
+        // Merge top REST repos into our data
+        sortedRestRepos.slice(0, 5).forEach((repo: any) => {
+          if (!topRepos.find((r: any) => r.name === repo.name)) {
+            topRepos.unshift({
+              name: repo.name,
+              url: repo.html_url,
+              description: repo.description,
+              language: repo.language,
+              stars: repo.stargazers_count,
+              forks: repo.forks_count,
+              updatedAt: repo.updated_at,
+              isFork: repo.fork,
+              isMaintainer: false,
+              totalCommits: 0,
+              commits: []
+            });
+          }
+        });
+
+        // Re-sort by stars
+        topRepos.sort((a: any, b: any) => (b.stars || 0) - (a.stars || 0));
+      }
+    } catch (e) {
+      console.log(`[GitHub] REST fallback failed:`, e);
+    }
+  }
 
   const stats = userStats || {
     totalStars: 0,
