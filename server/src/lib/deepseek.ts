@@ -37,13 +37,39 @@
 
 export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, codeSamples: string) => {
     // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 0: Check for minimum data requirements
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const repoCount = globalMetadata.topRepos?.length || 0;
+    const hasCodeSamples = codeSamples && codeSamples.trim().length > 100;
+    const languages = globalMetadata.userStats?.languages || [];
+
+    // If user has no repos or no analyzable code, return insufficient data response
+    if (repoCount === 0 || (!hasCodeSamples && languages.length === 0)) {
+        console.log(`[DeepSeek] Insufficient data: ${repoCount} repos, hasCode: ${hasCodeSamples}, languages: ${languages.length}`);
+        return {
+            insufficient_data: true,
+            label: 'THE GHOST',
+            rarity: 'UNKNOWN',
+            rarity_badge: '👻',
+            rarity_percentile: '',
+            archetype_reason: 'No public repositories or code to analyze. This developer may work in private repos or enterprise environments.',
+            trajectory_summary: 'Limited public GitHub presence.',
+            recruiter_summary: 'Unable to generate assessment - this profile has no public repositories with analyzable code. Consider requesting code samples or portfolio links directly.',
+            highlights: [],
+            technical_signal: 'No public code available.',
+            technical_signal_detailed: '',
+            verified_skills: []
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // STEP 1: Extract key metrics from GitHub data
     // ═══════════════════════════════════════════════════════════════════════════
 
     const highestStars = globalMetadata.starDistribution?.highest_single_repo || 0;
     const totalStars = globalMetadata.starDistribution?.total_stars || 0;
     const topRepo = globalMetadata.topRepos?.[0];
-    const repoCount = globalMetadata.topRepos?.length || 0;
 
     // DEBUG: Log star data
     console.log(`[DeepSeek DEBUG] highestStars: ${highestStars}, totalStars: ${totalStars}, topRepo: ${topRepo?.name} (${topRepo?.stars}⭐)`);
@@ -52,7 +78,6 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const last90DaysCommits = globalMetadata.userStats?.last90DaysCommits || 0;
     const totalCommits = globalMetadata.topRepos?.reduce((sum: number, r: any) => sum + (r.totalCommits || 0), 0) || 0;
     const externalContribs = globalMetadata.userStats?.externalContributions || 0;
-    const languages = globalMetadata.userStats?.languages || [];
     const accountCreatedAt = globalMetadata.userStats?.createdAt;
     const accountAgeYears = accountCreatedAt
         ? (Date.now() - new Date(accountCreatedAt).getTime()) / (365 * 24 * 60 * 60 * 1000)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Award, Navigation, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass } from 'lucide-react'
+import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Award, Navigation, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -60,6 +60,9 @@ const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: s
     'the hobbyist': Coffee,           // Coffee for passion/side projects
     'the explorer': Compass,          // Compass for exploring many directions
     'the apprentice': Zap,            // Zap for energy/learning/beginners
+
+    // 👻 GHOST (Insufficient data)
+    'the ghost': Ghost,               // Ghost for profiles with no public code
   }
 
 
@@ -353,171 +356,146 @@ function App() {
 
       <main>
         {selectedReport ? (
-          <div className="detail-view">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '8px' }}>
-              <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
-                padding: '10px',
-                marginLeft: '-8px',
-                background: 'var(--bg-gray)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                cursor: 'pointer'
-              }}>
-                <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
-              </button>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-                {(() => {
-                  const handle = selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : '';
-                  return (
-                    <>
-                      {handle ? (
-                        <img
-                          src={`https://github.com/${handle}.png?size=48`}
-                          alt={handle}
-                          className="history-avatar"
-                          style={{ width: '48px', height: '48px', borderRadius: '12px' }}
-                        />
-                      ) : (
-                        <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
-                          <User size={24} color="var(--text-dim)" />
-                        </div>
-                      )}
-                      <div className="history-meta" style={{ gap: '2px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{handle || 'Guest Profile'}</h2>
-                          {selectedReport.rarity_badge && (
-                            <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity} size={14} />
-                          <div className="archetype-tooltip-wrapper">
-                            <div className={`archetype-badge ${getRarityClass(selectedReport.rarity)}`}>
-                              {stripThe(selectedReport.label) || 'Profile'}
-                            </div>
-                            <div className="archetype-tooltip">
-                              <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
-                              {selectedReport.archetype_reason || 'Analysis based on GitHub activity.'}
-                            </div>
-                          </div>
-                          {selectedReport.rarity_percentile && (
-                            <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
-                              • {selectedReport.rarity_percentile.toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
-                          {selectedReport.seniority && (
-                            <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.2px', opacity: 0.8 }}>
-                              {selectedReport.seniority.toUpperCase()}
-                            </span>
-                          )}
-                          {selectedReport.star_count !== undefined && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
-                              <Star size={10} fill="currentColor" /> {selectedReport.star_count} STARS
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
+          selectedReport.insufficient_data ? (
+            // Insufficient data state
+            <div className="detail-view">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
+                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
+                  padding: '10px',
+                  marginLeft: '-8px',
+                  background: 'var(--bg-gray)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}>
+                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
+                </button>
+                <div>
+                  <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{selectedReport.handle || 'Guest Profile'}</h2>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📊</div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-main)' }}>NOT ENOUGH DATA</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto' }}>
+                  This profile has limited public repositories or code to analyze. They may work primarily in private repos or enterprise environments.
+                </p>
               </div>
             </div>
+          ) : (
+            <div className="detail-view">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '8px' }}>
+                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
+                  padding: '10px',
+                  marginLeft: '-8px',
+                  background: 'var(--bg-gray)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}>
+                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
+                </button>
 
-            <div className="detail-section">
-              <button
-                onClick={() => {
-                  setShowFullSummary(!showFullSummary);
-                  if (!showFullSummary) setShowDetailedSummary(false);
-                }}
-                className="section-header-btn"
-              >
-                <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
-                {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
-              </button>
-
-              {showFullSummary && (
-                <div className="trajectory-box expanded">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                    <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
-                      {showDetailedSummary
-                        ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                        : (selectedReport.trajectorySummary || selectedReport.trajectory)
-                      }
-                    </p>
-                    <button
-                      className="copy-icon-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const text = showDetailedSummary
-                          ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                          : selectedReport.trajectorySummary;
-                        navigator.clipboard.writeText(text);
-                        setCopiedId('summary');
-                        setTimeout(() => setCopiedId(null), 2000);
-                      }}
-                    >
-                      {copiedId === 'summary' ? (
-                        <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
-                      ) : (
-                        <Copy size={14} strokeWidth={2} />
-                      )}
-                    </button>
-                  </div>
-
-                  {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
-                    <button
-                      className="view-more-btn"
-                      onClick={() => setShowDetailedSummary(!showDetailedSummary)}
-                      style={{ marginTop: '12px' }}
-                    >
-                      {showDetailedSummary ? 'view less' : 'view more'}
-                    </button>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
+                  {(() => {
+                    const handle = selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : '';
+                    return (
+                      <>
+                        {handle ? (
+                          <img
+                            src={`https://github.com/${handle}.png?size=48`}
+                            alt={handle}
+                            className="history-avatar"
+                            style={{ width: '48px', height: '48px', borderRadius: '12px' }}
+                          />
+                        ) : (
+                          <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
+                            <User size={24} color="var(--text-dim)" />
+                          </div>
+                        )}
+                        <div className="history-meta" style={{ gap: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{handle || 'Guest Profile'}</h2>
+                            {selectedReport.rarity_badge && (
+                              <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity} size={14} />
+                            <div className="archetype-tooltip-wrapper">
+                              <div className={`archetype-badge ${getRarityClass(selectedReport.rarity)}`}>
+                                {stripThe(selectedReport.label) || 'Profile'}
+                              </div>
+                              <div className="archetype-tooltip">
+                                <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
+                                {selectedReport.archetype_reason || 'Analysis based on GitHub activity.'}
+                              </div>
+                            </div>
+                            {selectedReport.rarity_percentile && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
+                                • {selectedReport.rarity_percentile.toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                            {selectedReport.seniority && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.2px', opacity: 0.8 }}>
+                                {selectedReport.seniority.toUpperCase()}
+                              </span>
+                            )}
+                            {selectedReport.star_count !== undefined && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
+                                <Star size={10} fill="currentColor" /> {selectedReport.star_count} STARS
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {selectedReport.metadata?.technical_signal && (
               <div className="detail-section">
                 <button
                   onClick={() => {
-                    setShowTechnicalSignal(!showTechnicalSignal);
-                    if (!showTechnicalSignal) setShowDetailedTechnical(false);
+                    setShowFullSummary(!showFullSummary);
+                    if (!showFullSummary) setShowDetailedSummary(false);
                   }}
                   className="section-header-btn"
                 >
-                  <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
-                  {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+                  <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
+                  {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
                 </button>
 
-                {showTechnicalSignal && (
-                  <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                {showFullSummary && (
+                  <div className="trajectory-box expanded">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                      <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
-                        {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                          ? selectedReport.metadata.technical_signal_detailed
-                          : selectedReport.metadata.technical_signal
+                      <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
+                        {showDetailedSummary
+                          ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                          : (selectedReport.trajectorySummary || selectedReport.trajectory)
                         }
                       </p>
                       <button
                         className="copy-icon-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                            ? selectedReport.metadata.technical_signal_detailed
-                            : selectedReport.metadata.technical_signal;
+                          const text = showDetailedSummary
+                            ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                            : selectedReport.trajectorySummary;
                           navigator.clipboard.writeText(text);
-                          setCopiedId('signal');
+                          setCopiedId('summary');
                           setTimeout(() => setCopiedId(null), 2000);
                         }}
                       >
-                        {copiedId === 'signal' ? (
+                        {copiedId === 'summary' ? (
                           <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
                         ) : (
                           <Copy size={14} strokeWidth={2} />
@@ -525,115 +503,171 @@ function App() {
                       </button>
                     </div>
 
-                    {selectedReport.metadata.technical_signal_detailed && (
+                    {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
                       <button
                         className="view-more-btn"
-                        onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
+                        onClick={() => setShowDetailedSummary(!showDetailedSummary)}
                         style={{ marginTop: '12px' }}
                       >
-                        {showDetailedTechnical ? 'view less' : 'view more'}
+                        {showDetailedSummary ? 'view less' : 'view more'}
                       </button>
                     )}
                   </div>
                 )}
               </div>
-            )
-            }
 
-            {
-              selectedReport.metadata?.verified_skills?.length > 0 && (
+              {selectedReport.metadata?.technical_signal && (
                 <div className="detail-section">
-                  <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
-                  <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>SKILLS VERIFIED FROM CODE</h3>
-                  <div className="merit-grid scrollable">
-                    {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
-                      const isExpanded = expandedSkills.includes(i);
-                      const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
+                  <button
+                    onClick={() => {
+                      setShowTechnicalSignal(!showTechnicalSignal);
+                      if (!showTechnicalSignal) setShowDetailedTechnical(false);
+                    }}
+                    className="section-header-btn"
+                  >
+                    <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
+                    {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+                  </button>
 
-                      const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
-                      const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
-                      const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
-
-                      return (
-                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                          <div className="merit-header">
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                              <span className="merit-title">{name}</span>
-                            </div>
-                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
-                          </div>
-                          {isExpanded && (
-                            <div className="merit-detail">
-                              {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
-                              {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )
-            }
-
-
-            <div className="detail-section">
-              <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
-              <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
-              <div className="merit-grid scrollable">
-                {selectedReport.meritPoints.map((point: any, i: number) => {
-                  const isExpanded = expandedMerits.includes(i);
-                  const isNegative = point.type === 'negative';
-                  const toggle = () => {
-                    setExpandedMerits((prev: number[]) =>
-                      prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
-                    );
-                  };
-                  return (
-                    <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                      <div className="merit-header">
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          {isNegative ? (
-                            <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
+                  {showTechnicalSignal && (
+                    <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
+                          {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                            ? selectedReport.metadata.technical_signal_detailed
+                            : selectedReport.metadata.technical_signal
+                          }
+                        </p>
+                        <button
+                          className="copy-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                              ? selectedReport.metadata.technical_signal_detailed
+                              : selectedReport.metadata.technical_signal;
+                            navigator.clipboard.writeText(text);
+                            setCopiedId('signal');
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                        >
+                          {copiedId === 'signal' ? (
+                            <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
                           ) : (
-                            <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                            <Copy size={14} strokeWidth={2} />
                           )}
-                          <span className="merit-title">{point.title || point}</span>
-                        </div>
-                        {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                        </button>
                       </div>
-                      {isExpanded && (
-                        <div className="merit-detail">
-                          <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
 
-                          {point.business_impact && (
-                            <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
-                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
-                              <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
-                            </div>
-                          )}
-
-                          {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
-                            <div>
-                              <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
-                              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
+                      {selectedReport.metadata.technical_signal_detailed && (
+                        <button
+                          className="view-more-btn"
+                          onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
+                          style={{ marginTop: '12px' }}
+                        >
+                          {showDetailedTechnical ? 'view less' : 'view more'}
+                        </button>
                       )}
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+              )
+              }
+
+              {
+                selectedReport.metadata?.verified_skills?.length > 0 && (
+                  <div className="detail-section">
+                    <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
+                    <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>SKILLS VERIFIED FROM CODE</h3>
+                    <div className="merit-grid scrollable">
+                      {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
+                        const isExpanded = expandedSkills.includes(i);
+                        const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
+
+                        const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
+                        const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
+                        const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
+
+                        return (
+                          <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                            <div className="merit-header">
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                                <span className="merit-title">{name}</span>
+                              </div>
+                              {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                            </div>
+                            {isExpanded && (
+                              <div className="merit-detail">
+                                {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
+                                {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
+              }
+
+
+              <div className="detail-section">
+                <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
+                <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
+                <div className="merit-grid scrollable">
+                  {selectedReport.meritPoints.map((point: any, i: number) => {
+                    const isExpanded = expandedMerits.includes(i);
+                    const isNegative = point.type === 'negative';
+                    const toggle = () => {
+                      setExpandedMerits((prev: number[]) =>
+                        prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
+                      );
+                    };
+                    return (
+                      <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                        <div className="merit-header">
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            {isNegative ? (
+                              <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
+                            ) : (
+                              <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                            )}
+                            <span className="merit-title">{point.title || point}</span>
+                          </div>
+                          {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                        </div>
+                        {isExpanded && (
+                          <div className="merit-detail">
+                            <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
+
+                            {point.business_impact && (
+                              <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
+                                <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
+                                <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
+                              </div>
+                            )}
+
+                            {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
+                              <div>
+                                <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
+                                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="download-card-btn">
+                  <FileDown size={16} />
+                  DOWNLOAD REPORT CARD
+                </button>
               </div>
-              <button className="download-card-btn">
-                <FileDown size={16} />
-                DOWNLOAD REPORT CARD
-              </button>
-            </div>
-          </div >
+            </div >
+          )
         ) : (
           <>
             {activeTab === 'analyze' && (
