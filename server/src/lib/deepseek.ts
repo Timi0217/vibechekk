@@ -465,6 +465,13 @@ ${codeSamples.length > 8000 ? codeSamples.substring(0, 8000) + '\n[truncated]' :
 
 Write a professional assessment following this EXACT structure:
 
+### 0. archetype_reason (1-2 sentences) - REQUIRED
+Explain WHY this specific developer got their archetype based on THEIR repos and behavior. Be specific!
+Examples:
+- "Classified as CRAFTSPERSON because 80% of their repos have comprehensive test suites and consistent code style patterns."
+- "Earned ARCHITECT status through designing scalable systems in their payment-gateway and microservices-template repos."
+- "Identified as HIDDEN GEM: low star count but exceptionally clean React code with TypeScript and proper error handling."
+
 ### 1. trajectory_summary (2-3 sentences)
 Describe their developer EVOLUTION - how they've changed over time. If they have old C/systems work but recent TypeScript/Python, lead with the recent focus. Example: "Started with systems programming in C during university, now focuses on modern web development with TypeScript and React."
 
@@ -595,6 +602,11 @@ Golden rules:
         analysis.rarity_badge = tierBadge;
         analysis.rarity_percentile = percentile;
 
+        // Ensure archetype_reason is present (DeepSeek might not generate it)
+        if (!analysis.archetype_reason) {
+            analysis.archetype_reason = `Classified as ${archetype.replace(/^THE\s+/i, '')} based on ${classificationReason}.`;
+        }
+
         // Ensure highlights have proper distribution
         const positives = (analysis.highlights || []).filter((h: any) => h.type === 'positive');
         const negatives = (analysis.highlights || []).filter((h: any) => h.type === 'negative');
@@ -661,6 +673,7 @@ Golden rules:
             rarity: tier,
             rarity_badge: tierBadge,
             rarity_percentile: percentile,
+            archetype_reason: `Classified as ${archetype.replace(/^THE\s+/i, '')} based on ${classificationReason}.`,
             trajectory_summary: `Developer with ${accountAgeYears.toFixed(0)} years on GitHub, primarily working with ${languages.slice(0, 3).join(', ') || 'various technologies'}.`,
             recruiter_summary: `This candidate shows ${experienceSignals.recentlyActive} activity on GitHub with ${repoCount} public repositories. Their primary focus appears to be ${primaryDomain[0]} development. ${qualityTier === 'production-ready' ? 'Code quality practices are strong with testing and CI present.' : 'Code quality practices could be strengthened.'}`,
             highlights: [
