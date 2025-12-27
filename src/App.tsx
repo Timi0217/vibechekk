@@ -90,6 +90,11 @@ const pluralizeArchetype = (name: string) => {
   return cleaned + 'S';
 }
 
+const stripThe = (name: string) => {
+  if (!name) return name;
+  return name.replace(/^THE\s+/i, '');
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('analyze')
   const [manualUrl, setManualUrl] = useState('')
@@ -390,7 +395,7 @@ function App() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity} size={14} />
                           <div className={`archetype-badge ${getRarityClass(selectedReport.rarity)}`}>
-                            {selectedReport.label || 'Profile'}
+                            {stripThe(selectedReport.label) || 'Profile'}
                           </div>
                           {selectedReport.rarity_percentile && (
                             <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
@@ -776,7 +781,7 @@ function App() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <ArchetypeIcon label={item.label || 'Profile'} rarity={item.rarity} size={12} />
                               <div className={`archetype-badge ${getRarityClass(item.rarity)}`}>
-                                {item.label || 'Profile'}
+                                {stripThe(item.label) || 'Profile'}
                               </div>
                             </div>
                           </div>
