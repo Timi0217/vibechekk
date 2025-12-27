@@ -28,25 +28,30 @@ const VibeLogo = ({ size = 20, color = 'currentColor', className = '', ...props 
 
 const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: string, size?: number }) => {
   const ArchetypeMap: Record<string, any> = {
-    // TIER 1 - LEGENDARY (🟡)
-    'the architect': Award,     // Crown/Award for top-tier production
-    'the professor': BookOpen,  // Book for educators
+    // 🌟🌟🌟 HYPER RARE (Top 1%)
+    'the 10x engineer': Award,      // Trophy/Award for industry legends
 
-    // TIER 2 - RARE (🟣)
-    'the maintainer': Heart,    // Heart for keeping OSS alive
-    'the specialist': Beaker,   // Beaker for niche deep-dives
-    'the systems thinker': Layers, // Layers for infra/systems
+    // 🌟🌟 ULTRA RARE (Top 5%)
+    'the architect': Layers,        // Layers for system design
+    'the professor': BookOpen,      // Book for educators
 
-    // TIER 3 - UNCOMMON (🔵)
-    'the builder': Box,         // Box for shipping products
+    // ⭐ RARE (Top 15%)
+    'the specialist': Beaker,       // Beaker for deep expertise
+    'the systems thinker': Box,     // Box for infrastructure/systems
+
+    // ◆ UNCOMMON (Top 30%)
+    'the maintainer': Heart,        // Heart for keeping OSS alive
+    'the builder': Hammer,          // Hammer for shipping products
     'the contributor': MessageSquare, // Message for collaboration
-    'the craftsperson': Hammer, // Hammer for quality code
+    'the craftsperson': Code,       // Code for quality focus
+    'the hidden gem': Star,         // Star for high skill/low visibility
 
-    // TIER 4 - COMMON (⚪)
-    'the hidden gem': Star,     // Star for high quality/low stars
-    'the tinkerer': Code,       // Code for practical projects
-    'the explorer': Navigation, // Compass/Navigation for multi-lang
-    'the apprentice': Zap,      // Zap for learning/beginners
+    // ● COMMON (Top 50%)
+    'the tinkerer': Sliders,        // Sliders for practical tinkering
+    'the grinder': TrendingUp,      // TrendingUp for high activity
+    'the hobbyist': Heart,          // Heart for passion projects (different color)
+    'the explorer': Navigation,     // Compass for multi-lang exploration
+    'the apprentice': Zap,          // Zap for learning/beginners
   }
 
   const rarityColors: Record<string, string> = {
