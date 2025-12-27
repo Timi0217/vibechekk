@@ -99,6 +99,7 @@ function App() {
   const [expandedSkills, setExpandedSkills] = useState<number[]>([])
   const [loadingStep, setLoadingStep] = useState(0)
   const [tierFilter, setTierFilter] = useState<string | null>(null)
+  const [archetypeFilter, setArchetypeFilter] = useState<string | null>(null)
   const activeTabRef = useRef(activeTab)
 
   useEffect(() => {
@@ -713,11 +714,37 @@ function App() {
 
             {activeTab === 'history' && (
               <div className="history-list">
-                <h2 className="section-title">History</h2>
-                {history.length === 0 ? (
-                  <p className="footer-info">No reports found.</p>
-                ) : (
-                  history.map((item: any, i: number) => {
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h2 className="section-title" style={{ margin: 0 }}>
+                    {archetypeFilter ? `${archetypeFilter}` : 'History'}
+                  </h2>
+                  {archetypeFilter && (
+                    <button
+                      onClick={() => setArchetypeFilter(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--accent)',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      Clear Filter
+                    </button>
+                  )}
+                </div>
+                {(() => {
+                  const filteredHistory = archetypeFilter
+                    ? history.filter((item: any) => item.label?.toUpperCase() === archetypeFilter.toUpperCase())
+                    : history;
+
+                  if (filteredHistory.length === 0) {
+                    return <p className="footer-info">{archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No reports found.'}</p>;
+                  }
+
+                  return filteredHistory.map((item: any, i: number) => {
                     const handle = item.candidate?.githubHandle || item.githubHandle || '';
                     return (
                       <div key={i} className={`history-item ${getRarityClass(item.rarity)}`} onClick={() => handleOpenReport(item)}>
@@ -748,8 +775,8 @@ function App() {
                         </div>
                       </div>
                     );
-                  })
-                )}
+                  });
+                })()}
               </div>
             )}
 
@@ -842,7 +869,17 @@ function App() {
                               const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
                               const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
                               return (
-                                <div key={arch} className="stat-card compact" style={{ background: 'white' }}>
+                                <div
+                                  key={arch}
+                                  className="stat-card compact"
+                                  style={{ background: 'white', cursor: 'pointer', transition: 'all 0.2s' }}
+                                  onClick={() => {
+                                    setArchetypeFilter(arch);
+                                    setActiveTab('history');
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                                >
                                   <div className="stat-info">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                       <div className="archetype-icon-small">
