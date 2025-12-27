@@ -269,9 +269,9 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const isMaintainer = globalMetadata.topRepos?.some((r: any) => r.isMaintainer && r.stars >= 100);
     const isFullStackDev = domains.web >= 2 && domains.backend >= 2;
 
-    // HYPER RARE (90+ points) - Top 1%
+    // LEGENDARY (90+ points) - Top 1%
     if (compositeScore >= 90) {
-        tier = 'HYPER RARE';
+        tier = 'LEGENDARY';
         tierBadge = '🌟🌟🌟';
         percentile = 'Top 1%';
 

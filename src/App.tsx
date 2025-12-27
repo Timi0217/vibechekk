@@ -4,7 +4,7 @@ import { BACKEND_URL } from './constants'
 import './App.css'
 
 const rarityColors: Record<string, string> = {
-  'HYPER RARE': '#f59e0b',    // Gold/Amber for top 1%
+  'LEGENDARY': '#f59e0b',     // Gold/Amber for top 1%
   'ULTRA RARE': '#8b5cf6',    // Purple for top 5%
   'RARE': '#3b82f6',          // Blue for top 15%
   'UNCOMMON': '#10b981',      // Green for top 30%
@@ -36,7 +36,7 @@ const VibeLogo = ({ size = 20, color = 'currentColor', className = '', ...props 
 
 const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: string, size?: number }) => {
   const ArchetypeMap: Record<string, any> = {
-    // 🌟🌟🌟 HYPER RARE (Top 1%)
+    // 🌟🌟🌟 LEGENDARY (Top 1%)
     'the 10x engineer': Rocket,       // Rocket for industry legends launching major projects
 
     // 🌟🌟 ULTRA RARE (Top 5%)
@@ -72,7 +72,7 @@ const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: s
 
 const getRarityClass = (rarity: string) => {
   const r = rarity?.toUpperCase();
-  if (r === 'HYPER RARE') return 'hyper-rare';
+  if (r === 'LEGENDARY') return 'legendary';
   if (r === 'ULTRA RARE') return 'ultra-rare';
   if (r === 'RARE') return 'rare';
   if (r === 'UNCOMMON') return 'uncommon';
@@ -795,7 +795,7 @@ function App() {
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
-                        {['HYPER RARE', 'ULTRA RARE', 'RARE', 'UNCOMMON', 'COMMON'].map(tier => {
+                        {['LEGENDARY', 'ULTRA RARE', 'RARE', 'UNCOMMON', 'COMMON'].map(tier => {
                           const isActive = tierFilter === tier;
                           const count = analytics.tierBreakdown?.[tier] || 0;
                           return (
