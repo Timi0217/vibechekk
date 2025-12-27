@@ -448,11 +448,14 @@ export const findTopRepos = async (token: string, username: string) => {
 
 export const analyzeGitHubProfile = async (token: string, username: string) => {
   console.log(`[GitHub] Starting comprehensive analysis for ${username}`);
+  const startTime = Date.now();
 
+  // Phase 1: Fetch user stats and repos in parallel
   const [userStats, topRepos] = await Promise.all([
     fetchUserStats(token, username).catch(() => null),
     findTopRepos(token, username)
   ]);
+  console.log(`[GitHub] Phase 1 (stats+repos): ${Date.now() - startTime}ms`);
 
   const stats = userStats || {
     totalStars: 0,
@@ -465,21 +468,33 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     forkRatio: 0
   };
 
-  const qualitySignals = topRepos.length > 0
-    ? await Promise.all(topRepos.slice(0, 5).map(r => fetchCodeQualitySignals(token, username, r.name)))
-    : [];
-
-  await Promise.all(topRepos.map(async (repo: any) => {
-    if (repo.stars >= 1000) {
-      repo.isMaintainer = await checkMaintainerStatus(token, username, repo.name, username);
-    }
+  // Sync operations (no API calls)
+  topRepos.forEach((repo: any) => {
     repo.educationalMeta = detectEducationalContent(repo);
     repo.contribution = analyzeContributionDepth(repo);
-  }));
+  });
 
-  const codeSamples = await fetchSmartDiffs(token, username, topRepos);
+  // Phase 2: Run ALL API-heavy operations in parallel
+  const phase2Start = Date.now();
+  const [qualitySignals, codeSamples, ...maintainerResults] = await Promise.all([
+    // Quality signals for top 5 repos
+    Promise.all(topRepos.slice(0, 5).map(r => fetchCodeQualitySignals(token, username, r.name))),
+    // Smart diffs
+    fetchSmartDiffs(token, username, topRepos),
+    // Maintainer checks only for 1K+ star repos
+    ...topRepos.filter((r: any) => r.stars >= 1000).map((repo: any) =>
+      checkMaintainerStatus(token, username, repo.name, username).then(isMaintainer => ({ repo: repo.name, isMaintainer }))
+    )
+  ]);
+  console.log(`[GitHub] Phase 2 (quality+diffs+maintainer): ${Date.now() - phase2Start}ms`);
 
-  // NEW: AI Code Analysis
+  // Apply maintainer results
+  maintainerResults.forEach((result: any) => {
+    const repo = topRepos.find((r: any) => r.name === result.repo);
+    if (repo) repo.isMaintainer = result.isMaintainer;
+  });
+
+  // AI Code Analysis (sync, uses already-fetched codeSamples)
   const aiCodeAnalysis = topRepos.slice(0, 5).map((repo: any) => ({
     repo: repo.name,
     signals: detectAICodeSignals(codeSamples, repo.commits || [])
@@ -494,6 +509,8 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
   distribution.highest_single_repo = Math.max(distribution.highest_single_repo, topRepos[0]?.stars || 0);
 
   const trajectoryData = analyzeGlobalTrajectory(topRepos);
+
+  console.log(`[GitHub] Total analysis time: ${Date.now() - startTime}ms`);
 
   return {
     userStats: stats,
