@@ -407,7 +407,8 @@ export const findTopRepos = async (token: string, username: string) => {
     };
 
     const allTimeTop = [...allRepos].sort((a, b) => b.stargazerCount - a.stargazerCount).slice(0, 10);
-    console.log(`[GitHub] Top all-time repos: ${allTimeTop.slice(0, 3).map(r => `${r.name} (${r.stargazerCount}⭐)`).join(', ')}`);
+    console.log(`[GitHub] DEBUG - Total repos fetched: ${allRepos.length}`);
+    console.log(`[GitHub] DEBUG - Top 5 repos by stars:`, allTimeTop.slice(0, 5).map(r => `${r.name}: ${r.stargazerCount}⭐`));
     addRepos(allTimeTop);
 
     const currentYear = new Date().getFullYear();
