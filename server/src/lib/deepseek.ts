@@ -3,11 +3,8 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const totalStars = globalMetadata.starDistribution.total_stars;
     const topRepo = globalMetadata.topRepos[0];
 
-    // PRE-CLASSIFICATION: Determine if tier/type should be locked
-    let tierLock: string | null = null;
-    let typeLock: string | null = null;
-    let lockReason: string = '';
 
+    // Quality score calculation
     const qualityScore = globalMetadata.qualitySignals.reduce((score: number, q: any) => {
         if (!q) return score;
 
@@ -23,7 +20,65 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             + (q.complexity === 'high' ? 2 : q.complexity === 'medium' ? 1 : 0);
     }, 0);
 
-    // **LEGENDARY TIER**: 5K+ stars with quality gate
+    // **NEW**: Calculate skill depth from repo metadata and code
+    const skillComplexityScore = (() => {
+        const allText = [
+            ...globalMetadata.topRepos.map((r: any) => `${r.name} ${r.description || ''}`),
+            codeSamples
+        ].join(' ').toLowerCase();
+
+        const advancedSignals = [
+            'distributed', 'microservices', 'kubernetes', 'docker', 'serverless',
+            'machine learning', 'ml', 'compiler', 'optimization', 'concurrency',
+            'websocket', 'graphql', 'postgresql', 'redis', 'system design',
+            'security', 'cryptography', 'parsing', 'interpreter', 'blockchain',
+            'performance', 'caching', 'indexing', 'algorithms', 'data structures',
+            'systems programming', 'c programming', 'rust', 'kernel', 'assembly'
+        ];
+
+        const intermediateSignals = [
+            'api', 'rest', 'authentication', 'auth', 'jwt', 'deployment', 'testing',
+            'state management', 'responsive', 'full-stack', 'backend', 'frontend',
+            'database', 'sql', 'nosql', 'react', 'vue', 'angular', 'node',
+            'express', 'flask', 'django', 'spring', 'typescript'
+        ];
+
+        const beginnerSignals = [
+            'tutorial', 'learning', 'practice', 'clone', 'sample',
+            'exercise', 'homework', 'bootcamp', 'beginner', 'intro',
+            'hello world', 'getting started', 'basic'
+        ];
+
+        const advancedCount = advancedSignals.filter(s => allText.includes(s)).length;
+        const intermediateCount = intermediateSignals.filter(s => allText.includes(s)).length;
+        const beginnerCount = beginnerSignals.filter(s => allText.includes(s)).length;
+
+        // File count and commits also signal skill level
+        const avgFileCount = globalMetadata.qualitySignals.reduce((sum: number, q: any) =>
+            sum + (q?.fileCount || 0), 0) / Math.max(globalMetadata.qualitySignals.length, 1);
+
+        const avgCommits = globalMetadata.topRepos.reduce((sum: number, r: any) =>
+            sum + (r.totalCommits || 0), 0) / Math.max(globalMetadata.topRepos.length, 1);
+
+        const projectComplexity = avgFileCount > 100 ? 2 : avgFileCount > 30 ? 1 : 0;
+        const commitDepth = avgCommits > 50 ? 2 : avgCommits > 20 ? 1 : 0;
+
+        return {
+            advanced: advancedCount,
+            intermediate: intermediateCount,
+            beginner: beginnerCount,
+            totalComplexity: (advancedCount * 3) + (intermediateCount * 2) - (beginnerCount * 1) + projectComplexity + commitDepth
+        };
+    })();
+
+    console.log(`[Skill Analysis] Advanced: ${skillComplexityScore.advanced}, Intermediate: ${skillComplexityScore.intermediate}, Beginner: ${skillComplexityScore.beginner}, Total: ${skillComplexityScore.totalComplexity}`);
+
+    // PRE-CLASSIFICATION with skill-aware logic
+    let tierLock: string | null = null;
+    let typeLock: string | null = null;
+    let lockReason: string = '';
+
+    // **LEGENDARY TIER**: 5K+ stars
     if (highestStars >= 5000) {
         tierLock = 'LEGENDARY';
 
@@ -35,26 +90,71 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             lockReason = `${highestStars} stars on production infrastructure`;
         }
 
-        // **QUALITY GATE**: Flag if legendary status but poor code quality
         if (qualityScore < 4) {
             lockReason += ` ⚠️ Low quality score (${qualityScore}/10)`;
         }
 
         console.log(`[Pre-Check] LEGENDARY locked: ${typeLock} (${lockReason})`);
     }
-    // **BEGINNER TIER**: <10 total stars
-    else if (highestStars < 10 && totalStars < 10) {
-        tierLock = 'COMMON';
-        typeLock = 'THE LEARNER';
-        lockReason = `Only ${totalStars} total stars`;
-        console.log(`[Pre-Check] BEGINNER locked: ${typeLock} (${lockReason})`);
+    // **RARE TIER**: High skill complexity OR 1K+ stars
+    else if (highestStars >= 1000 || skillComplexityScore.totalComplexity >= 15) {
+        tierLock = 'RARE';
+        if (highestStars >= 1000) {
+            typeLock = 'THE MAINTAINER';
+            lockReason = `${highestStars} stars with maintainer status`;
+        } else {
+            typeLock = 'THE SPECIALIST';
+            lockReason = `High skill complexity (${skillComplexityScore.totalComplexity}) in advanced domains`;
+        }
+        console.log(`[Pre-Check] RARE locked: ${typeLock} (${lockReason})`);
     }
-    // **HIDDEN GEM**: Elite quality, low visibility
-    else if (qualityScore >= 8 && highestStars < 100) {
+    // **UNCOMMON TIER**: Moderate skills + some stars
+    else if (skillComplexityScore.totalComplexity >= 8 || highestStars >= 100) {
+        tierLock = 'UNCOMMON';
+
+        if (globalMetadata.userStats?.externalContributions >= 100) {
+            typeLock = 'THE CONTRIBUTOR';
+            lockReason = `${globalMetadata.userStats.externalContributions} external contributions`;
+        } else if (qualityScore >= 6) {
+            typeLock = 'THE CRAFTSPERSON';
+            lockReason = `High code quality (${qualityScore}/10)`;
+        } else {
+            typeLock = 'THE BUILDER';
+            lockReason = `${highestStars} stars with production experience`;
+        }
+        console.log(`[Pre-Check] UNCOMMON locked: ${typeLock} (${lockReason})`);
+    }
+    // **COMMON TIER**: Skill-based differentiation
+    else {
         tierLock = 'COMMON';
-        typeLock = 'THE HIDDEN GEM';
-        lockReason = `Quality score ${qualityScore}/10 but only ${highestStars} stars`;
-        console.log(`[Pre-Check] HIDDEN GEM locked: ${typeLock} (${lockReason})`);
+
+        // THE HIDDEN GEM: Great quality, low visibility
+        if (qualityScore >= 8 && highestStars < 100) {
+            typeLock = 'THE HIDDEN GEM';
+            lockReason = `Elite quality score (${qualityScore}/10) but only ${highestStars} stars`;
+        }
+        // THE TINKERER: Moderate complexity, practical work
+        else if (skillComplexityScore.totalComplexity >= 5 || (highestStars >= 10 && highestStars < 50)) {
+            typeLock = 'THE TINKERER';
+            lockReason = `Practical projects with complexity score ${skillComplexityScore.totalComplexity}`;
+        }
+        // THE EXPLORER: Breadth over depth
+        else if (globalMetadata.userStats?.languages?.length >= 6 && skillComplexityScore.totalComplexity >= 3) {
+            typeLock = 'THE EXPLORER';
+            lockReason = `${globalMetadata.userStats.languages.length} languages explored`;
+        }
+        // THE APPRENTICE: Actual beginners only
+        else if (skillComplexityScore.beginner > skillComplexityScore.intermediate && skillComplexityScore.totalComplexity < 3) {
+            typeLock = 'THE APPRENTICE';
+            lockReason = `Early stage: ${skillComplexityScore.beginner} tutorial projects, ${totalStars} total stars`;
+        }
+        // DEFAULT: THE TINKERER for anyone with real code
+        else {
+            typeLock = 'THE TINKERER';
+            lockReason = `${totalStars} stars across ${globalMetadata.topRepos.length} projects`;
+        }
+
+        console.log(`[Pre-Check] COMMON tier: ${typeLock} (${lockReason})`);
     }
 
     const prompt = `
@@ -68,6 +168,7 @@ You MUST return this exact label. No exceptions.
 - PEAK_PROJECT_STARS: ${highestStars} ${highestStars >= 5000 ? '⬅️ LEGENDARY THRESHOLD MET' : ''}
 - TOTAL_STARS: ${totalStars}
 - QUALITY_SCORE: ${qualityScore}/10
+- SKILL_COMPLEXITY: ${skillComplexityScore.totalComplexity} (Advanced: ${skillComplexityScore.advanced}, Intermediate: ${skillComplexityScore.intermediate}, Beginner: ${skillComplexityScore.beginner})
 - EXTERNAL_CONTRIBS: ${globalMetadata.userStats?.externalContributions || 0}
 - MAINTAINER_OF_1K_PLUS: ${globalMetadata.topRepos.filter((r: any) => r.stars >= 1000 && r.isMaintainer).length > 0 ? 'YES' : 'NO'}
 
@@ -77,12 +178,14 @@ ${globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => {
         return `
 ${i + 1}. "${r.name}" 
    - Stars: ${r.stars}
+   - Commits: ${r.totalCommits}
+   - Files: ${quality?.fileCount || 'N/A'}
    - Educational: ${r.educationalMeta?.isEducational ? 'YES' : 'NO'}
    - Likely Guide/Curated: ${r.educationalMeta?.isLikelyGuide ? 'YES' : 'NO'}
    - Stars/Commit Ratio: ${r.educationalMeta?.starsPerCommit?.toFixed(1) || 'N/A'} ${r.educationalMeta?.starsPerCommit > 50 ? '⬅️ CURATED CONTENT SIGNAL' : ''}
    - Maintainer: ${r.isMaintainer ? 'YES' : 'NO'}
    - Quality: Tests=${quality?.hasTests}, CI=${quality?.hasCI}, Docs=${quality?.hasDocs}
-   - README Preview: ${quality?.readmePreview || 'N/A'}
+   - README Preview: ${quality?.readmePreview?.substring(0, 150) || 'N/A'}
 `;
     }).join('')}
 
@@ -97,32 +200,36 @@ ${globalMetadata.trajectoryNarrative || 'No historical data available'}
 
 **TIER 2: RARE 🟣 (Top 15%)**
 - THE MAINTAINER - Keeps critical OSS alive (1K+ stars, consistent maintenance)
-- THE SPECIALIST - Deep expertise in niche domains (300-1K stars, ML/compilers/crypto/systems)
+- THE SPECIALIST - Deep expertise in niche domains (15+ complexity score: ML/compilers/crypto/systems)
 - THE SYSTEMS THINKER - Distributed systems, databases, performance-critical code (500-3K stars)
 
 **TIER 3: UNCOMMON 🔵 (Top 30%)**
 - THE BUILDER - Ships products people use (100-500 stars, production features)
 - THE CONTRIBUTOR - 100+ meaningful PRs to external projects (50-300 stars on own work)
-- THE CRAFTSPERSON - High-quality code with tests/CI (100-300 stars, quality score >= 6)
+- THE CRAFTSPERSON - High-quality code with tests/CI (8+ complexity score, quality >= 6)
 
 **TIER 4: COMMON ⚪ (Bottom 50%)**
-- THE HIDDEN GEM - Elite code quality but low visibility (<100 stars, quality score >= 8)
-- THE TINKERER - Useful scripts and tools (10-50 stars, practical projects)
-- THE EXPLORER - Trying new languages/frameworks (<20 stars, 6+ languages)
-- THE LEARNER - Building foundations (0-10 total stars)
+- THE HIDDEN GEM - Elite code quality but low visibility (<100 stars, quality >= 8)
+- THE TINKERER - Practical projects (5-15 complexity score, intermediate skills detected)
+- THE EXPLORER - Breadth over depth (6+ languages, 3+ complexity score)
+- THE APPRENTICE - Building foundations (beginner signals > intermediate signals, <3 complexity score)
 
-### CLASSIFICATION RULES:
-1. If PEAK_PROJECT_STARS >= 5,000 → MUST be LEGENDARY tier
-   - Educational/curated content → THE PROFESSOR
-   - Production tools/libraries → THE ARCHITECT
+### CRITICAL CLASSIFICATION RULES:
+1. NEVER classify someone as "THE APPRENTICE" if they have:
+   - Intermediate/advanced skills detected (complexity >= 5)
+   - Projects with 30+ files
+   - 20+ commits on average
+   - Skills like "Serverless", "Database Integration", "Systems Programming"
    
-2. If PEAK_PROJECT_STARS >= 1,000 AND user is maintainer → THE MAINTAINER (RARE tier)
+2. "THE APPRENTICE" is ONLY for developers with:
+   - Tutorial/learning/practice repos dominating
+   - Low file counts (<20 files per project)
+   - Few commits (<10 per project)
+   - No intermediate skills detected
+   
+3. If unsure between TINKERER and APPRENTICE → default to TINKERER
 
-3. If QUALITY_SCORE >= 8 AND PEAK_PROJECT_STARS < 100 → THE HIDDEN GEM
-
-4. If PEAK_PROJECT_STARS < 10 AND TOTAL_STARS < 10 → THE LEARNER
-
-5. If EXTERNAL_CONTRIBS >= 100 → Consider THE CONTRIBUTOR
+4. If EXTERNAL_CONTRIBS >= 100 → Consider THE CONTRIBUTOR
 
 ### Code Samples (Top 5 Repos, 3 Commits Each):
 ${codeSamples}
@@ -199,14 +306,22 @@ Return ONLY valid JSON matching this structure.
 
 CRITICAL RULES:
 1. Stars >= 5,000 on one repo = LEGENDARY tier (Professor or Architect ONLY)
-2. Stars < 10 total = THE LEARNER ONLY
-3. Quality score >= 8 with <100 stars = THE HIDDEN GEM
-4. Educational content (guides, tutorials, curated lists) with 5K+ stars = THE PROFESSOR
-5. Production infrastructure (libraries, tools, frameworks) with 5K+ stars = THE ARCHITECT
+2. Skill complexity >= 15 OR stars >= 1,000 = RARE tier minimum
+3. Skill complexity >= 8 OR stars >= 100 = UNCOMMON tier
+4. Quality score >= 8 with <100 stars = THE HIDDEN GEM
+5. "THE APPRENTICE" is ONLY for actual beginners:
+   - Beginner signals > intermediate signals
+   - Complexity score < 3
+   - Tutorial/practice projects dominating
+6. DEFAULT to THE TINKERER for anyone with real intermediate skills (complexity >= 5)
+
+Educational content (guides, tutorials, curated lists) with 5K+ stars = THE PROFESSOR
+Production infrastructure (libraries, tools, frameworks) with 5K+ stars = THE ARCHITECT
 
 If the user message includes a LOCKED classification, return that exact label with no deviation.
 
-Be forensic in finding technical debt. Every developer has weaknesses - find them and include as negative highlights.`
+Be forensic in finding technical debt. Every developer has weaknesses - find them and include as negative highlights.
+`
                     },
                     { role: 'user', content: prompt }
                 ],

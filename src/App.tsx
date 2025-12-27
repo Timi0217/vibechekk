@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award } from 'lucide-react'
+import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award, Navigation } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -28,27 +28,25 @@ const VibeLogo = ({ size = 20, color = 'currentColor', className = '', ...props 
 
 const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: string, size?: number }) => {
   const ArchetypeMap: Record<string, any> = {
-    // TIER 4 - LEGENDARY
-    'the foundation builder': Bug,
-    'the technical titan': BookOpen,
-    'the industry shaper': Award,
+    // TIER 1 - LEGENDARY (🟡)
+    'the architect': Award,     // Crown/Award for top-tier production
+    'the professor': BookOpen,  // Book for educators
 
-    // TIER 3 - RARE
-    'the open source champion': Heart,
-    'the system architect': Layers,
-    'the deep specialist': Search,
+    // TIER 2 - RARE (🟣)
+    'the maintainer': Heart,    // Heart for keeping OSS alive
+    'the specialist': Beaker,   // Beaker for niche deep-dives
+    'the systems thinker': Layers, // Layers for infra/systems
 
-    // TIER 2 - UNCOMMON
-    'the open source contributor': MessageSquare,
-    'the independent builder': Sliders,
-    'the product engineer': Box,
+    // TIER 3 - UNCOMMON (🔵)
+    'the builder': Box,         // Box for shipping products
+    'the contributor': MessageSquare, // Message for collaboration
+    'the craftsperson': Hammer, // Hammer for quality code
 
-    // TIER 1 - COMMON
-    'the hidden gem': Star,
-    'the practical builder': Hammer,
-    'the feature engineer': Code,
-    'the experimental developer': Beaker,
-    'the beginner student': BookOpen,
+    // TIER 4 - COMMON (⚪)
+    'the hidden gem': Star,     // Star for high quality/low stars
+    'the tinkerer': Code,       // Code for practical projects
+    'the explorer': Navigation, // Compass/Navigation for multi-lang
+    'the apprentice': Zap,      // Zap for learning/beginners
   }
 
   const rarityColors: Record<string, string> = {
