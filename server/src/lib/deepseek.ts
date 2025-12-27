@@ -368,10 +368,12 @@ Describe their developer journey. Reference their primary technologies, how thei
 
 **Paragraph 3 - Team Fit & Collaboration:** What kind of team would they thrive on? Do they collaborate well (based on external contributions)? What's their likely seniority level?
 
-### 3. highlights (exactly 5 items)
-Provide EXACTLY 5 highlights with concrete evidence from their repos:
-- **3-4 positive highlights** (type: "positive") - specific achievements, technologies, patterns
-- **1-2 concerns** (type: "negative") - gaps, missing practices, areas for growth
+### 3. highlights (3-7 items, dynamic)
+Provide highlights with concrete evidence from their repos:
+- **2-4 positive highlights** (type: "positive") - specific achievements, technologies, patterns
+- **1-3 concerns** (type: "negative") - gaps, missing practices, areas for growth
+
+Use your judgment: more complex profiles deserve more highlights. Junior devs may have fewer.
 
 Each highlight must have a "title" (short label) and "detail" (1-2 sentence explanation with specific evidence).
 
@@ -405,9 +407,6 @@ Return ONLY valid JSON matching this structure:
   "recruiter_summary": "...",
   "highlights": [
     {"title": "...", "detail": "...", "type": "positive"},
-    {"title": "...", "detail": "...", "type": "positive"},
-    {"title": "...", "detail": "...", "type": "positive"},
-    {"title": "...", "detail": "...", "type": "negative"},
     {"title": "...", "detail": "...", "type": "negative"}
   ],
   "technical_signal": "...",
@@ -525,11 +524,11 @@ Golden rules:
             }
         }
 
-        // Trim to exactly 5 highlights (3-4 positive, 1-2 negative)
-        if (analysis.highlights && analysis.highlights.length > 5) {
+        // Ensure highlights stay within bounds (2-4 positive, 1-3 negative)
+        if (analysis.highlights && analysis.highlights.length > 7) {
             const pos = analysis.highlights.filter((h: any) => h.type === 'positive').slice(0, 4);
-            const neg = analysis.highlights.filter((h: any) => h.type === 'negative').slice(0, 2);
-            analysis.highlights = [...pos.slice(0, 5 - neg.length), ...neg];
+            const neg = analysis.highlights.filter((h: any) => h.type === 'negative').slice(0, 3);
+            analysis.highlights = [...pos, ...neg];
         }
 
         return analysis;
