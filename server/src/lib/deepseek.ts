@@ -123,12 +123,16 @@ Return a JSON object:
   "trajectory_summary": "1 sentence evolution summary.",
   "recruiter_summary": "3 detailed paragraphs analysis.",
   "highlights": [
-    { "title": "...", "detail": "..." }
+    { "title": "...", "detail": "...", "type": "positive" | "negative" }
   ],
   "technical_signal": "Short technical proof.",
   "technical_signal_detailed": "Evidence-backed deep dive.",
   "verified_skills": ["Skill | Level | Evidence"]
 }
+
+### HIGHLIGHT RULES:
+- Use "type": "negative" for: Low test coverage, high complexity warnings, lack of documentation, or stale repositories.
+- Use "type": "positive" for: High quality signals, complex project ownership, and strong community impact.
 
 Return JSON matching the structure exactly.
 `;
@@ -217,8 +221,8 @@ If the user message includes a LOCKED classification, you MUST return that exact
         analysis.trajectory_summary = analysis.trajectory_summary || `Evolved through ${globalMetadata.topRepos.length} repositories with a focus on ${globalMetadata.userStats?.languages?.[0] || 'software engineering'}.`;
         analysis.recruiter_summary = analysis.recruiter_summary || analysis.trajectory_summary;
         analysis.highlights = analysis.highlights || [
-            { title: "Technical Impact", detail: `Built projects with ${highestStars} peak stars.` },
-            { title: "Language Diversity", detail: `Proficient in ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.` }
+            { title: "Technical Impact", detail: `Built projects with ${highestStars} peak stars.`, type: "positive" },
+            { title: "Language Diversity", detail: `Proficient in ${globalMetadata.userStats?.languages?.slice(0, 3).join(', ') || 'multiple languages'}.`, type: "positive" }
         ];
 
         // POST-VALIDATION: Override if DeepSeek violated constraints
