@@ -167,7 +167,50 @@ If the user message includes a LOCKED classification, you MUST return that exact
             throw new Error('DeepSeek API returned no choices');
         }
 
-        const analysis = JSON.parse(data.choices[0].message?.content || '{}');
+        const rawContent = data.choices[0].message?.content || '{}';
+
+        // --- ROBUST JSON CLEANING ---
+        const cleanJsonResponse = (text: string) => {
+            try {
+                // 1. Strip potential Markdown code blocks
+                let cleaned = text.trim();
+                if (cleaned.startsWith('```')) {
+                    cleaned = cleaned.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+                }
+
+                // 2. Fix common trailing comma issues
+                cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
+
+                // Attempt parse
+                return JSON.parse(cleaned);
+            } catch (e) {
+                // Last ditch effort: try to find the first '{' and last '}'
+                try {
+                    const firstBrace = text.indexOf('{');
+                    const lastBrace = text.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1) {
+                        return JSON.parse(text.substring(firstBrace, lastBrace + 1));
+                    }
+                } catch (e2) { }
+                throw e;
+            }
+        };
+
+        let analysis;
+        try {
+            analysis = cleanJsonResponse(rawContent);
+        } catch (error) {
+            console.error('[DeepSeek] Fatal JSON Error:', error);
+            // FAILSAFE: Return a basic template so the database operation doesn't crash
+            analysis = {
+                label: typeLock || 'THE PRACTICAL BUILDER',
+                rarity: tierLock || 'COMMON',
+                rarity_badge: tierLock === 'LEGENDARY' ? '🟡' : '⚪',
+                trajectory_summary: 'Technical profile analysis exceeded token limits or contained invalid characters.',
+                recruiter_summary: 'Unable to parse detailed AI summary.',
+                highlights: []
+            };
+        }
 
         // ENSURE REQUIRED FIELDS EXIST (Safety against AI omission)
         analysis.label = analysis.label || (typeLock || 'THE PRACTICAL BUILDER');
