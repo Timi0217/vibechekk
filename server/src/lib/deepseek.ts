@@ -209,8 +209,12 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const hasQualityPractices = qualitySignals.hasTests || qualitySignals.hasCI;
     const isRecentlyActive = experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active';
 
+    // Multi-domain expertise check (for skill-based path)
+    const domainExpertiseCount = Object.values(domains).filter(count => count >= 2).length;
+    const hasMultiDomainExpertise = domainExpertiseCount >= 3; // Expert in 3+ domains
+
     // HYPER RARE: True industry legends - should be EXTREMELY rare
-    // Requires: MASSIVE stars (25K+) OR exceptional combination of quality + activity + depth
+    // PATH 1: Massive stars (25K+) with quality
     if (highestStars >= 25000 && !isViralNonCode && hasQualityPractices) {
         tier = 'HYPER RARE';
         tierBadge = '🌟🌟🌟';
@@ -218,13 +222,29 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         archetype = 'THE 10X ENGINEER';
         classificationReason = 'Industry-defining impact with widely-adopted tools';
     }
-    // Alternative path: 10K+ stars with production-ready quality AND active AND specialization
+    // PATH 2: High stars (10K+) with production-ready quality + active + specialized
     else if (highestStars >= 10000 && !isViralNonCode && qualityTier === 'production-ready' && isRecentlyActive && hasSpecialization) {
         tier = 'HYPER RARE';
         tierBadge = '🌟🌟🌟';
         percentile = 'Top 1%';
         archetype = 'THE 10X ENGINEER';
         classificationReason = 'High-impact engineer with exceptional quality practices';
+    }
+    // PATH 3: PURE SKILL (no stars required) - for enterprise/private devs
+    // Requires: production-ready + multi-domain expertise + large projects + very active + long tenure
+    else if (
+        qualityTier === 'production-ready' &&
+        hasMultiDomainExpertise &&
+        experienceSignals.projectScale === 'large' &&
+        isRecentlyActive &&
+        accountAgeYears >= 5 &&
+        experienceSignals.commitDepth === 'extensive'
+    ) {
+        tier = 'HYPER RARE';
+        tierBadge = '🌟🌟🌟';
+        percentile = 'Top 1%';
+        archetype = 'THE 10X ENGINEER';
+        classificationReason = 'Elite technical depth across multiple domains with production-grade practices';
     }
     // ULTRA RARE: Strong visibility with matching skill
     else if ((highestStars >= 5000 && !isViralNonCode && hasQualityPractices) || (highestStars >= 3000 && isMaintainer && qualityTier === 'production-ready')) {
