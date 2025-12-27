@@ -144,61 +144,124 @@ export const detectEducationalContent = (repo: any) => {
   };
 };
 
-// NEW: AI Code Detection
+// NEW: Enhanced AI Code Detection
 export const detectAICodeSignals = (codeContent: string, commits: any[]) => {
-  const aiSignatures = {
-    copilot: /github copilot|@copilot|ai-generated|auto-?completed/gi,
-    cursor: /cursor ai|ai-?assisted|cursor completion/gi,
-    chatgpt: /chatgpt|gpt-?4|claude|ai helper/gi,
-    aiCommitPatterns: /with (copilot|cursor|ai|chatgpt)|ai-?assisted|auto-?generated/gi,
-    verboseComments: /\/\*\*[\s\S]{200,}\*\//g,
-    explanatoryComments: /\/\/ (here's how|this (function|method|class)|note that|important:)/gi,
-    errorHandlingDensity: /try\s*{[\s\S]*?}\s*catch/g,
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 1. Explicit AI Tool Mentions in Code (comments, strings, file names)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const codePatterns = {
+    copilot: /github copilot|@copilot|copilot[:\-\s]|(ai|auto)[:\-\s]?generated/gi,
+    cursor: /cursor\s?(ai|ide|editor)|cursor[:\-\s]completion|cursor\.sh/gi,
+    claude: /claude[:\-\s]?(code|3|opus|sonnet|haiku)|anthropic|using claude/gi,
+    chatgpt: /chatgpt|gpt[:\-\s]?4|openai[:\-\s]?(api|chat)|"model":\s*"gpt/gi,
+    gemini: /gemini[:\-\s]?(pro|ultra|flash)|google ai studio/gi,
+    cline: /cline[:\-\s]|v0\.dev|bolt\.new|lovable\.dev|replit\s?agent/gi,
+    aider: /aider|continue\.dev|sourcegraph\s?cody|tabnine/gi,
+    generic: /ai[:\-\s]?(assisted|generated|powered|helper)/gi,
   };
 
+  let codeExplicitMarkers = 0;
+  for (const pattern of Object.values(codePatterns)) {
+    codeExplicitMarkers += (codeContent.match(pattern) || []).length;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 2. Commit Message AI Mentions (critical for detecting Claude Code, etc.)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const commitPatterns = [
+    /claude[:\-\s]?(code)?/i,
+    /copilot/i,
+    /cursor[:\-\s]?(ai|ide)?/i,
+    /chatgpt|gpt[:\-\s]?4/i,
+    /gemini/i,
+    /with\s?(ai|llm|claude|gpt)/i,
+    /ai[:\-\s]?(assisted|generated|help)/i,
+    /\[ai\]|\(ai\)/i,
+    /co[:\-]?authored[:\-]?by[:\s]*(claude|copilot|cursor|chatgpt|ai)/i,
+    /vibe[:\-\s]?coded|vibe\s?check/i,
+    /auto[:\-\s]?(generated|completed|commit)/i,
+    /🤖|🧠|✨.*ai/i,
+  ];
+
+  const commitMessages = commits.map((c: any) => c.message || '').join('\n');
+  let commitAIReferences = 0;
+  for (const pattern of commitPatterns) {
+    commitAIReferences += (commitMessages.match(new RegExp(pattern, 'gi')) || []).length;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 3. Behavioral Patterns (AI-style commits)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Large single-file commits (AI often dumps large blocks)
+  const largeSingleFileCommits = commits.filter((c: any) =>
+    (c.additions || 0) > 300 && (c.changedFilesIfAvailable || 1) === 1
+  ).length;
+
+  // Many files changed at once (AI scaffolding)
+  const bulkFileCommits = commits.filter((c: any) =>
+    (c.changedFilesIfAvailable || 0) > 10 && (c.additions || 0) > 500
+  ).length;
+
+  // Commits with generic messages (AI default behavior)
+  const genericMessages = commits.filter((c: any) => {
+    const msg = (c.message || '').toLowerCase();
+    return /^(initial commit|update|fix|wip|changes|refactor)$/i.test(msg.trim()) ||
+      msg.length < 8;
+  }).length;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 4. Code Style Signals (AI tends to over-explain)
+  // ═══════════════════════════════════════════════════════════════════════════
   const codeLines = codeContent.split('\n');
   const commentLines = codeLines.filter(line =>
     line.trim().startsWith('//') || line.trim().startsWith('/*') || line.trim().startsWith('*')
   );
-
-  const explicitMarkers =
-    (codeContent.match(aiSignatures.copilot) || []).length +
-    (codeContent.match(aiSignatures.cursor) || []).length +
-    (codeContent.match(aiSignatures.chatgpt) || []).length;
-
-  const commitAIReferences = commits.filter((c: any) =>
-    aiSignatures.aiCommitPatterns.test(c.message)
-  ).length;
-
   const commentDensity = commentLines.length / Math.max(codeLines.length, 1);
-  const hasExcessiveComments = commentDensity > 0.3;
+  const hasExcessiveComments = commentDensity > 0.35;
 
-  const verboseJSDoc = (codeContent.match(aiSignatures.verboseComments) || []).length;
-  const explanatoryStyle = (codeContent.match(aiSignatures.explanatoryComments) || []).length;
-  const errorHandlingCount = (codeContent.match(aiSignatures.errorHandlingDensity) || []).length;
+  const verboseJSDoc = (codeContent.match(/\/\*\*[\s\S]{300,}\*\//g) || []).length;
+  const explanatoryStyle = (codeContent.match(/\/\/ (here's how|this (function|method|class)|note that|important:|step \d)/gi) || []).length;
 
-  const hasScaffoldingPattern = commits.some((c: any) =>
-    (c.additions || 0) > 200 && (c.changedFilesIfAvailable || 1) === 1
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 5. Calculate Overall AI Likelihood Score
+  // ═══════════════════════════════════════════════════════════════════════════
+  const aiLikelihoodScore = Math.min(
+    // Explicit markers are strong signals
+    (codeExplicitMarkers * 25) +
+    // Commit messages mentioning AI tools are VERY strong
+    (commitAIReferences * 35) +
+    // Behavioral patterns
+    (largeSingleFileCommits * 8) +
+    (bulkFileCommits * 12) +
+    (genericMessages > 3 ? 10 : 0) +
+    // Code style
+    (hasExcessiveComments ? 10 : 0) +
+    (verboseJSDoc * 5) +
+    (explanatoryStyle * 3),
+    100
   );
 
   return {
-    explicitMarkers,
+    codeExplicitMarkers,
     commitAIReferences,
+    largeSingleFileCommits,
+    bulkFileCommits,
+    genericMessages,
     commentDensity: parseFloat(commentDensity.toFixed(2)),
     hasExcessiveComments,
     verboseJSDoc,
     explanatoryStyle,
-    errorHandlingCount,
-    hasScaffoldingPattern,
-    aiLikelihoodScore: Math.min(
-      (explicitMarkers * 30) +
-      (commitAIReferences * 20) +
-      (hasExcessiveComments ? 15 : 0) +
-      (verboseJSDoc * 10) +
-      (explanatoryStyle * 5) +
-      (hasScaffoldingPattern ? 10 : 0),
-      100
-    )
+    aiLikelihoodScore,
+    // Summary for debugging
+    detectedTools: [
+      codeContent.match(/claude/i) ? 'Claude' : null,
+      codeContent.match(/copilot/i) ? 'Copilot' : null,
+      codeContent.match(/cursor/i) ? 'Cursor' : null,
+      codeContent.match(/chatgpt|gpt-?4/i) ? 'ChatGPT' : null,
+      commitMessages.match(/claude/i) ? 'Claude (commit)' : null,
+      commitMessages.match(/copilot/i) ? 'Copilot (commit)' : null,
+    ].filter(Boolean)
   };
 };
 

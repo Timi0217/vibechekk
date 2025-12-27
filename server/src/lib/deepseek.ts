@@ -127,29 +127,45 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
 
     const avgAILikelihood = globalMetadata.avgAILikelihood || 0;
 
+    // Extract detected tools from the AI analysis
+    const detectedTools: string[] = (globalMetadata.aiCodeAnalysis || [])
+        .flatMap((a: any) => a.signals?.detectedTools || [])
+        .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i); // unique
+
     const aiAssessment = (() => {
+        const toolsNote = detectedTools.length > 0
+            ? ` Detected: ${detectedTools.join(', ')}.`
+            : '';
+
         if (avgAILikelihood > 70 && qualityTier === 'basic') {
             return {
                 level: 'concerning',
-                summary: 'Heavy AI patterns without quality validation',
+                summary: `Heavy AI patterns without quality validation.${toolsNote}`,
                 recommendation: 'Recommend live coding assessment to verify hands-on ability'
             };
         } else if (avgAILikelihood > 70 && qualityTier !== 'basic') {
             return {
                 level: 'pragmatic',
-                summary: 'Uses AI tools effectively with proper testing/CI',
+                summary: `Uses AI tools effectively with proper testing/CI.${toolsNote}`,
                 recommendation: 'Modern tooling approach, verify architectural understanding'
             };
         } else if (avgAILikelihood > 30) {
             return {
                 level: 'balanced',
-                summary: 'Healthy mix of AI assistance and manual coding',
+                summary: `Healthy mix of AI assistance and manual coding.${toolsNote}`,
+                recommendation: 'Standard technical interview process'
+            };
+        } else if (detectedTools.length > 0) {
+            // Some AI detected even with low score - mention it
+            return {
+                level: 'light-ai',
+                summary: `Some AI tool usage detected but primarily hand-written.${toolsNote}`,
                 recommendation: 'Standard technical interview process'
             };
         } else {
             return {
                 level: 'traditional',
-                summary: 'Primarily hand-written code',
+                summary: 'Primarily hand-written code with no AI tool indicators detected.',
                 recommendation: 'Standard technical interview process'
             };
         }
