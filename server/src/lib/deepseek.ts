@@ -76,6 +76,13 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     const externalContribs = globalMetadata.userStats?.externalContributions || 0;
     const isMaintainer = globalMetadata.topRepos.some((r: any) => r.isMaintainer && r.stars >= 100);
 
+    // FIX 1: Use actual recent activity data
+    const last90DaysCommits = globalMetadata.userStats?.last90DaysCommits || 0;
+    const accountCreatedAt = globalMetadata.userStats?.createdAt;
+    const accountAgeYears = accountCreatedAt
+        ? (Date.now() - new Date(accountCreatedAt).getTime()) / (365 * 24 * 60 * 60 * 1000)
+        : 0;
+
     // impactScore formula: stars=30%, complexity=33x, quality=50x
     let impactScore = (
         (totalStars * 0.3) +                   // 1. Visibility (30%)
@@ -87,7 +94,7 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     );
     impactScore = Math.min(impactScore, 1000);
 
-    console.log(`[Impact Score] Total: ${impactScore.toFixed(1)}, Complexity: ${skillComplexityScore.totalComplexity}, Quality: ${qualityScore}`);
+    console.log(`[Impact Score] Total: ${impactScore.toFixed(1)}, Complexity: ${skillComplexityScore.totalComplexity}, Quality: ${qualityScore}, Last90Days: ${last90DaysCommits}`);
 
     let tierLock: string | null = null;
     let typeLock: string | null = null;
@@ -111,7 +118,7 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             lockReason = `Infrastructure/Tooling architect with high impact`;
         }
     }
-    // TIER 3: RARE ⭐ (Top 15%)
+    // TIER 3: RARE ⭐ (Top 15%) - FIX 3: Better SYSTEMS THINKER vs SPECIALIST
     else if (impactScore >= 300 || skillComplexityScore.totalComplexity >= 12) {
         tierLock = 'RARE';
         const allText = [
@@ -119,15 +126,28 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             codeSamples
         ].join(' ').toLowerCase();
 
-        const systemsSignals = ['distributed', 'database', 'kernel', 'low-level', 'scaling', 'performance', 'concurrency'];
-        const isSystems = systemsSignals.some(s => allText.includes(s));
+        // Critical systems keywords require multiple matches
+        const criticalSystems = ['distributed', 'kubernetes', 'microservices', 'scaling', 'concurrency'];
+        const systemsCount = criticalSystems.filter(s => allText.includes(s)).length;
 
-        if (isSystems || skillComplexityScore.totalComplexity >= 15) {
+        // Advanced keywords for specialist domains
+        const specialistDomains = ['machine learning', 'ml', 'compiler', 'cryptography', 'blockchain'];
+        const specialistCount = specialistDomains.filter(s => allText.includes(s)).length;
+
+        // SYSTEMS THINKER: Multiple systems signals OR complexity 12+ with distributed focus
+        if (systemsCount >= 2 || (allText.includes('distributed') && skillComplexityScore.totalComplexity >= 12)) {
             typeLock = 'THE SYSTEMS THINKER';
-            lockReason = `Systems focus with complexity score ${skillComplexityScore.totalComplexity}`;
-        } else {
+            lockReason = `Systems architecture focus: ${systemsCount} distributed signals`;
+        }
+        // SPECIALIST: Niche domain OR very high complexity
+        else if (specialistCount >= 1 || skillComplexityScore.totalComplexity >= 15) {
             typeLock = 'THE SPECIALIST';
-            lockReason = `Deep domain expertise in advanced technologies`;
+            lockReason = `Deep domain expertise (complexity ${skillComplexityScore.totalComplexity})`;
+        }
+        // Fallback for RARE tier
+        else {
+            typeLock = 'THE SYSTEMS THINKER';
+            lockReason = `Advanced engineering (impact ${impactScore.toFixed(0)})`;
         }
     }
     // TIER 4: UNCOMMON ◆ (Top 30%)
@@ -150,49 +170,61 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
             lockReason = `Consistently shipping functional products`;
         }
     }
-    // TIER 5: COMMON ● (Bottom 50%)
+    // TIER 5: COMMON ● (Bottom 50%) - FIX 2: Accurate HOBBYIST detection
     else {
         tierLock = 'COMMON';
         const languages = globalMetadata.userStats?.languages || [];
-        const last90Commits = totalCommits / 4; // Weighted approximation
 
         if (skillComplexityScore.totalComplexity >= 5 && skillComplexityScore.totalComplexity <= 10) {
             typeLock = 'THE TINKERER';
-            lockReason = `Practical dev solving real problems`;
-        } else if (skillComplexityScore.totalComplexity >= 3 && skillComplexityScore.totalComplexity < 5) {
-            if (last90Commits >= 30 || globalMetadata.topRepos.length >= 3) {
+            lockReason = `Practical dev solving real problems (complexity ${skillComplexityScore.totalComplexity})`;
+        }
+        else if (skillComplexityScore.totalComplexity >= 3 && skillComplexityScore.totalComplexity < 5) {
+            // THE GRINDER: High velocity
+            if (last90DaysCommits >= 40 || globalMetadata.topRepos.length >= 3) {
                 typeLock = 'THE GRINDER';
-                lockReason = `High velocity: putting in the work to scale up`;
-            } else {
-                typeLock = 'THE HOBBYIST';
-                lockReason = `Long-term passion projects with low velocity`;
+                lockReason = `High velocity: ${last90DaysCommits} commits in 90 days`;
             }
-        } else if (languages.length >= 6 && skillComplexityScore.totalComplexity >= 3) {
+            // THE HOBBYIST: Low velocity but sustained
+            else if (accountAgeYears >= 1 && last90DaysCommits < 30) {
+                typeLock = 'THE HOBBYIST';
+                lockReason = `Sustained ${accountAgeYears.toFixed(1)}-year passion coder with low velocity`;
+            }
+            else {
+                typeLock = 'THE GRINDER';
+                lockReason = `Emerging skills, moderate activity`;
+            }
+        }
+        else if (languages.length >= 6 && skillComplexityScore.totalComplexity >= 3) {
             typeLock = 'THE EXPLORER';
-            lockReason = `Polyglot explorer of many stacks`;
-        } else if (skillComplexityScore.totalComplexity < 3) {
+            lockReason = `Polyglot explorer of ${languages.length} stacks`;
+        }
+        else if (skillComplexityScore.totalComplexity < 3 && last90DaysCommits < 40) {
             typeLock = 'THE APPRENTICE';
             lockReason = `Building fundamental technical foundations`;
-        } else {
+        }
+        else {
             typeLock = 'THE TINKERER';
             lockReason = `Generalist intermediate developer`;
         }
     }
 
+    // FIX 4: Precise DeepSeek prompt with exact thresholds
     const prompt = `
 ${typeLock ? `🔒 CLASSIFICATION LOCKED: "${typeLock}" 🔒
 Reason: ${lockReason}
 You MUST return this exact label and rarity_badge. No exceptions.
 
-` : ''}Analyze this developer using the 15-ARCHETYPE system. Skill/Impact Priority.
+` : ''}Analyze this developer using the 15-ARCHETYPE system with EXACT classification rules.
 
 ### AGGREGATE STATS:
 - IMPACT_SCORE: ${impactScore.toFixed(0)} / 1000
 - QUALITY_SCORE: ${qualityScore}/10
-- SKILL_COMPLEXITY: ${skillComplexityScore.totalComplexity} (Advanced: ${skillComplexityScore.advanced}, Intermediate: ${skillComplexityScore.intermediate}, Beginner: ${skillComplexityScore.beginner})
+- SKILL_COMPLEXITY: ${skillComplexityScore.totalComplexity} (Adv: ${skillComplexityScore.advanced}, Int: ${skillComplexityScore.intermediate}, Beg: ${skillComplexityScore.beginner})
 - TOTAL_STARS: ${totalStars}
+- LAST_90_DAYS_COMMITS: ${last90DaysCommits}
+- ACCOUNT_AGE: ${accountAgeYears.toFixed(1)} years
 - EXTERNAL_CONTRIBS: ${externalContribs}
-- TOTAL_COMMITS: ${totalCommits}
 
 ### TOP REPOSITORIES:
 ${globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => {
@@ -204,32 +236,32 @@ ${i + 1}. "${r.name}"
 `;
     }).join('')}
 
-### MANDATORY SYSTEM:
+### EXACT CLASSIFICATION RULES:
 
 **🌟🌟🌟 HYPER RARE (Top 1%)**
-- THE 10X ENGINEER: Changed how millions code. Impact 700+.
+- THE 10X ENGINEER: Impact ≥700 OR Stars ≥10K OR (Complexity ≥25 + Quality ≥8)
 
 **🌟🌟 ULTRA RARE (Top 5%)**
-- THE ARCHITECT: Built infra used by thousands. Impact 500-699.
-- THE PROFESSOR: Defined how devs learn. Impact 500-699 (educational).
+- THE ARCHITECT: Impact 500-699, production tools
+- THE PROFESSOR: Impact 500-699, educational content
 
 **⭐ RARE (Top 15%)**
-- THE SPECIALIST: Deep expertise in advanced domains. Complexity 15+.
-- THE SYSTEMS THINKER: Distributed systems master. Complexity 12+.
+- THE SPECIALIST: Complexity ≥15 OR niche domain expertise (ML, crypto, compilers)
+- THE SYSTEMS THINKER: Complexity ≥12 + 2+ distributed systems keywords
 
 **◆ UNCOMMON (Top 30%)**
-- THE MAINTAINER: Keeps critical open source alive.
-- THE BUILDER: Ships products people use.
-- THE CONTRIBUTOR: Gives back to the ecosystem.
-- THE CRAFTSPERSON: Code quality is non-negotiable. Quality >= 7.
-- THE HIDDEN GEM: Elite skills, low visibility. Quality/Complexity >= 8.
+- THE MAINTAINER: Maintainer status + 100+ stars
+- THE BUILDER: 100-500 stars, shipping products
+- THE CONTRIBUTOR: 100+ external contributions
+- THE CRAFTSPERSON: Quality ≥7 + Complexity ≥7
+- THE HIDDEN GEM: Quality ≥8 + Complexity ≥8 + Stars <100
 
 **● COMMON (50%)**
-- THE TINKERER: Solves problems. Complexity 5-10.
-- THE GRINDER: High activity, complexity 3-5.
-- THE HOBBYIST: Passion projects, low velocity.
-- THE EXPLORER: mastering many stacks. 6+ languages.
-- THE APPRENTICE: Building foundations. Complexity < 3.
+- THE TINKERER: Complexity 5-10, Impact 50-149
+- THE GRINDER: Complexity 3-5, 40+ commits/90d OR 3+ active repos, Impact 40-149
+- THE HOBBYIST: Complexity 4-7, <30 commits/90d, account age ≥1 year, Impact 50-149
+- THE EXPLORER: 6+ languages + Complexity 3-7, Impact 30-149
+- THE APPRENTICE: Complexity <3, Impact <50
 
 ### Code Samples:
 ${codeSamples}
@@ -241,12 +273,12 @@ Return ONLY JSON:
   "rarity_badge": "🌟🌟🌟" | "🌟🌟" | "⭐" | "◆" | "●",
   "rarity_percentile": "Top X%",
   "impact_score": ${impactScore.toFixed(0)},
-  "trajectory_summary": "...",
-  "recruiter_summary": "...",
+  "trajectory_summary": "1-2 sentence evolution",
+  "recruiter_summary": "3 paragraphs: strengths, quality, collaboration",
   "highlights": [{"title": "...", "detail": "...", "type": "positive"|"negative"}],
-  "technical_signal": "...",
-  "technical_signal_detailed": "...",
-  "verified_skills": [{"name": "...", "level": "...", "evidence": "..."}]
+  "technical_signal": "One sentence proof",
+  "technical_signal_detailed": "2-3 paragraphs deep dive",
+  "verified_skills": [{"name": "...", "level": "Beginner|Intermediate|Advanced|Expert", "evidence": "..."}]
 }
 `;
 
@@ -262,12 +294,17 @@ Return ONLY JSON:
                 messages: [
                     {
                         role: 'system',
-                        content: `Strict 15-Archetype Engineer Classifier. 
+                        content: `Strict 15-Archetype Engineer Classifier with exact thresholds.
 Rules:
-1. Impact Score 700+ = THE 10X ENGINEER
-2. Complexity 15+ = THE SPECIALIST
-3. Quality 8+ = THE HIDDEN GEM (if low stars)
-4. Use logic in prompt to determine the exact persona.
+1. Impact Score 700+ = THE 10X ENGINEER (HYPER RARE)
+2. Impact 500-699 = THE ARCHITECT or THE PROFESSOR (ULTRA RARE)
+3. Complexity 15+ OR 2+ systems keywords = THE SYSTEMS THINKER or THE SPECIALIST (RARE)
+4. Quality 8+ + Complexity 8+ + Stars<100 = THE HIDDEN GEM (UNCOMMON)
+5. Complexity 5-10 = THE TINKERER (COMMON)
+6. Complexity 3-5 + 40+ commits/90d = THE GRINDER (COMMON)
+7. Complexity 4-7 + <30 commits/90d + account 1yr+ = THE HOBBYIST (COMMON)
+8. Complexity <3 = THE APPRENTICE (COMMON)
+
 Forensic debt analysis: Always include at least one negative highlight.`
                     },
                     { role: 'user', content: prompt }

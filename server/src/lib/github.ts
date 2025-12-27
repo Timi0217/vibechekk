@@ -3,12 +3,21 @@ import { Octokit } from 'octokit';
 export const fetchUserStats = async (token: string, username: string) => {
   const octokit = new Octokit({ auth: token });
 
+  // Calculate date for 90 days ago
+  const last90Days = new Date();
+  last90Days.setDate(last90Days.getDate() - 90);
+
   const query = `
-    query($username: String!) {
+    query($username: String!, $from: DateTime!) {
       user(login: $username) {
+        createdAt
         contributionsCollection {
           totalCommitContributions
           totalRepositoriesWithContributedCommits
+          restrictedContributionsCount
+        }
+        recentActivity: contributionsCollection(from: $from) {
+          totalCommitContributions
           restrictedContributionsCount
         }
         repositories(first: 100, privacy: PUBLIC, orderBy: {field: STARGAZERS, direction: DESC}) {
@@ -24,7 +33,10 @@ export const fetchUserStats = async (token: string, username: string) => {
   `;
 
   try {
-    const response: any = await octokit.graphql(query, { username });
+    const response: any = await octokit.graphql(query, {
+      username,
+      from: last90Days.toISOString()
+    });
     if (!response.user) return null;
 
     const repos = response.user.repositories.nodes;
@@ -34,6 +46,8 @@ export const fetchUserStats = async (token: string, username: string) => {
       totalRepos: response.user.repositories.totalCount,
       totalCommits: response.user.contributionsCollection.totalCommitContributions,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
+      last90DaysCommits: response.user.recentActivity.totalCommitContributions,
+      createdAt: response.user.createdAt,
       languages: [...new Set(repos.map((r: any) => r.primaryLanguage?.name).filter(Boolean))],
       forkRatio: repos.length > 0 ? repos.filter((r: any) => r.isFork).length / repos.length : 0
     };
