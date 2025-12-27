@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Bug, Award, Navigation } from 'lucide-react'
+import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Award, Navigation, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -29,29 +29,29 @@ const VibeLogo = ({ size = 20, color = 'currentColor', className = '', ...props 
 const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: string, size?: number }) => {
   const ArchetypeMap: Record<string, any> = {
     // 🌟🌟🌟 HYPER RARE (Top 1%)
-    'the 10x engineer': Award,      // Trophy/Award for industry legends
+    'the 10x engineer': Rocket,       // Rocket for industry legends launching major projects
 
     // 🌟🌟 ULTRA RARE (Top 5%)
-    'the architect': Layers,        // Layers for system design
-    'the professor': BookOpen,      // Book for educators
+    'the architect': Layers,          // Layers for system design/architecture
+    'the professor': BookOpen,        // Book for educators/teachers
 
     // ⭐ RARE (Top 15%)
-    'the specialist': Beaker,       // Beaker for deep expertise
-    'the systems thinker': Box,     // Box for infrastructure/systems
+    'the specialist': Target,         // Target for focused deep expertise
+    'the systems thinker': Cpu,       // CPU for infrastructure/systems work
 
     // ◆ UNCOMMON (Top 30%)
-    'the maintainer': Heart,        // Heart for keeping OSS alive
-    'the builder': Hammer,          // Hammer for shipping products
-    'the contributor': MessageSquare, // Message for collaboration
-    'the craftsperson': Code,       // Code for quality focus
-    'the hidden gem': Star,         // Star for high skill/low visibility
+    'the maintainer': Heart,          // Heart for keeping OSS alive with love
+    'the builder': Hammer,            // Hammer for shipping/building products
+    'the contributor': GitPullRequest, // Git PR for collaboration/contributions
+    'the craftsperson': Code,         // Code for quality-focused coding
+    'the hidden gem': Gem,            // Gem for hidden talent/diamond in rough
 
     // ● COMMON (Top 50%)
-    'the tinkerer': Sliders,        // Sliders for practical tinkering
-    'the grinder': TrendingUp,      // TrendingUp for high activity
-    'the hobbyist': Heart,          // Heart for passion projects (different color)
-    'the explorer': Navigation,     // Compass for multi-lang exploration
-    'the apprentice': Zap,          // Zap for learning/beginners
+    'the tinkerer': Wrench,           // Wrench for practical tinkering/fixing
+    'the grinder': TrendingUp,        // TrendingUp for high activity/momentum
+    'the hobbyist': Coffee,           // Coffee for passion/side projects
+    'the explorer': Compass,          // Compass for exploring many directions
+    'the apprentice': Zap,            // Zap for energy/learning/beginners
   }
 
   const rarityColors: Record<string, string> = {

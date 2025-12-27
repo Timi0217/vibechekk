@@ -313,20 +313,48 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     console.log(`[Classification] ${archetype} (${tier}) - ${classificationReason}`);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // STEP 6: Build the DeepSeek Prompt
+    // STEP 6: Build the DeepSeek Prompt with Timeline Context
     // ═══════════════════════════════════════════════════════════════════════════
 
-    const topReposSummary = globalMetadata.topRepos.slice(0, 5).map((r: any, i: number) => {
+    // Categorize repos by age to understand career evolution
+    const currentYear = new Date().getFullYear();
+    const reposByAge = {
+        recent: globalMetadata.topRepos.filter((r: any) => {
+            const year = new Date(r.updatedAt).getFullYear();
+            return currentYear - year <= 2;
+        }),
+        mid: globalMetadata.topRepos.filter((r: any) => {
+            const year = new Date(r.updatedAt).getFullYear();
+            return currentYear - year > 2 && currentYear - year <= 5;
+        }),
+        old: globalMetadata.topRepos.filter((r: any) => {
+            const year = new Date(r.updatedAt).getFullYear();
+            return currentYear - year > 5;
+        })
+    };
+
+    const recentLanguages = [...new Set(reposByAge.recent.map((r: any) => r.language).filter(Boolean))];
+    const oldLanguages = [...new Set(reposByAge.old.map((r: any) => r.language).filter(Boolean))];
+
+    const formatRepoWithAge = (r: any, i: number) => {
         const qual = globalMetadata.qualitySignals?.[i];
+        const year = new Date(r.updatedAt).getFullYear();
+        const age = currentYear - year;
+        const ageLabel = age === 0 ? 'this year' : age === 1 ? 'last year' : `${age} years ago`;
         const markers = [
             qual?.hasTests ? '✓Tests' : '',
             qual?.hasCI ? '✓CI' : '',
-            qual?.hasTypeScript ? 'TS' : '',
         ].filter(Boolean).join(' ');
-        return `• ${r.name} (${r.stars}⭐, ${r.language || 'Unknown'}) ${markers}`;
-    }).join('\n');
+        return `• ${r.name} (${r.language || 'Unknown'}, updated ${ageLabel}) ${markers}`;
+    };
 
     const prompt = `You are writing a developer assessment for a technical recruiter and engineering manager.
+
+## CRITICAL: PRIORITIZE RECENT WORK
+⚠️ **This developer has work spanning ${accountAgeYears.toFixed(0)} years. Focus on their CURRENT skills, not their history.**
+- Recent work (last 2 years): ${reposByAge.recent.length} repos - ${recentLanguages.join(', ') || 'None'}
+- Old work (5+ years ago): ${reposByAge.old.length} repos - ${oldLanguages.join(', ') || 'None'}
+${reposByAge.old.length > reposByAge.recent.length ? '⚠️ More old repos than recent - likely academic/historical work. Focus on recent activity!' : ''}
 
 ## CANDIDATE CLASSIFICATION
 **Archetype:** ${archetype}
@@ -336,18 +364,22 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
 ## GITHUB PROFILE SUMMARY
 - **Account Age:** ${accountAgeYears.toFixed(1)} years
 - **Total Stars:** ${totalStars} across ${repoCount} repositories
-- **Languages:** ${languages.slice(0, 5).join(', ') || 'Not detected'}
+- **Current Focus (last 2 years):** ${recentLanguages.slice(0, 4).join(', ') || 'Low recent activity'}
+- **Historical Languages:** ${oldLanguages.slice(0, 4).join(', ') || 'None'}
 - **Recent Activity:** ${last90DaysCommits} commits in last 90 days (${experienceSignals.recentlyActive})
 - **Code Quality:** ${qualityTier} (Tests: ${qualitySignals.hasTests ? 'Yes' : 'No'}, CI: ${qualitySignals.hasCI ? 'Yes' : 'No'})
-- **Primary Domain:** ${primaryDomain[0]} (${isFullStack ? 'full-stack' : 'specialized'})
 
-## TOP REPOSITORIES
-${topReposSummary}
+## REPOSITORIES BY TIMELINE
+
+**Recent (Last 2 Years) - PRIORITIZE THESE:**
+${reposByAge.recent.length > 0 ? reposByAge.recent.slice(0, 5).map(formatRepoWithAge).join('\n') : 'No recent public repositories'}
+
+**Historical (5+ Years Ago) - Context only, may be academic:**
+${reposByAge.old.length > 0 ? reposByAge.old.slice(0, 3).map(formatRepoWithAge).join('\n') : 'None'}
 
 ## AI TOOL USAGE
 - **Level:** ${aiAssessment.level}
 - **Summary:** ${aiAssessment.summary}
-- **Hiring Note:** ${aiAssessment.recommendation}
 
 ## CODE SAMPLES
 ${codeSamples.length > 8000 ? codeSamples.substring(0, 8000) + '\n[truncated]' : codeSamples}
@@ -359,43 +391,39 @@ ${codeSamples.length > 8000 ? codeSamples.substring(0, 8000) + '\n[truncated]' :
 Write a professional assessment following this EXACT structure:
 
 ### 1. trajectory_summary (2-3 sentences)
-Describe their developer journey. Reference their primary technologies, how their work has evolved, and where they seem to be heading. Write for a recruiter who needs to quickly understand this candidate.
+Describe their developer EVOLUTION - how they've changed over time. If they have old C/systems work but recent TypeScript/Python, lead with the recent focus. Example: "Started with systems programming in C during university, now focuses on modern web development with TypeScript and React."
 
 ### 2. recruiter_summary (3 paragraphs)
-**Paragraph 1 - Technical Strengths:** What can this developer build? What technologies do they know well? What's their primary value to a team?
+**Paragraph 1 - Current Technical Strengths:** What can they build TODAY based on RECENT work? Lead with their current focus, not historical skills. Mention historical background briefly if relevant context.
 
-**Paragraph 2 - Development Practices:** How do they approach code quality? ${aiAssessment.level === 'concerning' ? 'NOTE: Address the AI usage concern - recommend hands-on coding assessment.' : aiAssessment.level === 'pragmatic' ? 'NOTE: They use AI tools effectively with proper quality gates.' : ''} What does their testing/documentation look like?
+**Paragraph 2 - Development Practices:** How do they approach code quality? ${aiAssessment.level === 'concerning' ? 'NOTE: Address the AI usage concern - recommend hands-on coding assessment.' : ''} What does their testing/documentation look like?
 
-**Paragraph 3 - Team Fit & Collaboration:** What kind of team would they thrive on? Do they collaborate well (based on external contributions)? What's their likely seniority level?
+**Paragraph 3 - Team Fit & Collaboration:** What kind of team would they thrive on based on their CURRENT trajectory? What's their likely seniority level?
 
 ### 3. highlights (3-7 items, dynamic)
 Provide highlights with concrete evidence from their repos:
-- **2-4 positive highlights** (type: "positive") - specific achievements, technologies, patterns
+- **2-4 positive highlights** (type: "positive") - prioritize RECENT achievements
 - **1-3 concerns** (type: "negative") - gaps, missing practices, areas for growth
 
-Use your judgment: more complex profiles deserve more highlights. Junior devs may have fewer.
+Do NOT treat old academic projects as current expertise. If someone has C from 7 years ago but TypeScript now, the highlight should be about TypeScript.
 
 Each highlight must have a "title" (short label) and "detail" (1-2 sentence explanation with specific evidence).
 
-DO NOT use raw numbers or internal metrics. Write naturally:
-- ✓ "Comprehensive test coverage across main projects" 
-- ✗ "Quality score of 8/10"
-- ✓ "Limited CI/CD automation"
-- ✗ "0 CI files detected"
-
 ### 4. technical_signal (1 sentence)
-One specific, concrete example that proves their technical ability. Reference an actual repo, pattern, or technology choice.
+One specific, concrete example that proves their CURRENT technical ability. Reference a RECENT repo if possible.
 
 ### 5. technical_signal_detailed (2-3 paragraphs)  
-Deep dive into their technical approach based on the code samples. What architectural patterns do they use? How do they handle errors? What does their code structure tell us about their experience level?
+Deep dive into their technical approach based on the code samples. Focus on recent work. If analyzing old code, note the time period.
 
 ### 6. verified_skills (5-8 skills)
 List their verified skills with:
-- name: The skill (e.g., "React", "PostgreSQL", "CI/CD")
+- name: The skill (e.g., "React", "PostgreSQL")
 - level: "Beginner" | "Intermediate" | "Advanced" | "Expert"
 - evidence: Brief proof from their repos
+- Mark skills from 5+ year old projects as "Historical" in evidence
 
 ---
+
 
 Return ONLY valid JSON matching this structure:
 {
