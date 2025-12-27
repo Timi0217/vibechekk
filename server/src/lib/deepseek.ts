@@ -281,29 +281,46 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         } else if (qualityTier === 'professional' || qualityTier === 'production-ready') {
             archetype = 'THE CRAFTSPERSON';
             classificationReason = 'Focuses on code quality and best practices';
+        } else if (accountAgeYears >= 7 && experienceSignals.recentlyActive !== 'dormant') {
+            // VETERAN CHECK: 7+ years with any recent activity = HIDDEN GEM (likely private/enterprise work)
+            archetype = 'THE HIDDEN GEM';
+            classificationReason = `${accountAgeYears.toFixed(0)}-year veteran with sustained activity - likely enterprise/private work`;
         } else {
             archetype = 'THE BUILDER';
             classificationReason = 'Ships working products consistently';
         }
     }
-    // COMMON: Early-mid career, still developing
+    // COMMON: Early-mid career OR truly quiet accounts
     else {
         tier = 'COMMON';
         tierBadge = '●';
         percentile = 'Top 50%';
 
-        if (isFullStack || (domains.web >= 2 && domains.backend >= 1)) {
+        // VETERAN ESCAPE HATCH: Long-tenured devs shouldn't be in COMMON tier
+        if (accountAgeYears >= 7 && (experienceSignals.recentlyActive !== 'dormant' || totalCommits > 200)) {
+            // Bump to UNCOMMON - they're clearly experienced, just low public visibility
+            tier = 'UNCOMMON';
+            tierBadge = '◆';
+            percentile = 'Top 30%';
+            archetype = 'THE HIDDEN GEM';
+            classificationReason = `${accountAgeYears.toFixed(0)}-year veteran - experienced dev with low public visibility`;
+        } else if (isFullStack || (domains.web >= 2 && domains.backend >= 1)) {
             archetype = 'THE TINKERER';
             classificationReason = 'Practical problem solver building real applications';
-        } else if (experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active') {
+        } else if ((experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active') && accountAgeYears < 4) {
+            // GRINDER is for early-career hustle, NOT 12-year veterans
             archetype = 'THE GRINDER';
-            classificationReason = 'High activity level, actively developing skills';
+            classificationReason = 'Early career with high activity - building experience fast';
         } else if (languages.length >= 5) {
             archetype = 'THE EXPLORER';
             classificationReason = 'Exploring multiple technologies, broad exposure';
         } else if (accountAgeYears >= 2 && experienceSignals.recentlyActive === 'occasional') {
             archetype = 'THE HOBBYIST';
             classificationReason = 'Codes for personal interest and passion projects';
+        } else if (accountAgeYears >= 4 && experienceSignals.recentlyActive !== 'dormant') {
+            // Mid-career with steady activity = TINKERER, not APPRENTICE
+            archetype = 'THE TINKERER';
+            classificationReason = 'Experienced developer with steady contributions';
         } else {
             archetype = 'THE APPRENTICE';
             classificationReason = 'Early career, building foundational skills';
