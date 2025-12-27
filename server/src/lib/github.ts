@@ -56,6 +56,17 @@ export const fetchCodeQualitySignals = async (token: string, owner: string, repo
 
     const paths = tree.tree.map((item: any) => item.path);
 
+    // **NEW**: Extract README for context
+    let readmePreview = '';
+    try {
+      const { data: readme } = await octokit.rest.repos.getReadme({ owner, repo });
+      const content = Buffer.from(readme.content, 'base64').toString('utf-8');
+      // Get first 500 chars for project description context
+      readmePreview = content.substring(0, 500);
+    } catch {
+      readmePreview = 'No README found';
+    }
+
     return {
       hasTests: paths.some((p: string) => p.toLowerCase().includes('test') || p.toLowerCase().includes('spec')),
       hasDocs: paths.some((p: string) => p.includes('docs/') || p.toLowerCase().includes('readme')),
@@ -63,7 +74,8 @@ export const fetchCodeQualitySignals = async (token: string, owner: string, repo
       hasTypeScript: paths.some((p: string) => p.endsWith('.ts') || p.endsWith('.tsx')),
       hasLinting: paths.some((p: string) => p.includes('eslint') || p.includes('.prettierrc') || p.includes('tsconfig.json')),
       fileCount: tree.tree.length,
-      complexity: tree.tree.length > 100 ? 'high' : tree.tree.length > 30 ? 'medium' : 'low'
+      complexity: tree.tree.length > 100 ? 'high' : tree.tree.length > 30 ? 'medium' : 'low',
+      readmePreview
     };
   } catch {
     return null;
@@ -146,20 +158,20 @@ export const calculateStarDistribution = (repos: any[]) => {
   };
 };
 
-// **OPTIMIZED**: Batch fetch diffs using GraphQL to reduce API calls
+// **RICH DATA EXTRACTION**: Get comprehensive code samples from top repos
 export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]) => {
   const octokit = new Octokit({ auth: token });
   const allDiffs: string[] = [];
 
-  // Only fetch from top 2 repos (reduced from 3) with highest impact commits
-  for (const repo of repos.slice(0, 2)) {
+  // Top 5 repos for maximum signal (was 2)
+  for (const repo of repos.slice(0, 5)) {
     const topCommits = [...(repo.commits || [])]
       .sort((a: any, b: any) => {
         const aImpact = (a.additions || 0) + (a.deletions || 0);
         const bImpact = (b.additions || 0) + (b.deletions || 0);
         return bImpact - aImpact;
       })
-      .slice(0, 1); // Reduced from 2 commits to 1 (cuts API calls in half)
+      .slice(0, 3); // Top 3 commits per repo (was 1)
 
     try {
       for (const commit of topCommits) {
@@ -170,23 +182,56 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
         });
 
         const files = data.files || [];
-        const codeSnippets = files
-          .filter((f: any) => f.patch && !f.filename.includes('package-lock') && !f.filename.includes('.json'))
-          .slice(0, 2) // Reduced from 3 files
+
+        // **PRIORITIZE CODE FILES**: Filter out config noise
+        const codeFiles = files
+          .filter((f: any) => {
+            if (!f.patch) return false;
+
+            // Skip lock files, generated code, and pure config
+            const skipPatterns = [
+              'package-lock.json', 'yarn.lock', 'Cargo.lock', 'poetry.lock',
+              '.min.js', '.bundle.js', 'dist/', 'build/',
+              'node_modules/', '.git/', '__pycache__/'
+            ];
+
+            if (skipPatterns.some(p => f.filename.includes(p))) return false;
+
+            // Prioritize actual code files
+            const codeExtensions = [
+              '.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go',
+              '.java', '.cpp', '.c', '.rb', '.php', '.swift', '.kt'
+            ];
+
+            return codeExtensions.some(ext => f.filename.endsWith(ext));
+          })
+          .slice(0, 5); // Up to 5 files per commit (was 2)
+
+        const codeSnippets = codeFiles
           .map((f: any) => {
             const patch = f.patch || '';
             const meaningfulLines = patch
               .split('\n')
-              .filter((line: string) => line.startsWith('+') || line.startsWith('-'))
-              .filter((line: string) => line.trim().length > 5) // Skip trivial changes
-              .slice(0, 15) // Reduced from 20 lines
+              .filter((line: string) => {
+                // Get actual code changes, not just any +/-
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('+') && !trimmed.startsWith('-')) return false;
+                if (trimmed.length < 10) return false; // Skip trivial lines
+
+                // Skip pure whitespace/bracket changes
+                const content = trimmed.substring(1).trim();
+                return content.length > 5 && !/^[{}()\[\];,]*$/.test(content);
+              })
+              .slice(0, 30) // More lines per file (was 15)
               .join('\n');
 
             return `File: ${f.filename}\n${meaningfulLines}`;
           })
           .join('\n\n');
 
-        allDiffs.push(`[${repo.name}] ${commit.message}\n${codeSnippets}`);
+        if (codeSnippets.trim().length > 50) {
+          allDiffs.push(`[${repo.name}] ${commit.message}\n${codeSnippets}`);
+        }
       }
     } catch (error) {
       console.warn(`[GitHub] Failed to fetch diffs for ${repo.name}`);
@@ -198,8 +243,9 @@ export const fetchSmartDiffs = async (token: string, owner: string, repos: any[]
     return 'No meaningful code samples available. Analysis based on repository metadata only.';
   }
 
-  // **TOKEN OPTIMIZATION**: Truncate to ~2K chars max
-  return result.length > 2000 ? result.substring(0, 2000) + '\n\n[...truncated for analysis]' : result;
+  // DeepSeek can handle 64K tokens, so we're generous here
+  // Truncate at ~10K chars (~2500 tokens) to leave room for metadata
+  return result.length > 10000 ? result.substring(0, 10000) + '\n\n[...truncated for token efficiency]' : result;
 };
 
 // **NEW**: Generate human-readable trajectory narrative
@@ -364,9 +410,9 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     forkRatio: 0
   };
 
-  // 2. Extra Signals (only if repos exist)
+  // 2. Extra Signals - analyze top 5 repos (was 3)
   const qualitySignals = topRepos.length > 0
-    ? await Promise.all(topRepos.slice(0, 3).map(r => fetchCodeQualitySignals(token, username, r.name)))
+    ? await Promise.all(topRepos.slice(0, 5).map(r => fetchCodeQualitySignals(token, username, r.name)))
     : [];
 
   // 3. Maintainer Status for high-star repos
