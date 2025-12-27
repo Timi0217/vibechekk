@@ -205,24 +205,29 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     // - Low visibility + low skill = early career / hobbyist
     // ─────────────────────────────────────────────────────────────────────────────
 
-    // HYPER RARE: Genuine industry impact (requires BOTH visibility AND skill)
-    if (highestStars >= 10000 && !isViralNonCode) {
+    // Quality gates for top tiers - you can't be elite without quality practices
+    const hasQualityPractices = qualitySignals.hasTests || qualitySignals.hasCI;
+    const isRecentlyActive = experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active';
+
+    // HYPER RARE: True industry legends - should be EXTREMELY rare
+    // Requires: MASSIVE stars (25K+) OR exceptional combination of quality + activity + depth
+    if (highestStars >= 25000 && !isViralNonCode && hasQualityPractices) {
         tier = 'HYPER RARE';
         tierBadge = '🌟🌟🌟';
         percentile = 'Top 1%';
         archetype = 'THE 10X ENGINEER';
-        classificationReason = 'Industry-level impact with widely-adopted tools';
+        classificationReason = 'Industry-defining impact with widely-adopted tools';
     }
-    // Can also reach HYPER RARE through exceptional skill without viral stars
-    else if (qualityTier === 'production-ready' && hasSpecialization && domains.systems >= 4 && experienceSignals.projectScale === 'large') {
+    // Alternative path: 10K+ stars with production-ready quality AND active AND specialization
+    else if (highestStars >= 10000 && !isViralNonCode && qualityTier === 'production-ready' && isRecentlyActive && hasSpecialization) {
         tier = 'HYPER RARE';
         tierBadge = '🌟🌟🌟';
         percentile = 'Top 1%';
         archetype = 'THE 10X ENGINEER';
-        classificationReason = 'Elite technical depth in systems engineering';
+        classificationReason = 'High-impact engineer with exceptional quality practices';
     }
     // ULTRA RARE: Strong visibility with matching skill
-    else if ((highestStars >= 5000 && !isViralNonCode) || (highestStars >= 2000 && isMaintainer && qualityTier === 'production-ready')) {
+    else if ((highestStars >= 5000 && !isViralNonCode && hasQualityPractices) || (highestStars >= 3000 && isMaintainer && qualityTier === 'production-ready')) {
         tier = 'ULTRA RARE';
         tierBadge = '🌟🌟';
         percentile = 'Top 5%';
