@@ -178,16 +178,82 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     };
 
     // Check if high stars are from non-code work (curated lists, tutorials, etc.)
-    // BUT: massive stars (100K+) = genuine impact regardless of type
-    // AND: 25K+ educational stars = THE PROFESSOR, not blocked
     const isViralNonCode = highestStars >= 500 && highestStars < 25000 &&
         (topRepo?.educationalMeta?.isEducational || topRepo?.educationalMeta?.isLikelyGuide) &&
         qualitySignals.avgFileCount < 20;
+    const isEducationalContent = topRepo?.educationalMeta?.isEducational || topRepo?.educationalMeta?.isLikelyGuide;
 
     console.log(`[Visibility vs Skill] Stars: ${visibilityScore.level}, Quality: ${skillScore.codeQuality}, Domain: ${skillScore.domainDepth}`);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // STEP 6: Archetype Classification (Balancing visibility and skill)
+    // STEP 6: COMPOSITE SCORING SYSTEM
+    // Instead of checking individual thresholds, calculate a holistic score
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // VISIBILITY SCORE (0-25 points) - reach and impact
+    let visibilityPoints = 0;
+    if (highestStars >= 100000) visibilityPoints = 25;
+    else if (highestStars >= 50000) visibilityPoints = 22;
+    else if (highestStars >= 25000) visibilityPoints = 20;
+    else if (highestStars >= 10000) visibilityPoints = 17;
+    else if (highestStars >= 5000) visibilityPoints = 14;
+    else if (highestStars >= 1000) visibilityPoints = 10;
+    else if (highestStars >= 500) visibilityPoints = 7;
+    else if (highestStars >= 100) visibilityPoints = 4;
+    else if (highestStars >= 10) visibilityPoints = 2;
+    // Penalty for viral non-code content
+    if (isViralNonCode) visibilityPoints = Math.floor(visibilityPoints * 0.5);
+
+    // QUALITY SCORE (0-30 points) - code craftsmanship
+    let qualityPoints = 0;
+    if (qualitySignals.hasTests) qualityPoints += 8;
+    if (qualitySignals.hasCI) qualityPoints += 8;
+    if (qualitySignals.hasTypeScript) qualityPoints += 4;
+    if (qualitySignals.hasLinting) qualityPoints += 3;
+    if (qualitySignals.hasDocs) qualityPoints += 3;
+    if (qualitySignals.avgFileCount > 100) qualityPoints += 4;
+    else if (qualitySignals.avgFileCount > 30) qualityPoints += 2;
+
+    // ACTIVITY SCORE (0-25 points) - engagement and consistency
+    let activityPoints = 0;
+    if (last90DaysCommits >= 100) activityPoints += 10;
+    else if (last90DaysCommits >= 50) activityPoints += 8;
+    else if (last90DaysCommits >= 20) activityPoints += 5;
+    else if (last90DaysCommits >= 5) activityPoints += 2;
+
+    if (totalCommits >= 1000) activityPoints += 8;
+    else if (totalCommits >= 500) activityPoints += 6;
+    else if (totalCommits >= 100) activityPoints += 3;
+
+    if (externalContribs >= 50) activityPoints += 7;
+    else if (externalContribs >= 20) activityPoints += 4;
+    else if (externalContribs >= 5) activityPoints += 2;
+
+    // EXPERTISE SCORE (0-20 points) - tenure and depth
+    let expertisePoints = 0;
+    if (accountAgeYears >= 10) expertisePoints += 6;
+    else if (accountAgeYears >= 7) expertisePoints += 5;
+    else if (accountAgeYears >= 5) expertisePoints += 4;
+    else if (accountAgeYears >= 3) expertisePoints += 2;
+
+    // Domain depth
+    const topDomainScore = primaryDomain[1];
+    if (topDomainScore >= 6) expertisePoints += 8;
+    else if (topDomainScore >= 4) expertisePoints += 5;
+    else if (topDomainScore >= 2) expertisePoints += 2;
+
+    // Multi-domain breadth
+    const domainExpertiseCount = Object.values(domains).filter(count => count >= 2).length;
+    if (domainExpertiseCount >= 4) expertisePoints += 6;
+    else if (domainExpertiseCount >= 2) expertisePoints += 3;
+
+    // TOTAL COMPOSITE SCORE (0-100)
+    const compositeScore = visibilityPoints + qualityPoints + activityPoints + expertisePoints;
+
+    console.log(`[Composite Score] Visibility: ${visibilityPoints}, Quality: ${qualityPoints}, Activity: ${activityPoints}, Expertise: ${expertisePoints} = ${compositeScore}/100`);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TIER DETERMINATION - Based on composite score
     // ═══════════════════════════════════════════════════════════════════════════
 
     let archetype: string;
@@ -196,184 +262,111 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     let percentile: string;
     let classificationReason: string;
 
-    // Check for maintainer status on popular repos
+    // Check for maintainer status
     const isMaintainer = globalMetadata.topRepos?.some((r: any) => r.isMaintainer && r.stars >= 100);
-    const isEducationalContent = topRepo?.educationalMeta?.isEducational || topRepo?.educationalMeta?.isLikelyGuide;
+    const isFullStackDev = domains.web >= 2 && domains.backend >= 2;
 
-    // ─────────────────────────────────────────────────────────────────────────────
-    // CLASSIFICATION PHILOSOPHY:
-    // - Stars = reach/visibility (marketing, luck, timing)
-    // - Quality + Domain + Complexity = skill (what we actually hire for)
-    // - High visibility + high skill = rare unicorn
-    // - High visibility + low skill = lucky/marketing-savvy (flag this)
-    // - Low visibility + high skill = HIDDEN GEM (we want to surface these!)
-    // - Low visibility + low skill = early career / hobbyist
-    // ─────────────────────────────────────────────────────────────────────────────
-
-    // Quality gates for top tiers - you can't be elite without quality practices
-    const hasQualityPractices = qualitySignals.hasTests || qualitySignals.hasCI;
-    const isRecentlyActive = experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active';
-
-    // Multi-domain expertise check (for skill-based path)
-    const domainExpertiseCount = Object.values(domains).filter(count => count >= 2).length;
-    const hasMultiDomainExpertise = domainExpertiseCount >= 3; // Expert in 3+ domains
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // HYPER RARE: True industry legends - should be EXTREMELY rare
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // PATH 0: MASSIVE educational impact (100K+ stars) = THE PROFESSOR (HYPER RARE)
-    if (highestStars >= 100000 && isEducationalContent) {
+    // HYPER RARE (90+ points) - Top 1%
+    if (compositeScore >= 90) {
         tier = 'HYPER RARE';
         tierBadge = '🌟🌟🌟';
         percentile = 'Top 1%';
-        archetype = 'THE PROFESSOR';
-        classificationReason = 'Industry-defining educational impact reaching millions';
-    }
-    // PATH 1: Massive code stars (100K+) = THE 10X ENGINEER
-    else if (highestStars >= 100000 && !isEducationalContent) {
-        tier = 'HYPER RARE';
-        tierBadge = '🌟🌟🌟';
-        percentile = 'Top 1%';
-        archetype = 'THE 10X ENGINEER';
-        classificationReason = 'Industry-defining tools used by millions';
-    }
-    // PATH 2: High stars (25K+) with quality code work
-    else if (highestStars >= 25000 && !isViralNonCode && hasQualityPractices) {
-        tier = 'HYPER RARE';
-        tierBadge = '🌟🌟🌟';
-        percentile = 'Top 1%';
-        if (isEducationalContent) {
+
+        if (isEducationalContent && visibilityPoints >= 20) {
             archetype = 'THE PROFESSOR';
-            classificationReason = 'Major educational influence reaching hundreds of thousands';
+            classificationReason = 'Industry-defining educational impact';
         } else {
             archetype = 'THE 10X ENGINEER';
-            classificationReason = 'Industry-defining impact with widely-adopted tools';
+            classificationReason = 'Exceptional across visibility, quality, and depth';
         }
     }
-    // PATH 3: 10K+ stars with production-ready quality + active + specialized
-    else if (highestStars >= 10000 && !isViralNonCode && qualityTier === 'production-ready' && isRecentlyActive && hasSpecialization) {
-        tier = 'HYPER RARE';
-        tierBadge = '🌟🌟🌟';
-        percentile = 'Top 1%';
-        archetype = 'THE 10X ENGINEER';
-        classificationReason = 'High-impact engineer with exceptional quality practices';
-    }
-    // PATH 3: PURE SKILL (no stars required) - extremely strict for enterprise/private devs
-    // Requires: production-ready + multi-domain expertise + large projects + very active + long tenure + deep specialization
-    else if (
-        qualityTier === 'production-ready' &&
-        hasMultiDomainExpertise &&
-        hasSpecialization &&
-        experienceSignals.projectScale === 'large' &&
-        isRecentlyActive &&
-        accountAgeYears >= 7 &&
-        experienceSignals.commitDepth === 'extensive'
-    ) {
-        tier = 'HYPER RARE';
-        tierBadge = '🌟🌟🌟';
-        percentile = 'Top 1%';
-        archetype = 'THE 10X ENGINEER';
-        classificationReason = 'Elite technical depth across multiple domains with production-grade practices';
-    }
-    // ULTRA RARE: Strong visibility with matching skill
-    else if ((highestStars >= 8000 && !isViralNonCode && hasQualityPractices) || (highestStars >= 5000 && isMaintainer && qualityTier === 'production-ready')) {
+    // ULTRA RARE (70-89 points) - Top 5%
+    else if (compositeScore >= 70) {
         tier = 'ULTRA RARE';
         tierBadge = '🌟🌟';
         percentile = 'Top 5%';
-        if (isEducationalContent) {
+
+        if (isEducationalContent && visibilityPoints >= 15) {
             archetype = 'THE PROFESSOR';
-            classificationReason = 'High-impact educational content with strong reach';
+            classificationReason = 'High-impact educational content creator';
+        } else if (qualityPoints >= 20 && expertisePoints >= 10) {
+            archetype = 'THE ARCHITECT';
+            classificationReason = 'Designs production-grade systems with deep expertise';
         } else {
             archetype = 'THE ARCHITECT';
-            classificationReason = 'Designs and maintains systems used by many';
+            classificationReason = 'Strong on multiple dimensions of engineering excellence';
         }
     }
-    // RARE: High visibility OR genuine deep specialization - NOT just basic quality
-    else if (
-        (highestStars >= 1000 && !isViralNonCode && hasQualityPractices) ||
-        (hasSpecialization && qualityTier === 'production-ready') ||
-        (domains.systems >= 4 || domains.lowLevel >= 3 || domains.ml >= 3)
-    ) {
+    // RARE (50-69 points) - Top 15%
+    else if (compositeScore >= 50) {
         tier = 'RARE';
         tierBadge = '⭐';
         percentile = 'Top 15%';
-        if (domains.systems >= 4 || domains.lowLevel >= 3) {
+
+        if (domains.systems >= 3 || domains.lowLevel >= 2) {
             archetype = 'THE SYSTEMS THINKER';
             classificationReason = 'Deep infrastructure and systems expertise';
-        } else if (domains.ml >= 3 || domains.security >= 3) {
+        } else if (topDomainScore >= 4) {
             archetype = 'THE SPECIALIST';
             classificationReason = `Deep expertise in ${primaryDomain[0]}`;
+        } else if (isMaintainer) {
+            archetype = 'THE MAINTAINER';
+            classificationReason = 'Actively maintains production repositories';
         } else {
             archetype = 'THE SPECIALIST';
-            classificationReason = 'Strong technical depth in focused domain';
+            classificationReason = 'Strong technical focus with proven impact';
         }
     }
-    // UNCOMMON: Solid skill indicators, varying visibility
-    else if (
-        qualityTier === 'professional' ||
-        qualityTier === 'production-ready' ||
-        externalContribs >= 20 ||
-        experienceSignals.projectScale === 'medium' ||
-        highestStars >= 50
-    ) {
+    // UNCOMMON (30-49 points) - Top 30%
+    else if (compositeScore >= 30) {
         tier = 'UNCOMMON';
         tierBadge = '◆';
         percentile = 'Top 30%';
 
-        // HIDDEN GEM: ONLY ONE PATH - production-ready quality + very low stars
-        // This is for genuine hidden talent, not just old accounts
-        if (qualityTier === 'production-ready' && highestStars < 100) {
+        if (qualityPoints >= 15 && visibilityPoints <= 5) {
             archetype = 'THE HIDDEN GEM';
-            classificationReason = 'Production-grade code quality with minimal public visibility - likely enterprise experience';
-        } else if (isMaintainer) {
-            archetype = 'THE MAINTAINER';
-            classificationReason = 'Actively maintains production repositories';
-        } else if (externalContribs >= 40) {
+            classificationReason = 'Strong code quality with low public visibility';
+        } else if (externalContribs >= 20) {
             archetype = 'THE CONTRIBUTOR';
-            classificationReason = 'Strong open-source collaboration track record';
-        } else if (qualityTier === 'professional' || qualityTier === 'production-ready') {
+            classificationReason = 'Active open-source collaborator';
+        } else if (qualityPoints >= 12) {
             archetype = 'THE CRAFTSPERSON';
             classificationReason = 'Focuses on code quality and best practices';
+        } else if (activityPoints >= 15) {
+            archetype = 'THE BUILDER';
+            classificationReason = 'Ships consistently and builds working products';
         } else {
             archetype = 'THE BUILDER';
-            classificationReason = 'Ships working products consistently';
+            classificationReason = 'Solid developer with growing portfolio';
         }
     }
-    // COMMON: General tier - most developers land here
+    // COMMON (0-29 points) - Top 50%
     else {
         tier = 'COMMON';
         tierBadge = '●';
         percentile = 'Top 50%';
 
-        // No more veteran escape hatch - account age alone doesn't make you special
-        if (isFullStack || (domains.web >= 2 && domains.backend >= 1)) {
+        if (isFullStackDev) {
             archetype = 'THE TINKERER';
-            classificationReason = 'Practical problem solver building real applications';
-        } else if ((experienceSignals.recentlyActive === 'very-active' || experienceSignals.recentlyActive === 'active') && accountAgeYears < 4) {
+            classificationReason = 'Practical problem solver building applications';
+        } else if (activityPoints >= 10 && accountAgeYears < 4) {
             archetype = 'THE GRINDER';
-            classificationReason = 'Early career with high activity - building experience fast';
-        } else if (accountAgeYears >= 5 && experienceSignals.recentlyActive !== 'dormant') {
-            // Veterans with activity but no quality signals = experienced hobbyist
+            classificationReason = 'Early career with high activity';
+        } else if (accountAgeYears >= 5 && activityPoints >= 5) {
             archetype = 'THE HOBBYIST';
-            classificationReason = `${accountAgeYears.toFixed(0)} years of coding - experienced with varied interests`;
-        } else if (languages.length >= 5) {
+            classificationReason = 'Experienced developer with varied interests';
+        } else if (domainExpertiseCount >= 3) {
             archetype = 'THE EXPLORER';
-            classificationReason = 'Exploring multiple technologies, broad exposure';
-        } else if (accountAgeYears >= 2 && experienceSignals.recentlyActive === 'occasional') {
-            archetype = 'THE HOBBYIST';
-            classificationReason = 'Codes for personal interest and passion projects';
-        } else if (accountAgeYears >= 4 && experienceSignals.recentlyActive !== 'dormant') {
-            // Mid-career with steady activity = TINKERER, not APPRENTICE
-            archetype = 'THE TINKERER';
-            classificationReason = 'Experienced developer with steady contributions';
+            classificationReason = 'Exploring multiple technologies';
         } else {
             archetype = 'THE APPRENTICE';
-            classificationReason = 'Early career, building foundational skills';
+            classificationReason = 'Building foundational skills';
         }
     }
 
-    console.log(`[Classification] ${archetype} (${tier}) - ${classificationReason}`);
+    console.log(`[Classification] ${archetype} (${tier}) - Score: ${compositeScore} - ${classificationReason}`);
+
+
 
     // ═══════════════════════════════════════════════════════════════════════════
     // STEP 6: Build the DeepSeek Prompt with Timeline Context
