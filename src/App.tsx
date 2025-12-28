@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { Clock, Sliders, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, Box, BookOpen, Layers, Plus, Loader2, Heart, Beaker, Star, Hammer, Code, MessageSquare, Award, Navigation, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -106,10 +106,8 @@ function App() {
   const [history, setHistory] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
   const [user, setUser] = useState<any>(null)
-  const [atsInput, setAtsInput] = useState({ key: '', type: 'ashby' as 'ashby' | 'greenhouse' })
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [selectedReport, setSelectedReport] = useState<any>(null)
-  const [authStep, setAuthStep] = useState<'none' | 'ashby' | 'greenhouse'>('none')
   const [expandedMerits, setExpandedMerits] = useState<number[]>([])
   const [showFullSummary, setShowFullSummary] = useState(false)
   const [showDetailedSummary, setShowDetailedSummary] = useState(false)
@@ -120,6 +118,8 @@ function App() {
   const [loadingStep, setLoadingStep] = useState(0)
   const [tierFilter, setTierFilter] = useState<string | null>(null)
   const [archetypeFilter, setArchetypeFilter] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
   const activeTabRef = useRef(activeTab)
 
   useEffect(() => {
@@ -143,22 +143,17 @@ function App() {
         deepseek: (res.deepseek_key as string) || '',
         vibeToken: (res.vibe_token as string) || ''
       })
-      if (res.user_data) setUser(res.user_data)
-    })
-
-    const handleKeyDetected = (message: any) => {
-      if (message.type === 'ATS_KEY_DETECTED') {
-        setAtsInput({ key: message.key, type: message.atsType })
-        setAuthStep(message.atsType)
+      if (res.user_data) {
+        setUser(res.user_data)
+      } else {
+        setUser(null)
       }
-    }
-
-    chrome.runtime.onMessage.addListener(handleKeyDetected)
+      setAuthLoading(false)
+    })
 
     if (activeTab === 'history') fetchHistory()
     if (activeTab === 'analytics') fetchAnalytics()
 
-    return () => chrome.runtime.onMessage.removeListener(handleKeyDetected)
   }, [activeTab, tierFilter])
 
   const fetchHistory = async () => {
@@ -181,6 +176,8 @@ function App() {
       if (data.success) setAnalytics(data.data)
     } catch (e) {
       console.warn('Analytics failed')
+    } finally {
+      setAnalyticsLoading(false)
     }
   }
 
@@ -269,31 +266,42 @@ function App() {
   }
 
 
-  const handleAtsLogin = async (keyOverride?: string) => {
-    const key = keyOverride || atsInput.key
-    if (!key) return
+  const handleGoogleLogin = async () => {
     setIsLoggingIn(true)
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/ats`, {
+      // Attempt real chrome identity first
+      let token = 'mock-google-token'
+      try {
+        const auth = await chrome.identity.getAuthToken({ interactive: true })
+        if (auth && auth.token) token = auth.token
+      } catch (e) {
+        console.warn('Chrome identity call failed (client_id probably not set), using dev bypass')
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: key, type: authStep === 'none' ? atsInput.type : authStep })
+        body: JSON.stringify({ token })
       })
+
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}. If you haven't deployed your local server changes to Railway yet, this endpoint won't exist there.`)
+      }
+
       const data = await res.json()
       if (data.success) {
         chrome.storage.local.set({ vibe_token: data.token, user_data: data.user }, () => {
           setTokens({ ...tokens, vibeToken: data.token })
           setUser(data.user)
           setIsLoggingIn(false)
-          setAtsInput({ ...atsInput, key: '' })
-          setAuthStep('none')
         })
       } else {
-        alert(data.error || 'Login failed')
+        alert(data.error || 'Google login failed')
         setIsLoggingIn(false)
       }
-    } catch (e) {
-      alert('Backend unavailable for login')
+    } catch (e: any) {
+      console.error('Auth error:', e)
+      alert(`Authentication failed: ${e.message || 'Unknown error'}`)
       setIsLoggingIn(false)
     }
   }
@@ -321,6 +329,11 @@ function App() {
       </header>
 
       <div className="tabs-nav">
+        <div className="tab-slider" style={{
+          transform: `translateX(${activeTab === 'analyze' ? '0' :
+            activeTab === 'history' ? '100%' :
+              activeTab === 'analytics' ? '200%' : '300%'})`
+        }} />
         <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
           <Search size={14} strokeWidth={2} />
         </button>
@@ -350,14 +363,26 @@ function App() {
           <TrendingUp size={14} strokeWidth={2} />
         </button>
         <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setSelectedReport(null); }}>
-          <Sliders size={14} strokeWidth={2} />
+          <Settings size={14} strokeWidth={2} />
         </button>
       </div>
 
       <main>
-        {selectedReport ? (
-          selectedReport.insufficient_data ? (
-            // Insufficient data state
+        {authLoading ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '300px',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <Loader2 size={24} className="spin" color="var(--accent)" />
+            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
+          </div>
+        ) : selectedReport ? (
+          (selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) ? (
+            // Insufficient data state (GHOST profile)
             <div className="detail-view">
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
                 <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
@@ -377,11 +402,23 @@ function App() {
                   <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{selectedReport.handle || 'Guest Profile'}</h2>
                 </div>
               </div>
-              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📊</div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-main)' }}>NOT ENOUGH DATA</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto' }}>
-                  This profile has limited public repositories or code to analyze. They may work primarily in private repos or enterprise environments.
+              <div style={{ textAlign: 'center', padding: '64px 32px' }}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  background: 'var(--bg-gray)',
+                  borderRadius: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 24px auto',
+                  border: '1px solid var(--border)'
+                }}>
+                  <Ghost size={40} color="var(--text-dim)" strokeWidth={1.5} />
+                </div>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '12px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>GHOST PROFILE</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto', fontWeight: 500 }}>
+                  This profile has limited public repositories or code to analyze. They likely work in private repos or enterprise environments.
                 </p>
               </div>
             </div>
@@ -408,12 +445,14 @@ function App() {
                     return (
                       <>
                         {handle ? (
-                          <img
-                            src={`https://github.com/${handle}.png?size=48`}
-                            alt={handle}
-                            className="history-avatar"
-                            style={{ width: '48px', height: '48px', borderRadius: '12px' }}
-                          />
+                          <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '12px', overflow: 'hidden' }}>
+                            <img
+                              src={`https://github.com/${handle}.png?size=48`}
+                              alt={handle}
+                              className="history-avatar"
+                              style={{ width: '48px', height: '48px', display: 'block' }}
+                            />
+                          </a>
                         ) : (
                           <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
                             <User size={24} color="var(--text-dim)" />
@@ -421,7 +460,17 @@ function App() {
                         )}
                         <div className="history-meta" style={{ gap: '2px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{handle || 'Guest Profile'}</h2>
+                            <a
+                              href={`https://github.com/${handle}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="profile-github-link"
+                              style={{ textDecoration: 'none' }}
+                            >
+                              <h2 className="history-name clickable" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>
+                                {handle || 'Guest Profile'}
+                              </h2>
+                            </a>
                             {selectedReport.rarity_badge && (
                               <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
                             )}
@@ -611,62 +660,75 @@ function App() {
               }
 
 
-              <div className="detail-section">
-                <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
-                <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
-                <div className="merit-grid scrollable">
-                  {selectedReport.meritPoints.map((point: any, i: number) => {
-                    const isExpanded = expandedMerits.includes(i);
-                    const isNegative = point.type === 'negative';
-                    const toggle = () => {
-                      setExpandedMerits((prev: number[]) =>
-                        prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
-                      );
-                    };
-                    return (
-                      <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                        <div className="merit-header">
-                          <div style={{ display: 'flex', alignItems: 'center' }}>
-                            {isNegative ? (
-                              <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
-                            ) : (
-                              <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                            )}
-                            <span className="merit-title">{point.title || point}</span>
+              {selectedReport.meritPoints?.length > 0 && !(selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) && (
+                <div className="detail-section">
+                  <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
+                  <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
+                  <div className="merit-grid scrollable">
+                    {selectedReport.meritPoints.map((point: any, i: number) => {
+                      const isExpanded = expandedMerits.includes(i);
+                      const isNegative = point.type === 'negative';
+                      const toggle = () => {
+                        setExpandedMerits((prev: number[]) =>
+                          prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
+                        );
+                      };
+                      return (
+                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                          <div className="merit-header">
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              {isNegative ? (
+                                <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
+                              ) : (
+                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                              )}
+                              <span className="merit-title">{point.title || point}</span>
+                            </div>
+                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                           </div>
-                          {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                          {isExpanded && (
+                            <div className="merit-detail">
+                              <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
+
+                              {point.business_impact && (
+                                <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
+                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
+                                  <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
+                                </div>
+                              )}
+
+                              {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
+                                <div>
+                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
+                                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {isExpanded && (
-                          <div className="merit-detail">
-                            <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
-
-                            {point.business_impact && (
-                              <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
-                                <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
-                                <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
-                              </div>
-                            )}
-
-                            {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
-                              <div>
-                                <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
-                                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      )
+                    })}
+                  </div>
+                  <button
+                    className="download-card-btn"
+                    onClick={() => {
+                      if (!user) {
+                        setSelectedReport(null);
+                        setActiveTab('settings');
+                      } else {
+                        // TODO: Implement actual PDF download
+                        console.log('Downloading report card...');
+                      }
+                    }}
+                  >
+                    <FileDown size={16} />
+                    {user ? 'DOWNLOAD REPORT CARD' : 'SIGN IN TO DOWNLOAD'}
+                  </button>
                 </div>
-                <button className="download-card-btn">
-                  <FileDown size={16} />
-                  DOWNLOAD REPORT CARD
-                </button>
-              </div>
-            </div >
+              )}
+            </div>
           )
         ) : (
           <>
@@ -725,9 +787,8 @@ function App() {
                   ) : 'RUN')}
                 </button>
                 <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>
-                  3 FREE ANALYSIS LEFT
+                  3 FREE CHEKKS LEFT THIS WEEK
                 </div>
-
                 <div className="referral-card" style={{
                   marginTop: '24px',
                   padding: '16px',
@@ -745,7 +806,7 @@ function App() {
                     <span style={{ fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Get Unlimited Chekks for Free</span>
                   </div>
                   <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9 }}>
-                    Refer 3 friends and get Vibechekk unlimited free for one month if they each run at least one chekk.
+                    Refer 3 friends and get unlimited chekks for one week free if they each run at least one chekk.
                   </p>
                   <button className="primary-btn" style={{
                     marginTop: '8px',
@@ -757,22 +818,47 @@ function App() {
                     height: '34px',
                     fontSize: '11px',
                     fontWeight: 800,
-                    width: 'fit-content',
-                    boxShadow: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
                     justifyContent: 'center'
-                  }}>
+                  }}
+                    onClick={() => {
+                      setLoginMessage('Sign up or login to invite friends');
+                      setActiveTab('settings');
+                    }}
+                  >
                     INVITE FRIENDS
                   </button>
                 </div>
+
+                <button className="primary-btn" style={{
+                  marginTop: '24px',
+                  background: 'var(--text-main)',
+                  color: 'white',
+                  border: 'none',
+                  fontSize: '14px',
+                  height: '44px',
+                  fontWeight: 800,
+                  letterSpacing: '1.2px',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%'
+                }}
+                  onClick={() => {
+                    setLoginMessage('Sign up or login to upgrade access');
+                    setActiveTab('settings');
+                  }}
+                >
+                  UPGRADE FOR UNLIMITED CHEKKS
+                </button>
               </div>
             )}
 
             {activeTab === 'history' && (
               <div className="history-list">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h2 className="section-title" style={{ margin: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     {archetypeFilter ? pluralizeArchetype(archetypeFilter) : 'History'}
                   </h2>
                   {archetypeFilter && (
@@ -841,10 +927,9 @@ function App() {
               <div className="analytics-view">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <div>
-                    <h2 className="section-title" style={{ margin: 0 }}>Insights</h2>
-                    <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Pipeline Intelligence
-                    </p>
+                    <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Pipeline Analytics
+                    </h2>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '6px' }}>
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
@@ -852,7 +937,19 @@ function App() {
                   </div>
                 </div>
 
-                {analytics ? (
+                {analyticsLoading ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '200px',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <Loader2 size={24} className="spin" color="var(--accent)" />
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
+                  </div>
+                ) : analytics ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div className="stat-card hero" style={{ padding: '20px', background: 'white' }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
@@ -862,7 +959,7 @@ function App() {
                         <TrendingUp size={16} color="var(--accent)" strokeWidth={3} style={{ marginBottom: '4px' }} />
                       </div>
                       <div className="stat-label" style={{ opacity: 0.7 }}>
-                        {tierFilter ? `${tierFilter} PROFILES` : 'TOTAL PROFILES PROCESSED'}
+                        {tierFilter ? `${tierFilter} PROFILES` : 'GITHUB PROFILES PROCESSED'}
                       </div>
                     </div>
 
@@ -878,32 +975,29 @@ function App() {
                           </button>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
-                        {['LEGENDARY', 'ULTRA RARE', 'RARE', 'UNCOMMON', 'COMMON'].map(tier => {
-                          const isActive = tierFilter === tier;
-                          const count = analytics.tierBreakdown?.[tier] || 0;
+                      <div className="tier-filter-container">
+                        {[
+                          { name: 'LEGENDARY', color: '#d97706' },
+                          { name: 'ULTRA RARE', color: '#7c3aed' },
+                          { name: 'RARE', color: '#0891b2' },
+                          { name: 'UNCOMMON', color: '#059669' },
+                          { name: 'COMMON', color: '#6b7280' }
+                        ].map(tier => {
+                          const isActive = tierFilter === tier.name;
+                          const count = analytics.tierBreakdown?.[tier.name] || 0;
                           return (
                             <button
-                              key={tier}
-                              onClick={() => setTierFilter(isActive ? null : tier)}
-                              style={{
-                                flexShrink: 0,
-                                padding: '6px 10px',
-                                borderRadius: '20px',
-                                border: `1px solid ${isActive ? rarityColors[tier] : 'var(--border-light)'}`,
-                                background: isActive ? rarityColors[tier] : 'white',
-                                color: isActive ? 'white' : 'var(--text-main)',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
+                              key={tier.name}
+                              className={`tier-filter-btn ${isActive ? 'active' : ''}`}
+                              onClick={() => setTierFilter(isActive ? null : tier.name)}
+                              style={isActive ? {
+                                color: 'white',
+                                background: tier.color,
+                                borderColor: tier.color
+                              } : undefined}
                             >
-                              {tier}
-                              <span style={{ opacity: 0.7, fontSize: '9px' }}>{count}</span>
+                              {tier.name}
+                              <span className="count">{count}</span>
                             </button>
                           );
                         })}
@@ -915,53 +1009,70 @@ function App() {
                         <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>
                           {tierFilter ? `${tierFilter} DISTRIBUTION` : 'PROFILE DISTRIBUTION'}
                         </h3>
-                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>BY ARCHETYPE</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '9px', color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.05em' }}>BY ARCHETYPE</span>
+                          {!user && <Lock size={10} color="var(--text-dim)" strokeWidth={3} />}
+                        </div>
                       </div>
 
-                      <div className="history-list" style={{ gap: '10px' }}>
-                        {Object.entries(analytics.distribution).length > 0 ? (
-                          Object.entries(analytics.distribution)
-                            .sort(([, a]: any, [, b]: any) => b - a)
-                            .map(([arch, count]: any) => {
-                              const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
-                              const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
-                              return (
-                                <div
-                                  key={arch}
-                                  className="stat-card compact"
-                                  style={{ background: 'white', cursor: 'pointer', transition: 'all 0.2s' }}
-                                  onClick={() => {
-                                    setArchetypeFilter(arch);
-                                    setActiveTab('history');
-                                  }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-                                >
-                                  <div className="stat-info">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                      <div className="archetype-icon-small">
-                                        <ArchetypeIcon label={arch} size={14} />
+                      <div className={`locked-container ${!user ? 'locked' : ''}`}>
+                        <div className="history-list" style={{ gap: '10px', pointerEvents: !user ? 'none' : 'auto' }}>
+                          {Object.entries(analytics.distribution).length > 0 ? (
+                            Object.entries(analytics.distribution)
+                              .sort(([, a]: any, [, b]: any) => b - a)
+                              .map(([arch, count]: any) => {
+                                const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
+                                const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
+                                return (
+                                  <div
+                                    key={arch}
+                                    className="stat-card compact"
+                                    style={{ background: 'white' }}
+                                  >
+                                    <div className="stat-info">
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <div className="archetype-icon-small">
+                                          <ArchetypeIcon label={arch} size={14} />
+                                        </div>
+                                        <span className="stat-arch-name">{pluralizeArchetype(arch)}</span>
                                       </div>
-                                      <span className="stat-arch-name">{pluralizeArchetype(arch)}</span>
+                                      <div style={{ textAlign: 'right' }}>
+                                        <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
+                                        <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
+                                      </div>
                                     </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                      <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
-                                      <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
+                                    <div className="percentage-bar-bg" style={{ height: '4px' }}>
+                                      <div
+                                        className="percentage-bar-fill"
+                                        style={{
+                                          width: `${percentage}%`,
+                                          background: percentage > 1 ? 'var(--accent)' : 'var(--border)',
+                                          borderRadius: '2px'
+                                        }}
+                                      ></div>
                                     </div>
                                   </div>
-                                  <div className="percentage-bar-bg" style={{ height: '4px' }}>
-                                    <div
-                                      className="percentage-bar-fill"
-                                      style={{ width: `${percentage}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })
-                        ) : (
-                          <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-dim)', padding: '20px 0' }}>
-                            No profiles found in this tier.
-                          </p>
+                                );
+                              })
+                          ) : (
+                            <p className="footer-info">No data for this tier yet.</p>
+                          )}
+                        </div>
+
+                        {!user && !authLoading && (
+                          <div className="paywall-overlay">
+                            <div className="paywall-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                              <div style={{ marginBottom: '16px' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 700, opacity: 0.5, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                                  Unlock Full Pipeline Intelligence
+                                </span>
+                              </div>
+                              <button className="paywall-btn" onClick={() => setActiveTab('settings')}>
+                                <Lock size={14} strokeWidth={3} />
+                                <span>Sign in to Unlock</span>
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -977,78 +1088,140 @@ function App() {
             {activeTab === 'settings' && (
               <div className="settings-scroll-container">
                 <div className="settings-group">
-                  <h2 className="section-title" style={{ marginBottom: '4px' }}>Analytics</h2>
+                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHORIZATION REQUIRED'}</h2>
                   {user ? (
                     <div className="auth-status-card" style={{ width: '100%', maxWidth: '100%' }}>
                       <p className="footer-info" style={{ color: 'var(--text-main)', marginBottom: '8px' }}>Connected as <strong>{user.name || user.email}</strong></p>
                       <p style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 600, marginBottom: '16px' }}>✓ Premium Analytics Active</p>
-                      <button className="secondary-btn logout-btn" onClick={logout}>Disconnect ATS</button>
+                      <button className="secondary-btn logout-btn" onClick={logout}>SIGN OUT</button>
                     </div>
-                  ) : authStep === 'none' ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-                      <button className="primary-btn" onClick={() => setAuthStep('ashby')} style={{ background: '#2563eb' }}>
-                        Connect Ashby
-                      </button>
-                      <button className="primary-btn" onClick={() => setAuthStep('greenhouse')} style={{ background: '#059669' }}>
-                        Connect Greenhouse
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                      <button
+                        onClick={() => handleGoogleLogin()}
+                        disabled={isLoggingIn}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          borderRadius: '10px',
+                          background: 'white',
+                          color: '#3c4043',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)',
+                          border: '1px solid #dadce0'
+                        }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 18 18">
+                          <path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.49h4.84c-.21 1.12-.84 2.07-1.79 2.7v2.25h2.91c1.7-1.56 2.68-3.86 2.68-6.6z" />
+                          <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.25c-.81.54-1.85.87-3.05.87-2.34 0-4.33-1.58-5.03-3.71H.95v2.3C2.43 15.89 5.5 18 9 18z" />
+                          <path fill="#FBBC05" d="M3.97 10.73c-.18-.54-.28-1.12-.28-1.73s.1-1.19.28-1.73V4.97H.95C.35 6.19 0 7.56 0 9s.35 2.81.95 4.03l3.02-2.3z" />
+                          <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0 5.5 0 2.43 2.11.95 5.03L3.97 7.33C4.67 5.2 6.66 3.58 9 3.58z" />
+                        </svg>
+                        {isLoggingIn ? 'SIGNING IN...' : 'CONTINUE WITH GOOGLE'}
                       </button>
 
-                      <div style={{ marginTop: '8px' }}>
-                        <p className="footer-info" style={{ marginBottom: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text-main)' }}>Connect your ATS to:</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '4px' }}>
+                      <div className="benefits-scroll-container" style={{ marginTop: '6px' }}>
+                        <div className="benefits-scroll-track">
                           {[
-                            'Analyze profiles in bulk',
-                            'See skill trends across your pipeline',
-                            'Benchmark against industry standards',
-                            'Export reports directly to your ATS'
+                            'Invite friends',
+                            'Save history',
+                            'See trends',
+                            'Full analytics',
+                            'Connect ATS',
+                            'Claim profile',
+                            'Invite friends',
+                            'Save history',
+                            'See trends',
+                            'Full analytics',
+                            'Connect ATS',
+                            'Claim profile'
                           ].map((text, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                              <BadgeCheck size={14} color="var(--accent)" strokeWidth={2} />
-                              <span>{text}</span>
-                            </div>
+                            <span key={i} className="benefit-tag">
+                              <BadgeCheck size={12} color="var(--accent)" strokeWidth={2.5} />
+                              {text}
+                            </span>
                           ))}
                         </div>
                       </div>
-                      <button className="upgrade-pro-btn">
-                        <TrendingUp size={16} strokeWidth={2.5} />
-                        UPGRADE TO PRO
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <h3 style={{ fontSize: '13px', margin: 0 }}>Connect to {authStep.charAt(0).toUpperCase() + authStep.slice(1)}</h3>
-                      <p className="footer-info">
-                        1. Go to your {authStep}
-                        <a href={authStep === 'ashby' ? 'https://app.ashbyhq.com/settings/api' : 'https://app.greenhouse.io/configure/dev_center/credentials'} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', marginLeft: '4px' }}>
-                          API Settings
-                        </a><br />
-                        2. Copy your API Key<br />
-                        3. Paste it below to link your account.
-                      </p>
-                      <input
-                        type="password"
-                        className="input-field"
-                        placeholder={`${authStep === 'ashby' ? 'Ashby API Key' : 'Greenhouse API Key'}`}
-                        value={atsInput.key}
-                        onChange={e => setAtsInput({ ...atsInput, key: e.target.value })}
-                      />
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="secondary-btn" onClick={() => { setAuthStep('none'); setAtsInput({ ...atsInput, key: '' }); }} style={{ flex: 1 }}>Cancel</button>
-                        <button className="primary-btn" onClick={() => handleAtsLogin()} disabled={isLoggingIn || !atsInput.key} style={{ flex: 2 }}>
-                          {isLoggingIn ? 'Syncing...' : 'Complete Connection'}
-                        </button>
+
+                      {/* Tier Showcase */}
+                      <div className="tier-showcase" style={{
+                        marginTop: '80px',
+                        padding: '16px 0'
+                      }}>
+                        <p style={{
+                          fontSize: '9px',
+                          color: 'var(--text-dim)',
+                          margin: '0 0 14px 0',
+                          fontWeight: 700,
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          textAlign: 'center'
+                        }}>DEV RARITY TIERS</p>
+
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '8px',
+                          justifyContent: 'center'
+                        }}>
+                          {[
+                            { name: 'LEGENDARY', color: '#d97706', glow: 'rgba(180, 83, 9, 0.3)' },
+                            { name: 'ULTRA RARE', color: '#7c3aed', glow: 'rgba(124, 58, 237, 0.25)' },
+                            { name: 'RARE', color: '#0891b2', glow: 'rgba(8, 145, 178, 0.2)' },
+                            { name: 'UNCOMMON', color: '#059669', glow: 'rgba(5, 150, 105, 0.2)' },
+                            { name: 'COMMON', color: '#6b7280', glow: 'rgba(107, 114, 128, 0.15)' }
+                          ].map((tier, i) => (
+                            <div
+                              key={tier.name}
+                              className="tier-showcase-badge"
+                              style={{
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                background: `linear-gradient(135deg, ${tier.color}15 0%, ${tier.color}08 100%)`,
+                                border: `1px solid ${tier.color}20`,
+                                boxShadow: `0 2px 8px ${tier.glow}`,
+                                fontSize: '9px',
+                                fontWeight: 800,
+                                color: tier.color,
+                                letterSpacing: '0.05em',
+                                cursor: 'default',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              {tier.name}
+                            </div>
+                          ))}
+                        </div>
+
+                        <p style={{
+                          fontSize: '11px',
+                          color: 'var(--text-dim)',
+                          margin: '14px 0 0 0',
+                          textAlign: 'center',
+                          fontWeight: 500
+                        }}>
+                          Discover where your searches rank
+                        </p>
                       </div>
                     </div>
                   )}
+
                 </div>
               </div>
             )}
           </>
-        )
-        }
-      </main >
+        )}
+      </main>
     </div >
-  )
+  );
 }
 
 export default App

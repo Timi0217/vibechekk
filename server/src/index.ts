@@ -31,7 +31,26 @@ const verifyAtsToken = async (token: string, type: 'ashby' | 'greenhouse') => {
 // --- MIDDLEWARE ---
 const checkTierLimit = async (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return next(); // Guest mode
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown-ip';
+
+    if (!authHeader) {
+        // Enforce Guest Limit (2 per IP)
+        try {
+            const guestCount = await prisma.vibeReport.count({
+                where: { guestIp: typeof ip === 'string' ? ip : 'unknown-ip', userId: null }
+            });
+
+            if (guestCount >= 2) {
+                return res.status(429).json({
+                    success: false,
+                    error: 'Guest limit reached. Login to get one extra check!'
+                });
+            }
+            return next();
+        } catch (e) {
+            return next(); // Fallback if DB fails
+        }
+    }
 
     const token = authHeader.split(' ')[1];
     try {
@@ -51,13 +70,15 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
             user.usageCount = 0;
         }
 
-        const limits = { GUEST: 3, AUTHENTICATED: 5, PRO: 100 };
-        const userLimit = limits[user.tier] || 3;
+        const limits = { GUEST: 2, AUTHENTICATED: 5, PRO: 100 };
+        const userLimit = limits[user.tier] || 2;
 
         if (user.usageCount >= userLimit) {
             return res.status(429).json({
                 success: false,
-                error: `Tier limit reached (${userLimit} per ${user.tier === 'PRO' ? 'month' : 'hour'}). Upgrade to Pro for more.`
+                error: user.tier === 'PRO'
+                    ? `Monthly limit reached (${userLimit} profiles).`
+                    : `Limit reached. Upgrade to Pro for unlimited chekks.`
             });
         }
 
@@ -90,6 +111,33 @@ app.post('/api/auth/ats', async (req, res) => {
         create: {
             email: atsUser.email,
             name: atsUser.name,
+            tier: 'AUTHENTICATED'
+        }
+    });
+
+    const vibeToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ success: true, token: vibeToken, user });
+});
+
+app.post('/api/auth/google', async (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(401).json({ success: false, error: 'No token provided' });
+
+    // In production, verify this token with Google:
+    // https://www.googleapis.com/oauth2/v3/tokeninfo?id_token={token}
+
+    // Mocking a successful Google user for now
+    const mockUser = {
+        email: 'timi@test.com',
+        name: 'Timi Creator'
+    };
+
+    const user = await prisma.user.upsert({
+        where: { email: mockUser.email },
+        update: { tier: 'AUTHENTICATED' },
+        create: {
+            email: mockUser.email,
+            name: mockUser.name,
             tier: 'AUTHENTICATED'
         }
     });
@@ -198,7 +246,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                     verified_skills: reportData.verified_skills,
                     highest_repo_stars: reportData.highest_repo_stars
                 } as any
-            },
+            } as any,
             include: { candidate: true }
         });
 
@@ -238,14 +286,14 @@ app.get('/api/analytics', async (req, res) => {
         const whereClause = tierFilter ? { tier: tierFilter } : {};
 
         // Get archetype distribution (with optional tier filter)
-        const archetypeCounts = await prisma.vibeReport.groupBy({
+        const archetypeCounts = await (prisma.vibeReport as any).groupBy({
             by: ['archetype'],
             where: whereClause,
             _count: { id: true }
         });
 
         // Get tier distribution (no filter for overview)
-        const tierCounts = await prisma.vibeReport.groupBy({
+        const tierCounts = await (prisma.vibeReport as any).groupBy({
             by: ['tier'],
             _count: { id: true }
         });
@@ -259,11 +307,11 @@ app.get('/api/analytics', async (req, res) => {
                 totalChecks: total,
                 filteredTotal: filteredTotal,
                 activeFilter: tierFilter || null,
-                distribution: archetypeCounts.reduce((acc: any, curr) => {
+                distribution: archetypeCounts.reduce((acc: any, curr: any) => {
                     acc[curr.archetype] = curr._count.id;
                     return acc;
                 }, {}),
-                tierBreakdown: tierCounts.reduce((acc: any, curr) => {
+                tierBreakdown: tierCounts.reduce((acc: any, curr: any) => {
                     acc[curr.tier] = curr._count.id;
                     return acc;
                 }, {})
@@ -272,6 +320,10 @@ app.get('/api/analytics', async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed' });
     }
+});
+
+app.use((req, res) => {
+    res.status(404).json({ success: false, error: `Route ${req.method} ${req.url} not found on this server.` });
 });
 
 app.listen(PORT, () => {

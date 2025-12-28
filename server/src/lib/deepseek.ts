@@ -237,14 +237,13 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     // VISIBILITY SCORE (0-25 points) - reach and impact
     let visibilityPoints = 0;
     if (highestStars >= 100000) visibilityPoints = 25;
-    else if (highestStars >= 50000) visibilityPoints = 22;
-    else if (highestStars >= 25000) visibilityPoints = 20;
-    else if (highestStars >= 10000) visibilityPoints = 17;
-    else if (highestStars >= 5000) visibilityPoints = 14;
-    else if (highestStars >= 1000) visibilityPoints = 10;
-    else if (highestStars >= 500) visibilityPoints = 7;
-    else if (highestStars >= 100) visibilityPoints = 4;
-    else if (highestStars >= 10) visibilityPoints = 2;
+    else if (highestStars >= 50000) visibilityPoints = 23;
+    else if (highestStars >= 10000) visibilityPoints = 20;
+    else if (highestStars >= 5000) visibilityPoints = 18;
+    else if (highestStars >= 1000) visibilityPoints = 15;
+    else if (highestStars >= 500) visibilityPoints = 12;
+    else if (highestStars >= 100) visibilityPoints = 8;
+    else if (highestStars >= 10) visibilityPoints = 4;
     // Penalty for viral non-code content
     if (isViralNonCode) visibilityPoints = Math.floor(visibilityPoints * 0.5);
 
@@ -390,21 +389,21 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         tierBadge = '●';
         percentile = 'Top 50%';
 
-        if (isFullStackDev) {
+        if (activityPoints >= 12) {
+            archetype = 'THE GRINDER';
+            classificationReason = 'High commit activity and sustained development effort';
+        } else if (isFullStackDev) {
             archetype = 'THE TINKERER';
             classificationReason = 'Practical problem solver building applications';
-        } else if (activityPoints >= 10 && accountAgeYears < 4) {
-            archetype = 'THE GRINDER';
-            classificationReason = 'Early career with high activity';
-        } else if (accountAgeYears >= 5 && activityPoints >= 5) {
+        } else if (accountAgeYears >= 5 || visibilityPoints >= 10) {
             archetype = 'THE HOBBYIST';
-            classificationReason = 'Experienced developer with varied interests';
+            classificationReason = 'Experienced developer or content creator with moderate activity';
         } else if (domainExpertiseCount >= 3) {
             archetype = 'THE EXPLORER';
-            classificationReason = 'Exploring multiple technologies';
+            classificationReason = 'Exploring multiple technologies and stacks';
         } else {
             archetype = 'THE APPRENTICE';
-            classificationReason = 'Building foundational skills';
+            classificationReason = 'Building foundational skills and early-career portfolio';
         }
     }
 

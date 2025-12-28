@@ -10,7 +10,8 @@
     },
     "permissions": [
         "storage",
-        "sidePanel"
+        "sidePanel",
+        "identity"
     ],
     "side_panel": {
         "default_path": "index.html",
