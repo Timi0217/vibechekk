@@ -255,7 +255,8 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                     technical_signal: reportData.technical_signal,
                     technical_signal_detailed: reportData.technical_signal_detailed,
                     verified_skills: reportData.verified_skills,
-                    highest_repo_stars: reportData.highest_repo_stars
+                    highest_repo_stars: reportData.highest_repo_stars,
+                    archetype_reason: reportData.archetype_reason
                 } as any
             } as any,
             include: { candidate: true }
@@ -272,6 +273,93 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
     } catch (error: any) {
         console.error('Analysis error:', error);
         res.status(500).json({ success: false, error: error.message || 'Internal server error' });
+    }
+});
+
+app.get('/api/auth/github/callback', async (req, res) => {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('No code provided');
+
+    try {
+        console.log('[Auth] Exchanging code for token...');
+        const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                client_id: process.env.GITHUB_CLIENT_ID,
+                client_secret: process.env.GITHUB_CLIENT_SECRET,
+                code
+            })
+        });
+
+        const tokenData: any = await tokenRes.json();
+        if (tokenData.error) throw new Error(tokenData.error_description || 'Token exchange failed');
+
+        const accessToken = tokenData.access_token;
+        console.log('[Auth] Token received. Fetching user...');
+
+        // Fetch User
+        const userRes = await fetch('https://api.github.com/user', {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        const githubUser: any = await userRes.json();
+
+        // Fetch Email if not public
+        let email = githubUser.email;
+        if (!email) {
+            const emailsRes = await fetch('https://api.github.com/user/emails', {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            const emails: any = await emailsRes.json();
+            if (Array.isArray(emails)) {
+                email = emails.find((e: any) => e.primary)?.email || emails[0]?.email;
+            }
+        }
+
+        if (!email) {
+            email = `${githubUser.login}@github.no-email`;
+        }
+
+        // Upsert User
+        let user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            user = await prisma.user.create({
+                data: {
+                    email,
+                    name: githubUser.name || githubUser.login,
+                    picture: githubUser.avatar_url,
+                    tier: 'AUTHENTICATED'
+                }
+            });
+        }
+
+        const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, process.env.JWT_SECRET || 'vibe-secret-shhhh');
+
+        res.send(`
+            <html>
+            <body style="font-family: sans-serif; text-align: center; padding: 40px; background: #fdfaf6; color: #1a1a1a;">
+                <div style="background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 400px; margin: 0 auto;">
+                    <h1 style="color: #22c55e; margin-bottom: 10px;">Transformation Complete!</h1>
+                    <p style="color: #666; margin-bottom: 20px;">Your GitHub account has been linked.</p>
+                    <p style="font-size: 12px; color: #999;">You can close this window.</p>
+                </div>
+                <script>
+                    if (window.opener) {
+                        window.opener.postMessage({ type: 'GITHUB_AUTH_SUCCESS', token: '${token}', user: ${JSON.stringify(user)} }, '*');
+                    }
+                    setTimeout(() => window.close(), 2000);
+                </script>
+                <div id="vibechekk-auth-data" style="display:none" data-token="${token}" data-user='${JSON.stringify(user)}'></div>
+            </body>
+            </html>
+        `);
+
+    } catch (e: any) {
+        console.error('[Auth Error]', e);
+        res.status(500).send(`Authentication Failed: ${e.message}`);
     }
 });
 
