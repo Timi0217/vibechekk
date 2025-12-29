@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "Vibechekk",
+  "version": "1.0.0",
+  "description": "Trajectory of Merit for Developers",
+  "icons": {
+    "16": "public/icon16.png",
+    "48": "public/icon48.png",
+    "128": "public/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "identity"
+  ],
+  "side_panel": {
+    "default_path": "index.html",
+    "default_title": " "
+  },
+  "action": {
+    "default_title": "Open Vibechekk",
+    "default_icon": "public/icon48.png"
+  },
+  "host_permissions": [
+    "https://api.github.com/*",
+    "https://*.linkedin.com/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.greenhouse.io/*"
+  ],
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/content.tsx-DC93f7Od.js"
+      ],
+      "matches": [
+        "https://*.ashbyhq.com/*",
+        "https://*.greenhouse.io/*"
+      ]
+    },
+    {
+      "js": [
+        "assets/sniffer.ts-7dox3xTg.js"
+      ],
+      "matches": [
+        "https://*.ashbyhq.com/*",
+        "https://*.greenhouse.io/*"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "https://*.ashbyhq.com/*",
+        "https://*.greenhouse.io/*"
+      ],
+      "resources": [
+        "assets/content.tsx-DC93f7Od.js",
+        "assets/sniffer.ts-7dox3xTg.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

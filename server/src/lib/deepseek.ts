@@ -366,19 +366,39 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         tierBadge = '◆';
         percentile = 'Top 30%';
 
-        if (qualityPoints >= 15 && visibilityPoints <= 5 && activityPoints >= 10) {
+        // Rebalanced order for better distribution:
+        // 1. Check for HIDDEN GEM first (high quality, low visibility)
+        if (qualityPoints >= 12 && visibilityPoints <= 4 && (qualitySignals.hasTests || qualitySignals.hasCI)) {
             archetype = 'THE HIDDEN GEM';
-            classificationReason = 'Strong quality and active development with low public visibility';
-        } else if (externalContribs >= 20) {
+            classificationReason = 'Strong code quality with low public visibility - likely works in private/enterprise';
+        }
+        // 2. Check for MAINTAINER (actively maintains repos with traction)
+        else if (isMaintainer) {
+            archetype = 'THE MAINTAINER';
+            classificationReason = 'Actively maintains open-source projects with community adoption';
+        }
+        // 3. Check for CONTRIBUTOR (OSS collaboration)
+        else if (externalContribs >= 15) {
             archetype = 'THE CONTRIBUTOR';
-            classificationReason = 'Active open-source collaborator';
-        } else if (qualityPoints >= 12) {
-            archetype = 'THE CRAFTSPERSON';
-            classificationReason = 'Focuses on code quality and best practices';
-        } else if (activityPoints >= 15) {
+            classificationReason = 'Active open-source collaborator with meaningful contributions';
+        }
+        // 4. Check for BUILDER (ships consistently) - PRIMARY for active devs
+        else if (activityPoints >= 12 || (last90DaysCommits >= 30 && repoCount >= 5)) {
             archetype = 'THE BUILDER';
-            classificationReason = 'Ships consistently and builds working products';
-        } else {
+            classificationReason = 'Ships consistently with strong development momentum';
+        }
+        // 5. Check for CRAFTSPERSON (exceptional quality focus) - RAISED threshold
+        else if (qualityPoints >= 18 && qualitySignals.hasTests && qualitySignals.hasCI) {
+            archetype = 'THE CRAFTSPERSON';
+            classificationReason = 'Exceptional focus on code quality, testing, and best practices';
+        }
+        // 6. Check for TINKERER (practical problem solver)
+        else if (isFullStackDev || domainExpertiseCount >= 2) {
+            archetype = 'THE TINKERER';
+            classificationReason = 'Practical problem solver building real applications';
+        }
+        // 7. Default to BUILDER for this tier
+        else {
             archetype = 'THE BUILDER';
             classificationReason = 'Solid developer with growing portfolio';
         }
@@ -389,19 +409,29 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         tierBadge = '●';
         percentile = 'Top 50%';
 
-        if (activityPoints >= 12) {
+        // Rebalanced for better distribution:
+        // 1. GRINDER - high activity, putting in the work
+        if (activityPoints >= 10 && last90DaysCommits >= 20) {
             archetype = 'THE GRINDER';
             classificationReason = 'High commit activity and sustained development effort';
-        } else if (isFullStackDev) {
+        }
+        // 2. TINKERER - practical builders (prioritize over HOBBYIST for active devs)
+        else if (isFullStackDev || (domains.web >= 2 && domains.backend >= 1)) {
             archetype = 'THE TINKERER';
-            classificationReason = 'Practical problem solver building applications';
-        } else if (accountAgeYears >= 5 || visibilityPoints >= 10) {
+            classificationReason = 'Practical problem solver building real applications';
+        }
+        // 3. HOBBYIST - experienced but low recent activity
+        else if (accountAgeYears >= 5 && last90DaysCommits < 20) {
             archetype = 'THE HOBBYIST';
-            classificationReason = 'Experienced developer or content creator with moderate activity';
-        } else if (domainExpertiseCount >= 3) {
+            classificationReason = 'Experienced developer with passion projects';
+        }
+        // 4. EXPLORER - trying multiple technologies
+        else if (domainExpertiseCount >= 2 || languages.length >= 4) {
             archetype = 'THE EXPLORER';
-            classificationReason = 'Exploring multiple technologies and stacks';
-        } else {
+            classificationReason = 'Exploring multiple technologies and finding their niche';
+        }
+        // 5. APPRENTICE - building foundations
+        else {
             archetype = 'THE APPRENTICE';
             classificationReason = 'Building foundational skills and early-career portfolio';
         }

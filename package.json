@@ -14,6 +14,7 @@
     "start": "cd server && npm run start"
   },
   "dependencies": {
+    "parse5-htmlparser2-tree-adapter": "^8.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -33,7 +34,7 @@
     "octokit": "^5.0.5",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4",
+    "vite": "^5.4.10",
     "vite-plugin-static-copy": "^3.1.4"
   }
 }

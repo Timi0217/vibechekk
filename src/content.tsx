@@ -44,22 +44,28 @@ const injectVibeButton = () => {
       e.preventDefault();
       e.stopPropagation();
       const githubUrl = (link as HTMLAnchorElement).href;
-      handleVibeCheck(githubUrl);
+      handleVibeCheck(githubUrl, false); // Manual click -> Show Result
     };
 
     link.insertAdjacentElement('afterend', btn);
   });
 };
 
-const handleVibeCheck = async (url: string) => {
-  console.log('[Vibechekk] Checking analysis in background for:', url);
+const handleVibeCheck = async (url: string, isSilent: boolean = false, avatar: string = '') => {
+  console.log('[Vibechekk] Checking analysis in background for:', url, isSilent ? '(Silent)' : '(Interactive)');
 
   chrome.runtime.sendMessage({
     type: 'START_VIBE_CHECK',
-    url
+    url,
+    isSilent,
+    avatar
   }, (response) => {
     if (response && response.success) {
-      renderVibeResult(response.data);
+      if (!isSilent) {
+        renderVibeResult(response.data);
+      } else {
+        console.log('[Vibechekk] Analysis complete (Silent Mode)');
+      }
     } else {
       console.log('[Vibechekk] No result available or analysis failed for:', url);
     }
@@ -114,7 +120,7 @@ const renderVibeResult = (data: any) => {
     <div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: full; background: #18181b; border: 1px solid #27272a; margin-bottom: 24px;">
       <span style="width: 8px; height: 8px; border-radius: 50%; background: ${isPro ? '#22c55e' : '#4f46e5'};"></span>
       <span style="font-size: 12px; font-weight: 700; color: #f4f4f5; text-transform: uppercase; letter-spacing: 0.05em;">
-        ${data.archetype} - ${data.label}
+        ${data.archetype === data.label ? data.archetype : `${data.archetype} - ${data.label}`}
         ${isPro ? '<span class="pro-badge">Pro Unlocked</span>' : ''}
       </span>
     </div>
@@ -123,12 +129,24 @@ const renderVibeResult = (data: any) => {
     <p style="margin: 0 0 28px 0; color: #a1a1aa; font-size: 14px; font-weight: 500;">${data.trajectorySummary || data.trajectory_summary}</p>
     
     <div style="display: flex; flex-direction: column; gap: 16px;">
-      ${(data.meritPoints || data.merit_points).map((p: string) => `
+      ${(data.meritPoints || data.merit_points || []).map((p: any) => {
+    let content = p;
+    if (typeof p === 'object') {
+      // Handle structured object from backend
+      content = p.detail || p.point || p.description || p.summary || p.title || JSON.stringify(p);
+      if (p.title && p.detail) {
+        content = `<strong>${p.title}</strong>: ${p.detail}`;
+      }
+    }
+    return `
         <div style="display: flex; gap: 14px; align-items: flex-start;">
           <div style="width: 20px; height: 20px; border-radius: 6px; background: #27272a; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ${isPro ? '#22c55e' : '#4f46e5'}; flex-shrink: 0; margin-top: 2px;">✦</div>
-          <span style="font-size: 14px; line-height: 1.5; color: #e4e4e7;">${p}</span>
+          <span style="font-size: 14px; line-height: 1.5; color: #e4e4e7;">
+            ${content}
+          </span>
         </div>
-      `).join('')}
+      `;
+  }).join('')}
     </div>
 
     <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #27272a; display: flex; justify-content: space-between; align-items: center;">
@@ -163,9 +181,143 @@ window.addEventListener('vibechekk_github_detected', ((e: CustomEvent) => {
   handleVibeCheck(githubUrl);
 }) as EventListener);
 
+// Listen for Autochekk Results from Background
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'SHOW_AUTOSCAN_RESULT') {
+    console.log('[Content] Received Autochekk Result - Logged to Activity Feed (Silent)');
+    // User requested NO summary card for Autochekk
+    // renderVibeResult(message.data); 
+  }
+});
+
 // Initial run
 injectVibeButton();
+setTimeout(() => {
+  scanForEmails();
+  scanForGitHubProfile();
+}, 1000); // Give SPA a moment to settle
 
-// Observer for dynamic content (common in SPA-like ATS dashboards)
-const observer = new MutationObserver(injectVibeButton);
+// Observer for dynamic content
+const observer = new MutationObserver(() => {
+  injectVibeButton();
+  scanForEmails();
+  scanForGitHubProfile();
+});
 observer.observe(document.body, { childList: true, subtree: true });
+
+// GitHub uses Turbo which doesn't reliably fire events we can catch.
+// We use URL polling as a robust fallback for SPA navigation detection.
+let lastCheckedUrl = window.location.href;
+const resetAndScan = () => {
+  scannedProfiles.clear();
+  scanForGitHubProfile();
+};
+setInterval(() => {
+  if (window.location.href !== lastCheckedUrl) {
+    lastCheckedUrl = window.location.href;
+    console.log('[Autochekk] URL Change Detected via Polling');
+    resetAndScan();
+  }
+}, 500);
+window.addEventListener('load', resetAndScan); // Still catch hard refreshes
+
+// --- Autochekk Logic ---
+let isAutochekkEnabled = false;
+let scannedEmails = new Set<string>();
+let scannedProfiles = new Set<string>();
+let scanTimeout: any = null;
+
+function scanForGitHubProfile() {
+  if (!isAutochekkEnabled) return;
+
+  // Check if we are physically ON a github profile
+  const host = window.location.hostname;
+  if (host === 'github.com') {
+    // Path is usually /username or /username/repo
+    // We only want /username
+    const path = window.location.pathname;
+    // Regex to match strictly /username (e.g. /torvalds) and NOT /torvalds/linux or /settings
+    // GitHub usernames are alphanumeric + hyphens
+    const profileMatch = path.match(/^\/([a-zA-Z0-9-]+)\/?$/);
+
+    if (profileMatch) {
+      const handle = profileMatch[1];
+      const fullUrl = `https://github.com/${handle}`;
+
+      // Reserved words to ignore
+      const ignored = ['settings', 'explore', 'topics', 'trending', 'collections', 'events', 'sponsors', 'orgs', 'search'];
+      if (ignored.includes(handle)) return;
+
+      if (!scannedProfiles.has(handle)) {
+        scannedProfiles.add(handle);
+        console.log('[Autochekk] Direct Profile Detected:', handle);
+
+        // Scrape avatar for "Profile Found" log
+        const avatar = document.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+          document.querySelector('img.avatar-user')?.getAttribute('src') || '';
+
+        // Trigger analysis directly
+        handleVibeCheck(fullUrl, true, avatar);
+      }
+    }
+  }
+}
+
+function scanForEmails() {
+  if (!isAutochekkEnabled) return;
+  // If we are on GitHub, rely on Profile Detection, not email scraping
+  if (window.location.hostname === 'github.com') return;
+
+  if (scanTimeout) clearTimeout(scanTimeout);
+
+  scanTimeout = setTimeout(() => {
+    const text = document.body.innerText;
+    // Basic email regex (can be improved)
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const matches = text.match(emailRegex);
+
+    if (matches && matches.length > 0) {
+      const newEmails: string[] = [];
+      matches.forEach(email => {
+        const lower = email.toLowerCase();
+        // Ignore internal/junk emails if necessary or restrict to gmail/yahoo/etc if user really wants
+        // User said "@ gmail or yahoo or just @" so general regex is fine.
+        if (!scannedEmails.has(lower)) {
+          scannedEmails.add(lower);
+          newEmails.push(lower);
+        }
+      });
+
+      if (newEmails.length > 0) {
+        console.log('[Vibechekk] Found new emails:', newEmails);
+        chrome.runtime.sendMessage({
+          type: 'EMAILS_FOUND',
+          emails: newEmails
+        });
+      }
+    }
+  }, 1000); // 1s Debounce
+}
+
+// Initialize State
+chrome.storage.local.get(['auto_chekk_enabled'], (res) => {
+  isAutochekkEnabled = res.auto_chekk_enabled !== undefined ? res.auto_chekk_enabled : true;
+  if (isAutochekkEnabled) {
+    console.log('[Vibechekk] Autochekk Enabled - Scanner Active');
+    scanForGitHubProfile();
+  }
+});
+
+// Detect State Changes
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.auto_chekk_enabled) {
+    isAutochekkEnabled = changes.auto_chekk_enabled.newValue;
+    if (isAutochekkEnabled) {
+      console.log('[Vibechekk] Autochekk Activated');
+      scanForEmails(); // Trigger immediate scan
+      scanForGitHubProfile();
+    } else {
+      console.log('[Vibechekk] Autochekk Deactivated');
+    }
+  }
+});

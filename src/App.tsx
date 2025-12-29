@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash } from 'lucide-react'
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -120,11 +120,60 @@ function App() {
   const [archetypeFilter, setArchetypeFilter] = useState<string | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showConcurrentModal, setShowConcurrentModal] = useState(false)
+  const [autoChekk, setAutoChekk] = useState(false)
+  const [autochekkLogs, setAutochekkLogs] = useState<any[]>([])
   const activeTabRef = useRef(activeTab)
 
   useEffect(() => {
     activeTabRef.current = activeTab
   }, [activeTab])
+
+  // Persist AutoChekk state & logs
+  useEffect(() => {
+    chrome.storage.local.get(['auto_chekk_enabled', 'autochekk_logs'], (res) => {
+      if (res.auto_chekk_enabled !== undefined) {
+        setAutoChekk(res.auto_chekk_enabled)
+      }
+      if (res.autochekk_logs) {
+        setAutochekkLogs(res.autochekk_logs)
+      }
+    })
+
+    const listener = (changes: any) => {
+      if (changes.autochekk_logs) {
+        setAutochekkLogs(changes.autochekk_logs.newValue)
+      }
+    };
+
+    // Listen for Runtime Messages (e.g. Analysis Started)
+    const messageListener = (message: any) => {
+      if (message.type === 'ANALYSIS_STARTED') {
+        const pendingLog = {
+          id: `pending-${message.handle}`,
+          type: 'analysis',
+          pending: true,
+          message: `Analyzing ${message.handle}...`,
+          timestamp: Date.now(),
+          data: { githubHandle: message.handle }
+        };
+        setAutochekkLogs(prev => [pendingLog, ...prev.filter(l => l.data?.githubHandle !== message.handle)]);
+      }
+    };
+
+    chrome.storage.onChanged.addListener(listener);
+    chrome.runtime.onMessage.addListener(messageListener);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(listener);
+      chrome.runtime.onMessage.removeListener(messageListener);
+    };
+  }, [])
+
+  useEffect(() => {
+    chrome.storage.local.set({ auto_chekk_enabled: autoChekk })
+  }, [autoChekk])
 
   const handleOpenReport = (report: any) => {
     setSelectedReport(report)
@@ -185,6 +234,12 @@ function App() {
 
   const handleManualSearch = async () => {
     if (!manualUrl) return
+
+    // Limit concurrent for guests
+    if (!user && pendingHandles.length >= 1) {
+      setShowConcurrentModal(true)
+      return
+    }
 
     // 1. Normalize
     let normalized = manualUrl.trim().replace(/^@/, '');
@@ -343,7 +398,7 @@ function App() {
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
           <BadgeCheck size={14} color={user ? 'var(--accent)' : 'var(--text-dim)'} strokeWidth={1.5} />
           <span style={{ fontSize: '10px', fontWeight: 800, color: user ? 'var(--accent)' : 'var(--text-dim)', letterSpacing: '0.5px' }}>
-            {user ? user.tier : 'GUEST'} TIER
+            {user ? 'AUTHENTICATED' : 'GUEST'} TIER
           </span>
         </div>
       </header>
@@ -768,7 +823,7 @@ function App() {
                     style={{ paddingRight: '40px' }}
                   />
                   <button
-                    onClick={() => { setManualUrl(''); }}
+                    onClick={handleManualSearch}
                     style={{
                       position: 'absolute',
                       right: '8px',
@@ -811,21 +866,43 @@ function App() {
                 </div>
                 <div className="referral-card" style={{
                   marginTop: '24px',
-                  padding: '16px',
-                  borderRadius: '12px',
+                  padding: '20px',
+                  borderRadius: '16px',
                   background: 'linear-gradient(135deg, var(--accent) 0%, #92400e 100%)',
                   color: 'white',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px',
                   cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(180, 83, 9, 0.2)'
+                  boxShadow: '0 4px 12px rgba(180, 83, 9, 0.3)',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {/* Decorative circles like the purple card */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '-40px',
+                    right: '-40px',
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.1)'
+                  }} />
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-20px',
+                    left: '-20px',
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.05)'
+                  }} />
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
                     <Zap size={15} fill="white" style={{ position: 'relative', top: '-0.5px' }} />
                     <span style={{ fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Get Unlimited Chekks for Free</span>
                   </div>
-                  <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9 }}>
+                  <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9, position: 'relative' }}>
                     Refer 3 friends and get unlimited chekks for one week free if they each run at least one chekk.
                   </p>
                   <button className="primary-btn" style={{
@@ -838,10 +915,11 @@ function App() {
                     height: '34px',
                     fontSize: '11px',
                     fontWeight: 800,
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    position: 'relative'
                   }}
                     onClick={() => {
-                      setLoginMessage('Sign up or login to invite friends');
+                      setShowInviteModal(true);
                       setActiveTab('settings');
                     }}
                   >
@@ -851,24 +929,21 @@ function App() {
 
                 <button className="primary-btn" style={{
                   marginTop: '24px',
-                  background: 'var(--text-main)',
+                  background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
                   color: 'white',
                   border: 'none',
-                  fontSize: '14px',
-                  height: '44px',
+                  fontSize: '13px',
+                  height: '52px',
                   fontWeight: 800,
-                  letterSpacing: '1.2px',
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
-                  borderRadius: '12px',
+                  letterSpacing: '1px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                  borderRadius: '16px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   width: '100%'
                 }}
-                  onClick={() => {
-                    setLoginMessage('Sign up or login to upgrade access');
-                    setActiveTab('settings');
-                  }}
+                  onClick={() => setActiveTab('settings')}
                 >
                   UPGRADE FOR UNLIMITED CHEKKS
                 </button>
@@ -1149,90 +1224,476 @@ function App() {
             {activeTab === 'settings' && (
               <div className="settings-scroll-container">
                 <div className="settings-group">
-                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHORIZATION REQUIRED'}</h2>
+                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHENTICATION REQUIRED'}</h2>
                   {user ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       {/* Account Card */}
                       <div style={{
-                        background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
-                        borderRadius: '16px',
-                        padding: '24px',
-                        border: '1px solid var(--border)',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
+                        background: 'white',
+                        borderRadius: '20px',
+                        padding: '20px',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
+                        position: 'relative',
+                        overflow: 'hidden'
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                        {/* Decorative background element */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '-10%',
+                          right: '-5%',
+                          width: '120px',
+                          height: '120px',
+                          background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(196, 114, 30, 0.05) 100%)',
+                          borderRadius: '50%',
+                          filter: 'blur(20px)',
+                          zIndex: 0
+                        }} />
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', position: 'relative', zIndex: 1 }}>
                           {user.picture ? (
-                            <img
-                              src={user.picture}
-                              alt={user.name}
-                              style={{
-                                width: '56px',
-                                height: '56px',
-                                borderRadius: '16px',
-                                border: '2px solid var(--accent)',
-                                boxShadow: '0 4px 12px rgba(196, 114, 30, 0.2)'
-                              }}
-                            />
+                            <div style={{ position: 'relative' }}>
+                              <img
+                                src={user.picture}
+                                alt={user.name}
+                                style={{
+                                  width: '64px',
+                                  height: '64px',
+                                  borderRadius: '22px',
+                                  objectFit: 'cover',
+                                  border: '2px solid white',
+                                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                                }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: '2px',
+                                right: '2px',
+                                width: '14px',
+                                height: '14px',
+                                background: '#10b981',
+                                border: '2.5px solid white',
+                                borderRadius: '50%',
+                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                              }} />
+                            </div>
                           ) : (
-                            <div style={{
-                              width: '56px',
-                              height: '56px',
-                              borderRadius: '16px',
-                              background: 'linear-gradient(135deg, var(--accent) 0%, #b45309 100%)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              boxShadow: '0 4px 12px rgba(196, 114, 30, 0.3)'
-                            }}>
-                              <User size={28} color="white" strokeWidth={2} />
+                            <div style={{ position: 'relative' }}>
+                              <div style={{
+                                width: '64px',
+                                height: '64px',
+                                borderRadius: '22px',
+                                background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)',
+                                color: 'white',
+                                fontSize: '26px',
+                                fontWeight: 800,
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}>
+                                {/* Inner glow/mesh effect */}
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '-20%',
+                                  left: '-20%',
+                                  width: '140%',
+                                  height: '140%',
+                                  background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 70%)',
+                                  zIndex: 1
+                                }} />
+                                <span style={{ position: 'relative', zIndex: 2 }}>
+                                  {user.name ? user.name.charAt(0).toUpperCase() : <User size={28} />}
+                                </span>
+                              </div>
+                              <div style={{
+                                position: 'absolute',
+                                bottom: '2px',
+                                right: '2px',
+                                width: '14px',
+                                height: '14px',
+                                background: '#10b981',
+                                border: '2.5px solid white',
+                                borderRadius: '50%',
+                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                              }} />
                             </div>
                           )}
-                          <div style={{ flex: 1 }}>
-                            <h3 style={{
-                              fontSize: '16px',
-                              fontWeight: 700,
-                              margin: '0 0 4px 0',
-                              color: 'var(--text-main)',
-                              letterSpacing: '-0.02em'
-                            }}>
-                              {user.name || 'User'}
-                            </h3>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                              <h3 style={{
+                                fontSize: '18px',
+                                fontWeight: 800,
+                                margin: 0,
+                                color: '#1a1a1a',
+                                letterSpacing: '-0.02em',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>
+                                {user.name ? user.name.split(' ')[0] : 'User'}
+                              </h3>
+                              {user.tier === 'PRO' && (
+                                <span style={{
+                                  padding: '2px 6px',
+                                  background: 'white',
+                                  color: 'black',
+                                  borderRadius: '4px',
+                                  fontSize: '9px',
+                                  fontWeight: 900,
+                                  letterSpacing: '0.05em',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                                  border: '1px solid rgba(0,0,0,0.1)'
+                                }}>
+                                  PRO
+                                </span>
+                              )}
+                            </div>
                             <p style={{
-                              fontSize: '12px',
+                              fontSize: '13px',
                               color: 'var(--text-dim)',
                               margin: 0,
-                              fontWeight: 500
+                              fontWeight: 500,
+                              opacity: 0.8,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
                             }}>
                               {user.email}
                             </p>
                           </div>
                         </div>
 
-                        {/* Tier Badge */}
+                        {/* Tier Badge / Status */}
                         <div style={{
-                          display: 'inline-flex',
+                          marginTop: '12px',
+                          display: 'flex',
                           alignItems: 'center',
                           gap: '8px',
-                          padding: '8px 14px',
-                          borderRadius: '24px',
-                          background: 'linear-gradient(135deg, rgba(196, 114, 30, 0.12) 0%, rgba(180, 83, 9, 0.06) 100%)',
-                          border: '1px solid rgba(196, 114, 30, 0.2)',
-                          marginBottom: '8px'
+                          position: 'relative',
+                          zIndex: 1
                         }}>
-                          <BadgeCheck size={14} color="var(--accent)" strokeWidth={2.5} />
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            color: 'var(--accent)',
-                            letterSpacing: '0.05em',
-                            textTransform: 'uppercase'
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 10px',
+                            background: 'rgba(124, 58, 237, 0.08)',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(124, 58, 237, 0.1)'
                           }}>
-                            {user.tier || 'Premium'} Member
-                          </span>
+                            <BadgeCheck size={12} color="#7c3aed" strokeWidth={2.5} />
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 800,
+                              color: '#7c3aed',
+                              letterSpacing: '0.04em'
+                            }}>
+                              AUTHENTICATED
+                            </span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Features Section */}
+                      {/* Autochekk - Premium Feature Card */}
+                      {/* AUTOCHEKK - Premium Feature Card */}
+                      <div
+                        onClick={() => {
+                          setAutoChekk(!autoChekk);
+                        }}
+                        style={{
+                          width: '100%',
+                          borderRadius: '16px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        {/* Background Layer with Overflow Hidden */}
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: '16px',
+                          background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
+                          overflow: 'hidden',
+                          zIndex: 0
+                        }}>
+                          {/* Decorative circle */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '-20px',
+                            right: '-20px',
+                            width: '90px',
+                            height: '90px',
+                            borderRadius: '50%',
+                            background: 'rgba(255,255,255,0.12)'
+                          }} />
+                        </div>
+
+                        {/* Content Layer with Overflow Visible (for Tooltip) */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '16px',
+                          position: 'relative',
+                          padding: '18px 20px',
+                          zIndex: 1
+                        }}>
+                          <div style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '14px',
+                            background: 'rgba(255, 255, 255, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backdropFilter: 'blur(8px)',
+                            flexShrink: 0,
+                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                          }}>
+                            <Binoculars size={22} color="white" strokeWidth={2} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{
+                              fontSize: '13px',
+                              fontWeight: 800,
+                              letterSpacing: '0.05em',
+                              textTransform: 'uppercase',
+                              marginBottom: '1px'
+                            }}>
+                              AUTOCHEKK
+                            </span>
+                            <span style={{ fontSize: '10px', opacity: 0.8, fontWeight: 500, letterSpacing: '0.01em', marginBottom: '4px' }}>
+                              Scan devs as you browse
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {user.tier !== 'PRO' && (
+                                <span style={{
+                                  fontSize: '8px',
+                                  fontWeight: 900,
+                                  color: '#1a1a1a',
+                                  background: 'white',
+                                  padding: '2px 6px',
+                                  borderRadius: '3px',
+                                  letterSpacing: '0.02em',
+                                  lineHeight: 1
+                                }}>
+                                  PRO
+                                </span>
+                              )}
+                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="autochekk-tooltip-wrapper">
+                                <Info
+                                  size={13}
+                                  color="white"
+                                  style={{ cursor: 'help', opacity: 0.7, transform: 'translateY(0.5px)' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <div className="autochekk-tooltip" style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  marginTop: '8px',
+                                  background: 'white',
+                                  color: 'var(--text-main)',
+                                  padding: '10px 12px',
+                                  borderRadius: '8px',
+                                  fontSize: '11px',
+                                  fontWeight: 500,
+                                  width: '200px',
+                                  textAlign: 'center',
+                                  lineHeight: 1.4,
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                  opacity: 0,
+                                  visibility: 'hidden',
+                                  transition: 'all 0.2s ease',
+                                  pointerEvents: 'none',
+                                  zIndex: 1000
+                                }}>
+                                  Automatically find and analyze Github profiles across all webpages you visit
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{
+                            width: '52px',
+                            height: '30px',
+                            borderRadius: '15px',
+                            background: autoChekk
+                              ? '#22c55e'
+                              : 'rgba(255,255,255,0.3)',
+                            position: 'relative',
+                            transition: 'all 0.3s ease',
+                            flexShrink: 0
+                          }}>
+                            <div style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              background: 'white',
+                              position: 'absolute',
+                              top: '3px',
+                              left: autoChekk ? '25px' : '3px',
+                              transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }} />
+                          </div>
+                        </div>
+                      </div>
+
+
+                      {/* Autochekk Live Activity Feed */}
+                      {autoChekk && (
+                        <div style={{
+                          marginTop: '12px',
+                          background: 'white',
+                          borderRadius: '12px',
+                          border: '1px solid var(--border)',
+                          padding: '16px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
+                          animation: 'fadeIn 0.3s ease-out'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <h4 style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: 'var(--text-dim)',
+                                margin: 0,
+                                letterSpacing: '0.05em',
+                                textTransform: 'uppercase',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}>
+                                <span style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  background: '#22c55e',
+                                  display: 'inline-block',
+                                  boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
+                                  animation: 'pulse 2s infinite'
+                                }}></span>
+                                LIVE ACTIVITY
+                              </h4>
+                            </div>
+
+                            {autochekkLogs.length > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  chrome.storage.local.set({ autochekk_logs: [] });
+                                  setAutochekkLogs([]);
+                                }}
+                                title="Clear Activity Log"
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'var(--text-dim)',
+                                  cursor: 'pointer',
+                                  padding: '4px',
+                                  borderRadius: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'background 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                  e.currentTarget.style.color = '#ef4444';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'none';
+                                  e.currentTarget.style.color = 'var(--text-dim)';
+                                }}
+                              >
+                                <Trash size={12} />
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            maxHeight: '160px',
+                            overflowY: 'auto',
+                            paddingRight: '4px'
+                          }}>
+                            {autochekkLogs.length === 0 ? (
+                              <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-dim)', fontSize: '11px' }}>
+                                Waiting for new profiles...
+                              </div>
+                            ) : (
+                              autochekkLogs.map((log) => (
+                                <div key={log.id} style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  padding: '8px',
+                                  borderRadius: '8px',
+                                  background: 'var(--bg-gray)',
+                                  fontSize: '11px'
+                                }}>
+                                  {log.type === 'discovery' && (
+                                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      <Search size={10} color="var(--text-dim)" />
+                                    </div>
+                                  )}
+                                  {log.type === 'resolution' && (
+                                    log.data?.avatar ? (
+                                      <img src={log.data.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0 }} />
+                                    ) : (
+                                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <User size={10} color="var(--text-main)" />
+                                      </div>
+                                    )
+                                  )}
+                                  {log.pending && (
+                                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, animation: 'pulse 1.5s infinite' }}>
+                                      <Loader2 size={10} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                                    </div>
+                                  )}
+                                  {log.type === 'analysis' && !log.pending && (
+                                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      <Zap size={10} color="var(--accent)" fill="var(--accent)" />
+                                    </div>
+                                  )}
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                    <span style={{ fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {log.pending
+                                        ? 'Analyzing...'
+                                        : log.type === 'analysis'
+                                          ? (log.data?.error
+                                            ? 'Analysis Failed'
+                                            : (log.data?.archetype ? `${log.data.archetype.replace(/^THE\s+/i, '')} DISCOVERED` : 'Analysis Complete'))
+                                          : log.type === 'resolution' ? 'Profile Found' : 'Email Detected'}
+                                    </span>
+                                    {log.type !== 'analysis' && (
+                                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {log.data?.error ? log.data.error : (log.data?.githubHandle ? `@${log.data.githubHandle}` : log.data?.email || log.message)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span style={{ fontSize: '9px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                                    {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Authentication Perks */}
                       <div style={{
                         background: 'white',
                         borderRadius: '16px',
@@ -1247,48 +1708,204 @@ function App() {
                           letterSpacing: '0.1em',
                           textTransform: 'uppercase'
                         }}>
-                          Your Benefits
+                          Authentication Perks
                         </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {[
-                            { icon: TrendingUp, label: 'Full Pipeline Analytics', active: true },
-                            { icon: Clock, label: 'Unlimited Search History', active: true },
-                            { icon: Layers, label: 'Archetype Distribution', active: true },
-                            { icon: Zap, label: 'Priority Processing', active: true },
-                          ].map((feature, idx) => (
-                            <div key={idx} style={{
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {/* Pipeline Analytics */}
+                          <button
+                            onClick={() => { setActiveTab('analytics'); }}
+                            style={{
+                              width: '100%',
+                              padding: '14px 16px',
+                              borderRadius: '12px',
+                              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.04) 100%)',
+                              border: '1px solid rgba(16, 185, 129, 0.2)',
+                              cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '12px',
-                              padding: '10px 12px',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
                               borderRadius: '10px',
-                              background: feature.active ? 'rgba(16, 185, 129, 0.06)' : 'var(--bg-gray)',
-                              border: feature.active ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid var(--border)'
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
                             }}>
-                              <div style={{
-                                width: '28px',
-                                height: '28px',
-                                borderRadius: '8px',
-                                background: feature.active ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-gray)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}>
-                                <feature.icon size={14} color={feature.active ? '#10b981' : 'var(--text-dim)'} strokeWidth={2} />
-                              </div>
-                              <span style={{
-                                fontSize: '12px',
-                                fontWeight: 600,
-                                color: feature.active ? 'var(--text-main)' : 'var(--text-dim)',
-                                flex: 1
-                              }}>
-                                {feature.label}
-                              </span>
-                              {feature.active && <BadgeCheck size={16} color="#10b981" strokeWidth={2.5} />}
+                              <TrendingUp size={18} color="#10b981" strokeWidth={2} />
                             </div>
-                          ))}
+                            <div style={{ textAlign: 'left', flex: 1 }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>
+                                Pipeline Analytics
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                View trends and archetypes
+                              </span>
+                            </div>
+                            <ChevronRight size={18} color="var(--text-dim)" />
+                          </button>
+
+                          {/* Get Free Chekks */}
+                          <button
+                            onClick={() => setShowInviteModal(true)}
+                            style={{
+                              width: '100%',
+                              padding: '14px 16px',
+                              borderRadius: '12px',
+                              background: 'linear-gradient(135deg, rgba(196, 114, 30, 0.08) 0%, rgba(180, 83, 9, 0.04) 100%)',
+                              border: '1px solid rgba(196, 114, 30, 0.2)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'rgba(196, 114, 30, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <Heart size={18} color="var(--accent)" strokeWidth={2} />
+                            </div>
+                            <div style={{ textAlign: 'left', flex: 1 }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>
+                                Get Free Chekks
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                Invite friends, earn +5 per signup
+                              </span>
+                            </div>
+                            <ChevronRight size={18} color="var(--text-dim)" />
+                          </button>
+
+                          {/* Claim Github */}
+                          <button
+                            onClick={() => window.open(`https://github.com/login/oauth/authorize?client_id=PLACEHOLDER&scope=repo,user`, '_blank')}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '14px 16px',
+                              borderRadius: '14px',
+                              background: 'rgba(36, 41, 46, 0.03)',
+                              border: '1px solid rgba(36, 41, 46, 0.1)',
+                              cursor: 'pointer',
+                              width: '100%',
+                              transition: 'all 0.2s ease',
+                              outline: 'none'
+                            }}
+                          >
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'rgba(36, 41, 46, 0.1)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <Code size={18} color="#24292e" strokeWidth={2} />
+                            </div>
+                            <div style={{ textAlign: 'left', flex: 1 }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>
+                                Claim Github
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                Boost reports with private repos
+                              </span>
+                            </div>
+                            <ChevronRight size={18} color="var(--text-dim)" />
+                          </button>
                         </div>
                       </div>
+
+                      {/* Upgrade to Pro Card */}
+                      {user.tier !== 'PRO' && (
+                        <div style={{
+                          background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
+                          borderRadius: '16px',
+                          padding: '24px',
+                          color: 'white',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          {/* Decorative circle */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '-30px',
+                            right: '-30px',
+                            width: '120px',
+                            height: '120px',
+                            borderRadius: '50%',
+                            background: 'rgba(255,255,255,0.1)'
+                          }} />
+
+                          <div style={{ marginBottom: '16px' }}>
+                            <h4 style={{ fontSize: '15px', fontWeight: 800, margin: '0', letterSpacing: '-0.01em' }}>
+                              Upgrade to <span style={{
+                                padding: '2px 6px',
+                                background: 'white',
+                                color: 'black',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 900,
+                                letterSpacing: '0.05em',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginLeft: '6px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                verticalAlign: 'middle',
+                                transform: 'translateY(-1px)'
+                              }}>PRO</span>
+                            </h4>
+                          </div>
+
+                          <div style={{ marginBottom: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+                              <BadgeCheck size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <span style={{ fontSize: '12px', fontWeight: 800, display: 'block', letterSpacing: '0.05em' }}>UNLIMITED</span>
+                                <span style={{ fontSize: '10px', opacity: 0.75 }}>No chekk limits, analyze your entire ATS</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <Zap size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>AUTOCHEKK</span>
+                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Scan for Github profiles as you browse</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => window.open('https://vibechekk.com/pricing', '_blank')}
+                            style={{
+                              width: '100%',
+                              padding: '14px',
+                              borderRadius: '10px',
+                              background: 'white',
+                              color: '#7c3aed',
+                              fontSize: '12px',
+                              fontWeight: 800,
+                              border: 'none',
+                              cursor: 'pointer',
+                              letterSpacing: '0.03em'
+                            }}
+                          >
+                            UPGRADE NOW
+                          </button>
+                        </div>
+                      )}
 
                       {/* Sign Out Button */}
                       <button
@@ -1297,20 +1914,33 @@ function App() {
                           width: '100%',
                           padding: '14px',
                           borderRadius: '12px',
-                          background: 'transparent',
-                          color: '#dc2626',
+                          background: 'linear-gradient(180deg, #c2410c 0%, #9a3412 100%)',
+                          color: 'white',
                           fontSize: '12px',
                           fontWeight: 700,
                           letterSpacing: '0.05em',
-                          border: '1px solid rgba(220, 38, 38, 0.2)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)',
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease',
+                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: '8px'
+                          gap: '10px',
+                          marginTop: '24px',
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.filter = 'brightness(1.1)';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 12px 24px -4px rgba(154, 52, 18, 0.4)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.filter = 'none';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)';
                         }}
                       >
+                        <LogOut size={16} strokeWidth={2.2} />
                         SIGN OUT
                       </button>
                     </div>
@@ -1397,7 +2027,7 @@ function App() {
                             { name: 'RARE', color: '#0891b2', glow: 'rgba(8, 145, 178, 0.2)' },
                             { name: 'UNCOMMON', color: '#059669', glow: 'rgba(5, 150, 105, 0.2)' },
                             { name: 'COMMON', color: '#6b7280', glow: 'rgba(107, 114, 128, 0.15)' }
-                          ].map((tier, i) => (
+                          ].map((tier) => (
                             <div
                               key={tier.name}
                               className="tier-showcase-badge"
@@ -1439,6 +2069,178 @@ function App() {
           </>
         )}
       </main>
+
+      {/* Invite Friends Modal */}
+      {
+        showInviteModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px'
+            }}
+            onClick={() => setShowInviteModal(false)}
+          >
+            <div
+              style={{
+                background: 'white',
+                borderRadius: '20px',
+                padding: '28px',
+                maxWidth: '340px',
+                width: '100%',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '20px',
+                  background: 'linear-gradient(135deg, var(--accent) 0%, #b45309 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px auto',
+                  boxShadow: '0 8px 24px rgba(196, 114, 30, 0.3)'
+                }}>
+                  <Heart size={28} color="white" strokeWidth={2} />
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', color: 'var(--text-main)' }}>
+                  Invite Friends
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
+                  Share your link. Each signup gives you <strong style={{ color: 'var(--accent)' }}>+5 free chekks</strong>!
+                </p>
+              </div>
+
+              <div style={{
+                background: 'var(--bg-gray)',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <div style={{
+                  flex: 1,
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  color: 'var(--text-main)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  vibechekk.com/r/{user?.id?.slice(0, 8) || 'invite'}
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://vibechekk.com/r/${user?.id?.slice(0, 8) || 'invite'}`);
+                    setCopiedId('modal-referral');
+                    setTimeout(() => setCopiedId(null), 2000);
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'var(--accent)',
+                    color: 'white',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {copiedId === 'modal-referral' ? (
+                    <><BadgeCheck size={14} /> COPIED</>
+                  ) : (
+                    <><Copy size={14} /> COPY</>
+                  )}
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowInviteModal(false)}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: 'var(--bg-gray)',
+                  color: 'var(--text-main)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Concurrent Analysis Modal */}
+      {
+        showConcurrentModal && (
+          <div className="modal-overlay" onClick={() => setShowConcurrentModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '320px', position: 'relative' }}>
+              <button
+                onClick={() => setShowConcurrentModal(false)}
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  color: 'var(--text-dim)'
+                }}
+              >
+                <X size={18} />
+              </button>
+
+              <div className="modal-body" style={{ textAlign: 'center', padding: '24px 8px 8px 8px' }}>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  background: 'rgba(124, 58, 237, 0.1)',
+                  borderRadius: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px auto'
+                }}>
+                  <Layers size={28} color="var(--accent)" strokeWidth={2} />
+                </div>
+                <h4 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 8px 0', color: '#1a1a1a' }}>Run Concurrent Analyses</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.5, margin: '0 0 24px 0' }}>
+                  Sign in to analyze multiple profiles at once and unlock your full pipeline speed.
+                </p>
+                <button
+                  className="primary-btn"
+                  onClick={() => {
+                    setShowConcurrentModal(false);
+                    setActiveTab('settings');
+                  }}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  Sign In to Unlock
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
     </div >
   );
 }

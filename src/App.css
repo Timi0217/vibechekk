@@ -674,6 +674,12 @@ main {
   transform: translateX(-50%) translateY(4px);
 }
 
+/* Autochekk Tooltip */
+.autochekk-tooltip-wrapper:hover .autochekk-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 .history-action-icon {
   opacity: 0.4;
   transition: all 0.2s ease;
@@ -779,8 +785,11 @@ main {
   gap: 20px;
   max-height: 480px;
   overflow-y: auto;
+  overflow-x: hidden;
   width: 100%;
   padding-bottom: 24px;
+  padding-right: 4px;
+  /* Compensate for scrollbar */
 }
 
 /* Upgrade Pro Button - Subtle Modern Edition */

@@ -56,7 +56,7 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
     try {
         const decoded: any = jwt.verify(token, JWT_SECRET);
         const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
-        if (!user) return next();
+        if (!user) return res.status(401).json({ success: false, error: 'User session invalid' });
 
         const now = new Date();
         const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -168,6 +168,16 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
 
         if (candidate && candidate.reports && candidate.reports.length > 0) {
             const lastReport = candidate.reports[0];
+            const thirtyMinAgo = new Date();
+            thirtyMinAgo.setMinutes(thirtyMinAgo.getMinutes() - 30);
+
+            // If the report was created less than 30 minutes ago, return it immediately
+            // This prevents rapid-fire duplicate analysis
+            if (lastReport.createdAt > thirtyMinAgo) {
+                console.log(`[Deduplication] Returning fresh report for ${githubUrl} (Created ${Math.floor((new Date().getTime() - lastReport.createdAt.getTime()) / 1000)}s ago)`);
+                return res.json({ success: true, data: lastReport, cached: true, isPro });
+            }
+
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
