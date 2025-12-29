@@ -269,23 +269,40 @@ function App() {
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true)
     try {
-      // Attempt real chrome identity first
-      let token = 'mock-google-token'
-      try {
-        const auth = await chrome.identity.getAuthToken({ interactive: true })
-        if (auth && auth.token) token = auth.token
-      } catch (e) {
-        console.warn('Chrome identity call failed (client_id probably not set), using dev bypass')
+      // Get real Google OAuth token using Chrome Identity API
+      const auth = await chrome.identity.getAuthToken({ interactive: true })
+
+      if (!auth || !auth.token) {
+        throw new Error('Failed to get authentication token')
       }
 
+      const token = auth.token
+
+      // Fetch user profile from Google
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      if (!profileRes.ok) {
+        throw new Error('Failed to fetch Google profile')
+      }
+
+      const profile = await profileRes.json()
+
+      // Send to backend for user creation/login
       const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({
+          token,
+          email: profile.email,
+          name: profile.name,
+          picture: profile.picture
+        })
       })
 
       if (!res.ok) {
-        throw new Error(`Server responded with ${res.status}. If you haven't deployed your local server changes to Railway yet, this endpoint won't exist there.`)
+        throw new Error(`Server responded with ${res.status}`)
       }
 
       const data = await res.json()
@@ -305,6 +322,9 @@ function App() {
       setIsLoggingIn(false)
     }
   }
+
+
+
 
   const logout = () => {
     chrome.storage.local.remove(['vibe_token', 'user_data'], () => {
@@ -724,7 +744,7 @@ function App() {
                     }}
                   >
                     <FileDown size={16} />
-                    {user ? 'DOWNLOAD REPORT CARD' : 'SIGN IN TO DOWNLOAD'}
+                    DOWNLOAD REPORT CARD
                   </button>
                 </div>
               )}
@@ -1055,7 +1075,48 @@ function App() {
                                 );
                               })
                           ) : (
-                            <p className="footer-info">No data for this tier yet.</p>
+                            <div style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '48px 24px',
+                              textAlign: 'center',
+                              gap: '16px'
+                            }}>
+                              <div style={{
+                                width: '64px',
+                                height: '64px',
+                                borderRadius: '20px',
+                                background: 'linear-gradient(135deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.06) 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1px dashed var(--border)'
+                              }}>
+                                <Search size={28} color="var(--text-dim)" strokeWidth={1.5} style={{ opacity: 0.5 }} />
+                              </div>
+                              <div>
+                                <p style={{
+                                  fontSize: '13px',
+                                  fontWeight: 700,
+                                  color: 'var(--text-main)',
+                                  margin: '0 0 6px 0',
+                                  letterSpacing: '-0.01em'
+                                }}>
+                                  No {tierFilter || 'profiles'} discovered yet
+                                </p>
+                                <p style={{
+                                  fontSize: '11px',
+                                  color: 'var(--text-dim)',
+                                  margin: 0,
+                                  fontWeight: 500,
+                                  lineHeight: 1.5
+                                }}>
+                                  Run analyses to populate your pipeline
+                                </p>
+                              </div>
+                            </div>
                           )}
                         </div>
 
@@ -1090,10 +1151,168 @@ function App() {
                 <div className="settings-group">
                   <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHORIZATION REQUIRED'}</h2>
                   {user ? (
-                    <div className="auth-status-card" style={{ width: '100%', maxWidth: '100%' }}>
-                      <p className="footer-info" style={{ color: 'var(--text-main)', marginBottom: '8px' }}>Connected as <strong>{user.name || user.email}</strong></p>
-                      <p style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 600, marginBottom: '16px' }}>✓ Premium Analytics Active</p>
-                      <button className="secondary-btn logout-btn" onClick={logout}>SIGN OUT</button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {/* Account Card */}
+                      <div style={{
+                        background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
+                        borderRadius: '16px',
+                        padding: '24px',
+                        border: '1px solid var(--border)',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                          {user.picture ? (
+                            <img
+                              src={user.picture}
+                              alt={user.name}
+                              style={{
+                                width: '56px',
+                                height: '56px',
+                                borderRadius: '16px',
+                                border: '2px solid var(--accent)',
+                                boxShadow: '0 4px 12px rgba(196, 114, 30, 0.2)'
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '56px',
+                              height: '56px',
+                              borderRadius: '16px',
+                              background: 'linear-gradient(135deg, var(--accent) 0%, #b45309 100%)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 4px 12px rgba(196, 114, 30, 0.3)'
+                            }}>
+                              <User size={28} color="white" strokeWidth={2} />
+                            </div>
+                          )}
+                          <div style={{ flex: 1 }}>
+                            <h3 style={{
+                              fontSize: '16px',
+                              fontWeight: 700,
+                              margin: '0 0 4px 0',
+                              color: 'var(--text-main)',
+                              letterSpacing: '-0.02em'
+                            }}>
+                              {user.name || 'User'}
+                            </h3>
+                            <p style={{
+                              fontSize: '12px',
+                              color: 'var(--text-dim)',
+                              margin: 0,
+                              fontWeight: 500
+                            }}>
+                              {user.email}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Tier Badge */}
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 14px',
+                          borderRadius: '24px',
+                          background: 'linear-gradient(135deg, rgba(196, 114, 30, 0.12) 0%, rgba(180, 83, 9, 0.06) 100%)',
+                          border: '1px solid rgba(196, 114, 30, 0.2)',
+                          marginBottom: '8px'
+                        }}>
+                          <BadgeCheck size={14} color="var(--accent)" strokeWidth={2.5} />
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            color: 'var(--accent)',
+                            letterSpacing: '0.05em',
+                            textTransform: 'uppercase'
+                          }}>
+                            {user.tier || 'Premium'} Member
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Features Section */}
+                      <div style={{
+                        background: 'white',
+                        borderRadius: '16px',
+                        padding: '20px',
+                        border: '1px solid var(--border)'
+                      }}>
+                        <h4 style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: 'var(--text-dim)',
+                          margin: '0 0 16px 0',
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase'
+                        }}>
+                          Your Benefits
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {[
+                            { icon: TrendingUp, label: 'Full Pipeline Analytics', active: true },
+                            { icon: Clock, label: 'Unlimited Search History', active: true },
+                            { icon: Layers, label: 'Archetype Distribution', active: true },
+                            { icon: Zap, label: 'Priority Processing', active: true },
+                          ].map((feature, idx) => (
+                            <div key={idx} style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '10px 12px',
+                              borderRadius: '10px',
+                              background: feature.active ? 'rgba(16, 185, 129, 0.06)' : 'var(--bg-gray)',
+                              border: feature.active ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid var(--border)'
+                            }}>
+                              <div style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '8px',
+                                background: feature.active ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-gray)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                <feature.icon size={14} color={feature.active ? '#10b981' : 'var(--text-dim)'} strokeWidth={2} />
+                              </div>
+                              <span style={{
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: feature.active ? 'var(--text-main)' : 'var(--text-dim)',
+                                flex: 1
+                              }}>
+                                {feature.label}
+                              </span>
+                              {feature.active && <BadgeCheck size={16} color="#10b981" strokeWidth={2.5} />}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Sign Out Button */}
+                      <button
+                        onClick={logout}
+                        style={{
+                          width: '100%',
+                          padding: '14px',
+                          borderRadius: '12px',
+                          background: 'transparent',
+                          color: '#dc2626',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          letterSpacing: '0.05em',
+                          border: '1px solid rgba(220, 38, 38, 0.2)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        SIGN OUT
+                      </button>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
