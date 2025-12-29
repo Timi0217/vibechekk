@@ -11,6 +11,7 @@ model User {
   id          String           @id @default(cuid())
   email       String           @unique
   name        String?
+  picture     String?
   tier        SubscriptionTier @default(GUEST)
   usageCount  Int              @default(0)
   lastResetAt DateTime         @default(now())

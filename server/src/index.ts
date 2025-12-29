@@ -120,24 +120,25 @@ app.post('/api/auth/ats', async (req, res) => {
 });
 
 app.post('/api/auth/google', async (req, res) => {
-    const { token } = req.body;
+    const { token, email, name, picture } = req.body;
     if (!token) return res.status(401).json({ success: false, error: 'No token provided' });
 
-    // In production, verify this token with Google:
-    // https://www.googleapis.com/oauth2/v3/tokeninfo?id_token={token}
-
-    // Mocking a successful Google user for now
-    const mockUser = {
-        email: 'timi@test.com',
-        name: 'Timi Creator'
-    };
+    // Use real Google profile data sent from extension
+    if (!email) {
+        return res.status(400).json({ success: false, error: 'Email is required' });
+    }
 
     const user = await prisma.user.upsert({
-        where: { email: mockUser.email },
-        update: { tier: 'AUTHENTICATED' },
+        where: { email },
+        update: {
+            tier: 'AUTHENTICATED',
+            name: name || undefined,
+            picture: picture || undefined
+        },
         create: {
-            email: mockUser.email,
-            name: mockUser.name,
+            email,
+            name: name || 'User',
+            picture: picture || null,
             tier: 'AUTHENTICATED'
         }
     });
