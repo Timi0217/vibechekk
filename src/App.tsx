@@ -83,6 +83,34 @@ const getRarityClass = (rarity: string) => {
   return 'common';
 }
 
+// Map archetype labels to their rarity tiers (fallback when rarity not set)
+const getRarityFromLabel = (label: string): string => {
+  const l = label?.toUpperCase() || '';
+  // LEGENDARY tier
+  if (l.includes('TITAN') || l.includes('PIONEER') || l.includes('VISIONARY')) return 'LEGENDARY';
+  // ULTRA RARE tier
+  if (l.includes('ARCHITECT') || l.includes('PRODIGY') || l.includes('SPECIALIST')) return 'ULTRA RARE';
+  // RARE tier
+  if (l.includes('HIDDEN GEM') || l.includes('MAINTAINER') || l.includes('CONTRIBUTOR')) return 'RARE';
+  // UNCOMMON tier
+  if (l.includes('BUILDER') || l.includes('CRAFTSPERSON') || l.includes('TINKERER')) return 'UNCOMMON';
+  // COMMON tier
+  return 'COMMON';
+}
+
+const getRarityColor = (rarity: string, label?: string) => {
+  // If rarity not set properly, derive from label
+  let r = rarity?.toUpperCase();
+  if (!r || r === 'UNKNOWN' || r === 'UNDEFINED') {
+    r = getRarityFromLabel(label || '');
+  }
+  if (r === 'LEGENDARY') return '#f59e0b';
+  if (r === 'ULTRA RARE') return '#8b5cf6';
+  if (r === 'RARE') return '#3b82f6';
+  if (r === 'UNCOMMON') return '#10b981';
+  return '#64748b';
+}
+
 const pluralizeArchetype = (name: string) => {
   if (!name) return name;
   // Strip "THE " prefix
@@ -124,6 +152,9 @@ function App() {
   const [showConcurrentModal, setShowConcurrentModal] = useState(false)
   const [autoChekk, setAutoChekk] = useState(false)
   const [autochekkLogs, setAutochekkLogs] = useState<any[]>([])
+  const [pendingAnalyses, setPendingAnalyses] = useState<{ handle: string, avatar: string, timestamp: number }[]>([])
+  const [githubLinked, setGithubLinked] = useState(false)
+  const [githubUsername, setGithubUsername] = useState<string | null>(null)
   const activeTabRef = useRef(activeTab)
 
   useEffect(() => {
@@ -143,31 +174,38 @@ function App() {
 
     const listener = (changes: any) => {
       if (changes.autochekk_logs) {
-        setAutochekkLogs(changes.autochekk_logs.newValue)
-      }
-    };
+        const logs = changes.autochekk_logs.newValue || [];
+        setAutochekkLogs(logs);
 
-    // Listen for Runtime Messages (e.g. Analysis Started)
-    const messageListener = (message: any) => {
-      if (message.type === 'ANALYSIS_STARTED') {
-        const pendingLog = {
-          id: `pending-${message.handle}`,
-          type: 'analysis',
-          pending: true,
-          message: `Analyzing ${message.handle}...`,
-          timestamp: Date.now(),
-          data: { githubHandle: message.handle }
-        };
-        setAutochekkLogs(prev => [pendingLog, ...prev.filter(l => l.data?.githubHandle !== message.handle)]);
+        // Get handles that have completed (success or failure) - these have analysis entries WITHOUT analyzing flag
+        const completedHandles = new Set(
+          logs
+            .filter((l: any) => l.type === 'analysis' && !l.data?.analyzing)
+            .map((l: any) => l.data?.githubHandle?.toLowerCase())
+        );
+
+        // Track analyzing entries for History skeleton cards, excluding completed ones
+        const analyzing = logs
+          .filter((l: any) => l.type === 'analysis' && l.data?.analyzing)
+          .filter((l: any) => !completedHandles.has(l.data?.githubHandle?.toLowerCase()))
+          .filter((l: any) => {
+            // Filter out stale analyses (> 3 minutes old) to prevent stuck loading states
+            const age = Date.now() - (l.timestamp || 0);
+            return age < 3 * 60 * 1000;
+          })
+          .map((l: any) => ({
+            handle: l.data?.githubHandle,
+            avatar: '',
+            timestamp: l.timestamp
+          }));
+        setPendingAnalyses(analyzing);
       }
     };
 
     chrome.storage.onChanged.addListener(listener);
-    chrome.runtime.onMessage.addListener(messageListener);
 
     return () => {
       chrome.storage.onChanged.removeListener(listener);
-      chrome.runtime.onMessage.removeListener(messageListener);
     };
   }, [])
 
@@ -186,7 +224,7 @@ function App() {
   }
 
   useEffect(() => {
-    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data'], (res) => {
+    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data', 'auth_token'], (res) => {
       setTokens({
         github: (res.github_token as string) || '',
         deepseek: (res.deepseek_key as string) || '',
@@ -197,12 +235,44 @@ function App() {
       } else {
         setUser(null)
       }
+      // Check if GitHub has been linked (auth_token is set by GitHub OAuth flow)
+      if (res.auth_token) {
+        setGithubLinked(true)
+      }
+      // Get GitHub username from user_data - try multiple sources
+      if (res.user_data?.githubLogin) {
+        setGithubUsername(res.user_data.githubLogin)
+      } else if (res.user_data?.email?.endsWith('@github.no-email')) {
+        // Extract username from generated email like "username@github.no-email"
+        setGithubUsername(res.user_data.email.replace('@github.no-email', ''))
+      } else if (res.auth_token && res.user_data?.name) {
+        // Fallback to name if GitHub auth exists but no githubLogin field
+        setGithubUsername(res.user_data.name)
+      }
       setAuthLoading(false)
     })
+
+    // Listen for storage changes (e.g., when GitHub auth completes in another tab)
+    const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.auth_token && changes.auth_token.newValue) {
+        setGithubLinked(true)
+      }
+      if (changes.user_data && changes.user_data.newValue) {
+        setUser(changes.user_data.newValue)
+        // Update GitHub username when user_data changes
+        if (changes.user_data.newValue?.githubLogin) {
+          setGithubUsername(changes.user_data.newValue.githubLogin)
+        }
+      }
+    }
+    chrome.storage.onChanged.addListener(storageListener)
 
     if (activeTab === 'history') fetchHistory()
     if (activeTab === 'analytics') fetchAnalytics()
 
+    return () => {
+      chrome.storage.onChanged.removeListener(storageListener)
+    }
   }, [activeTab, tierFilter])
 
   const fetchHistory = async () => {
@@ -558,7 +628,7 @@ function App() {
                               </div>
                               <div className="archetype-tooltip">
                                 <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
-                                {selectedReport.archetype_reason || 'Analysis based on GitHub activity.'}
+                                {selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.'}
                               </div>
                             </div>
                             {selectedReport.rarity_percentile && (
@@ -919,8 +989,10 @@ function App() {
                     position: 'relative'
                   }}
                     onClick={() => {
-                      setShowInviteModal(true);
                       setActiveTab('settings');
+                      if (user) {
+                        setShowInviteModal(true);
+                      }
                     }}
                   >
                     INVITE FRIENDS
@@ -978,11 +1050,65 @@ function App() {
                     ? history.filter((item: any) => item.label?.toUpperCase() === archetypeFilter.toUpperCase())
                     : history;
 
-                  if (filteredHistory.length === 0) {
+                  // Get handles that already have results in history
+                  const completedHandles = new Set(history.map((item: any) =>
+                    (item.candidate?.githubHandle || item.githubHandle || '').toLowerCase()
+                  ));
+
+                  // Combine BOTH manual (pendingHandles) and autochekk (pendingAnalyses) into one list
+                  const allPending = [
+                    ...pendingHandles.map(h => ({ handle: h, avatar: '', timestamp: Date.now() })),
+                    ...pendingAnalyses
+                  ];
+
+                  // Filter out skeleton cards for handles that already have results
+                  const activePending = allPending.filter(p =>
+                    !completedHandles.has(p.handle?.toLowerCase())
+                  );
+
+                  // Skeleton cards for pending analyses (only those not in history yet)
+                  const skeletonCards = activePending.map((pending, i) => (
+                    <div key={`pending-${pending.handle}-${i}`} className="history-item" style={{ opacity: 0.8, animation: 'pulse 1.5s infinite' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                        {pending.handle ? (
+                          <img
+                            src={`https://github.com/${pending.handle}.png?size=40`}
+                            alt={pending.handle}
+                            className="history-avatar"
+                            style={{ opacity: 0.7 }}
+                          />
+                        ) : (
+                          <div className="history-avatar-placeholder">
+                            <Loader2 size={20} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                          </div>
+                        )}
+                        <div className="history-meta">
+                          <span className="history-name">{pending.handle || 'Analyzing...'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Loader2 size={12} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                            <div style={{
+                              background: 'linear-gradient(90deg, var(--border) 25%, var(--bg-gray) 50%, var(--border) 75%)',
+                              backgroundSize: '200% 100%',
+                              animation: 'shimmer 1.5s infinite',
+                              borderRadius: '6px',
+                              padding: '4px 10px',
+                              fontSize: '10px',
+                              color: 'var(--text-dim)'
+                            }}>
+                              ANALYZING...
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight size={14} color="var(--text-dim)" />
+                    </div>
+                  ));
+
+                  if (filteredHistory.length === 0 && pendingAnalyses.length === 0) {
                     return <p className="footer-info">{archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No reports found.'}</p>;
                   }
 
-                  return filteredHistory.map((item: any, i: number) => {
+                  const historyCards = filteredHistory.map((item: any, i: number) => {
                     const handle = item.candidate?.githubHandle || item.githubHandle || '';
                     return (
                       <div key={i} className={`history-item ${getRarityClass(item.rarity)}`} onClick={() => handleOpenReport(item)}>
@@ -1002,7 +1128,17 @@ function App() {
                             <span className="history-name">{handle || 'Guest Profile'}</span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <ArchetypeIcon label={item.label || 'Profile'} rarity={item.rarity} size={12} />
-                              <div className={`archetype-badge ${getRarityClass(item.rarity)}`}>
+                              <div style={{
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                letterSpacing: '0.5px',
+                                textTransform: 'uppercase',
+                                color: getRarityColor(item.rarity, item.label),
+                                background: `${getRarityColor(item.rarity, item.label)}15`,
+                                border: `1px solid ${getRarityColor(item.rarity, item.label)}30`
+                              }}>
                                 {stripThe(item.label) || 'Profile'}
                               </div>
                             </div>
@@ -1014,6 +1150,8 @@ function App() {
                       </div>
                     );
                   });
+
+                  return <>{skeletonCards}{historyCards}</>;
                 })()}
               </div>
             )}
@@ -1338,14 +1476,14 @@ function App() {
                               {user.tier === 'PRO' && (
                                 <span style={{
                                   padding: '2px 6px',
-                                  background: 'white',
-                                  color: 'black',
+                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                  color: '#1a1a1a',
                                   borderRadius: '4px',
                                   fontSize: '9px',
                                   fontWeight: 900,
                                   letterSpacing: '0.05em',
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                                  border: '1px solid rgba(0,0,0,0.1)'
+                                  boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+                                  border: '1px solid rgba(217, 119, 6, 0.5)'
                                 }}>
                                   PRO
                                 </span>
@@ -1468,7 +1606,7 @@ function App() {
                               AUTOCHEKK
                             </span>
                             <span style={{ fontSize: '10px', opacity: 0.8, fontWeight: 500, letterSpacing: '0.01em', marginBottom: '4px' }}>
-                              Scan devs as you browse
+                              Chekk devs as you browse
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {user.tier !== 'PRO' && (
@@ -1476,7 +1614,7 @@ function App() {
                                   fontSize: '8px',
                                   fontWeight: 900,
                                   color: '#1a1a1a',
-                                  background: 'white',
+                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                                   padding: '2px 6px',
                                   borderRadius: '3px',
                                   letterSpacing: '0.02em',
@@ -1581,7 +1719,7 @@ function App() {
                                   boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
                                   animation: 'pulse 2s infinite'
                                 }}></span>
-                                LIVE ACTIVITY
+                                ACTIVITY FEED
                               </h4>
                             </div>
 
@@ -1589,8 +1727,18 @@ function App() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  chrome.storage.local.set({ autochekk_logs: [] });
+                                  // Clear both visual logs AND dedup cache for fresh testing
+                                  chrome.storage.local.set({ autochekk_logs: [], dedup_cache: [] });
                                   setAutochekkLogs([]);
+                                  setPendingAnalyses([]);
+                                  // Also notify content scripts to clear their in-memory caches
+                                  chrome.tabs.query({}, (tabs) => {
+                                    tabs.forEach(tab => {
+                                      if (tab.id) {
+                                        chrome.tabs.sendMessage(tab.id, { type: 'CLEAR_SCANNED_CACHE' }).catch(() => { });
+                                      }
+                                    });
+                                  });
                                 }}
                                 title="Clear Activity Log"
                                 style={{
@@ -1656,12 +1804,12 @@ function App() {
                                       </div>
                                     )
                                   )}
-                                  {log.pending && (
-                                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, animation: 'pulse 1.5s infinite' }}>
-                                      <Loader2 size={10} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                                  {log.data?.analyzing && (
+                                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      <Clock size={10} color="var(--accent)" />
                                     </div>
                                   )}
-                                  {log.type === 'analysis' && !log.pending && (
+                                  {log.type === 'analysis' && !log.data?.analyzing && (
                                     <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                       <Zap size={10} color="var(--accent)" fill="var(--accent)" />
                                     </div>
@@ -1669,7 +1817,7 @@ function App() {
 
                                   <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                                     <span style={{ fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {log.pending
+                                      {log.data?.analyzing
                                         ? 'Analyzing...'
                                         : log.type === 'analysis'
                                           ? (log.data?.error
@@ -1677,9 +1825,9 @@ function App() {
                                             : (log.data?.archetype ? `${log.data.archetype.replace(/^THE\s+/i, '')} DISCOVERED` : 'Analysis Complete'))
                                           : log.type === 'resolution' ? 'Profile Found' : 'Email Detected'}
                                     </span>
-                                    {log.type !== 'analysis' && (
+                                    {log.type === 'discovery' && (
                                       <span style={{ fontSize: '10px', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {log.data?.error ? log.data.error : (log.data?.githubHandle ? `@${log.data.githubHandle}` : log.data?.email || log.message)}
+                                        {log.data?.email || log.message}
                                       </span>
                                     )}
                                   </div>
@@ -1788,43 +1936,126 @@ function App() {
                           </button>
 
                           {/* Claim Github */}
-                          <button
-                            onClick={() => window.open(`https://github.com/login/oauth/authorize?client_id=PLACEHOLDER&scope=repo,user`, '_blank')}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              padding: '14px 16px',
-                              borderRadius: '14px',
-                              background: 'rgba(36, 41, 46, 0.03)',
-                              border: '1px solid rgba(36, 41, 46, 0.1)',
-                              cursor: 'pointer',
-                              width: '100%',
-                              transition: 'all 0.2s ease',
-                              outline: 'none'
-                            }}
-                          >
-                            <div style={{
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '10px',
-                              background: 'rgba(36, 41, 46, 0.1)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <Code size={18} color="#24292e" strokeWidth={2} />
-                            </div>
-                            <div style={{ textAlign: 'left', flex: 1 }}>
-                              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>
-                                Claim Github
-                              </span>
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                                Boost reports with private repos
-                              </span>
-                            </div>
-                            <ChevronRight size={18} color="var(--text-dim)" />
-                          </button>
+                          <div style={{ position: 'relative' }}>
+                            <button
+                              onClick={() => {
+                                if (!githubLinked) {
+                                  const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID || 'PLACEHOLDER';
+                                  window.open(`https://github.com/login/oauth/authorize?client_id=${clientId}`, '_blank');
+                                }
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '14px 16px',
+                                borderRadius: '14px',
+                                background: githubLinked ? 'rgba(71, 85, 105, 0.12)' : 'rgba(36, 41, 46, 0.03)',
+                                border: githubLinked ? '1px solid rgba(71, 85, 105, 0.4)' : '1px solid rgba(36, 41, 46, 0.1)',
+                                cursor: githubLinked ? 'default' : 'pointer',
+                                width: '100%',
+                                transition: 'all 0.2s ease',
+                                outline: 'none'
+                              }}
+                            >
+                              <div style={{
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '10px',
+                                background: githubLinked ? 'rgba(71, 85, 105, 0.25)' : 'rgba(36, 41, 46, 0.1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                {githubLinked ? (
+                                  <BadgeCheck size={18} color="#475569" strokeWidth={2} />
+                                ) : (
+                                  <Code size={18} color="#24292e" strokeWidth={2} />
+                                )}
+                              </div>
+                              <div style={{ textAlign: 'left', flex: 1 }}>
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>
+                                  {githubLinked ? 'GitHub Claimed' : 'Claim Github'}
+                                </span>
+                                {githubLinked ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      chrome.storage.local.remove(['auth_token'], () => {
+                                        setGithubLinked(false);
+                                        setGithubUsername(null);
+                                      });
+                                    }}
+                                    style={{
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      background: '#18181b',
+                                      border: '1px solid #27272a',
+                                      cursor: 'pointer',
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      color: 'white',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.3px',
+                                      lineHeight: 1.2,
+                                      marginTop: '4px'
+                                    }}
+                                  >
+                                    Unclaim
+                                  </button>
+                                ) : (
+                                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                    Boost reports with private repos
+                                  </span>
+                                )}
+                              </div>
+                              {githubLinked ? (
+                                <div
+                                  className="github-info-tooltip"
+                                  style={{
+                                    position: 'relative',
+                                    cursor: 'help',
+                                    opacity: 0.5,
+                                    display: 'flex',
+                                    alignItems: 'center'
+                                  }}
+                                >
+                                  <Info size={18} color="var(--text-dim)" strokeWidth={2} />
+                                  <div
+                                    className="tooltip-content"
+                                    style={{
+                                      position: 'absolute',
+                                      bottom: '100%',
+                                      right: '0',
+                                      marginBottom: '6px',
+                                      padding: '6px 10px',
+                                      background: '#18181b',
+                                      color: 'white',
+                                      fontSize: '11px',
+                                      fontWeight: 500,
+                                      borderRadius: '6px',
+                                      whiteSpace: 'nowrap',
+                                      opacity: 0,
+                                      visibility: 'hidden',
+                                      transition: 'opacity 0.15s ease, visibility 0.15s ease',
+                                      pointerEvents: 'none',
+                                      zIndex: 100
+                                    }}
+                                  >
+                                    @{githubUsername || 'your account'}
+                                  </div>
+                                  <style>{`
+                                    .github-info-tooltip:hover .tooltip-content {
+                                      opacity: 1 !important;
+                                      visibility: visible !important;
+                                    }
+                                  `}</style>
+                                </div>
+                              ) : (
+                                <ChevronRight size={18} color="var(--text-dim)" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -1853,8 +2084,8 @@ function App() {
                             <h4 style={{ fontSize: '15px', fontWeight: 800, margin: '0', letterSpacing: '-0.01em' }}>
                               Upgrade to <span style={{
                                 padding: '2px 6px',
-                                background: 'white',
-                                color: 'black',
+                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                color: '#1a1a1a',
                                 borderRadius: '4px',
                                 fontSize: '11px',
                                 fontWeight: 900,
@@ -1863,7 +2094,7 @@ function App() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 marginLeft: '6px',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
                                 verticalAlign: 'middle',
                                 transform: 'translateY(-1px)'
                               }}>PRO</span>

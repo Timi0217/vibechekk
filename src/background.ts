@@ -28,6 +28,13 @@ async function addToDedupCache(type: string, value: string) {
     }
 }
 
+// Helper to clear local cache (for testing/reset)
+async function clearLocalCache() {
+    await chrome.storage.local.remove(['dedup_cache', 'autochekk_logs']);
+    processedEmails.clear();
+    console.log('[Background] Local cache cleared');
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'START_VIBE_CHECK') {
         const handleMatch = request.url.match(/github\.com\/([^/]+)/);
@@ -40,14 +47,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     console.log(`[Autochekk] Skipping existing profile (History): ${handle}`);
                     sendResponse({ success: true, cached: true });
                 } else {
-                    processVibeCheck(request.url, handle, sendResponse, request.avatar);
+                    processVibeCheck(request.url, handle, sendResponse, request.avatar, true); // isAutochekk = true
                 }
             });
             return true;
         }
 
-        // Manual scans always proceed
-        processVibeCheck(request.url, handle, sendResponse, request.avatar);
+        // Manual scans - don't log to Live Activity
+        processVibeCheck(request.url, handle, sendResponse, request.avatar, false); // isAutochekk = false
         return true;
     }
 
@@ -55,42 +62,62 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         handleEmailDiscovery(request.emails, sender.tab?.id);
         return false; // No immediate response needed
     }
+
+    // Clear local cache handler (for testing/reset)
+    if (request.type === 'CLEAR_LOCAL_CACHE') {
+        clearLocalCache().then(() => {
+            sendResponse({ success: true });
+        });
+        return true;
+    }
 });
 
-function processVibeCheck(url: string, handle: string, sendResponse: any, avatar: string = '') {
+async function processVibeCheck(url: string, handle: string, sendResponse: any, avatar: string = '', isAutochekk: boolean = false) {
     // Cache immediately to prevent race conditions during analysis
     addToDedupCache('analysis', handle);
 
-    // Explicitly log "Profile Found" for direct visits (as requested)
-    logActivity('resolution', `Profile Found: ${handle}`, { githubHandle: handle, avatar });
+    // Only log to Live Activity for Autochekk scans
+    if (isAutochekk) {
+        // Log "Profile Found" FIRST - await to ensure order
+        await logActivity('resolution', `Profile Found: ${handle}`, { githubHandle: handle, avatar });
 
-    // Notify UI to show pending card
-    chrome.runtime.sendMessage({
-        type: 'ANALYSIS_STARTED',
-        handle
-    }).catch(() => { }); // Ignore error if popup is closed
+        // Then log "Analyzing..." - await to ensure it appears after Profile Found
+        await logActivity('analysis', `Analyzing ${handle}...`, { githubHandle: handle, analyzing: true });
+    }
 
     handleVibeCheck(url).then(async (res) => {
-        if (!res.success) {
-            logActivity('analysis', `Failed to analyze ${handle}`, { error: res.error });
-            // Optional: Remove from cache if failed so it can be retried?
-            // For now, let's keep it to prevent spamming errors.
+        if (!res.success && isAutochekk) {
+            logActivity('analysis', `Failed to analyze ${handle}`, { error: res.error, githubHandle: handle });
         }
         sendResponse(res);
     });
 }
 
+// Simple lock for atomic log writes
+let logLock: Promise<void> = Promise.resolve();
+
 async function logActivity(type: 'discovery' | 'resolution' | 'analysis', message: string, data?: any) {
-    const timestamp = Date.now();
-    const logItem = { id: crypto.randomUUID(), type, message, data, timestamp };
+    // Wait for any previous log to finish
+    await logLock;
 
-    const res = await chrome.storage.local.get(['autochekk_logs']);
-    const logs = res.autochekk_logs || [];
+    // Create a new lock that will resolve when this write completes
+    let unlock: () => void;
+    logLock = new Promise(resolve => { unlock = resolve; });
 
-    // Simple 50-item cap, deduplication handled by callers
-    const newLogs = [logItem, ...logs].slice(0, 50);
+    try {
+        const timestamp = Date.now();
+        const logItem = { id: crypto.randomUUID(), type, message, data, timestamp };
 
-    await chrome.storage.local.set({ autochekk_logs: newLogs });
+        const res = await chrome.storage.local.get(['autochekk_logs']);
+        const logs = res.autochekk_logs || [];
+
+        // Simple 50-item cap, deduplication handled by callers
+        const newLogs = [logItem, ...logs].slice(0, 50);
+
+        await chrome.storage.local.set({ autochekk_logs: newLogs });
+    } finally {
+        unlock!();
+    }
 }
 
 async function handleEmailDiscovery(emails: string[], tabId?: number) {

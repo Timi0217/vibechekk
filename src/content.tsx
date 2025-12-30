@@ -226,6 +226,8 @@ let isAutochekkEnabled = false;
 let scannedEmails = new Set<string>();
 let scannedProfiles = new Set<string>();
 let scanTimeout: any = null;
+let lastScannedHandle = '';  // Extra dedup layer
+let lastScanTime = 0;
 
 function scanForGitHubProfile() {
   if (!isAutochekkEnabled) return;
@@ -249,7 +251,16 @@ function scanForGitHubProfile() {
       if (ignored.includes(handle)) return;
 
       if (!scannedProfiles.has(handle)) {
+        // Extra time-based debounce to prevent rapid duplicates
+        const now = Date.now();
+        if (lastScannedHandle === handle && (now - lastScanTime) < 5000) {
+          console.log('[Autochekk] Skipping duplicate scan (debounce):', handle);
+          return;
+        }
+
         scannedProfiles.add(handle);
+        lastScannedHandle = handle;
+        lastScanTime = now;
         console.log('[Autochekk] Direct Profile Detected:', handle);
 
         // Scrape avatar for "Profile Found" log
@@ -271,32 +282,94 @@ function scanForEmails() {
   if (scanTimeout) clearTimeout(scanTimeout);
 
   scanTimeout = setTimeout(() => {
-    const text = document.body.innerText;
-    // Basic email regex (can be improved)
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const matches = text.match(emailRegex);
+    const foundEmails = new Set<string>();
 
-    if (matches && matches.length > 0) {
-      const newEmails: string[] = [];
-      matches.forEach(email => {
-        const lower = email.toLowerCase();
-        // Ignore internal/junk emails if necessary or restrict to gmail/yahoo/etc if user really wants
-        // User said "@ gmail or yahoo or just @" so general regex is fine.
-        if (!scannedEmails.has(lower)) {
-          scannedEmails.add(lower);
-          newEmails.push(lower);
+    // 1. Visible text (innerText)
+    const textMatches = document.body.innerText.match(emailRegex) || [];
+    textMatches.forEach(e => foundEmails.add(e.toLowerCase()));
+
+    // 2. mailto: links
+    document.querySelectorAll('a[href^="mailto:"]').forEach(el => {
+      const href = el.getAttribute('href') || '';
+      const emailMatch = href.replace('mailto:', '').split('?')[0].match(emailRegex);
+      if (emailMatch) emailMatch.forEach(e => foundEmails.add(e.toLowerCase()));
+    });
+
+    // 3. data-* attributes that might contain emails
+    document.querySelectorAll('[data-email], [data-user-email], [data-contact-email], [data-candidate-email]').forEach(el => {
+      const attrs = ['data-email', 'data-user-email', 'data-contact-email', 'data-candidate-email'];
+      attrs.forEach(attr => {
+        const val = el.getAttribute(attr);
+        if (val) {
+          const matches = val.match(emailRegex);
+          if (matches) matches.forEach(e => foundEmails.add(e.toLowerCase()));
         }
       });
+    });
 
-      if (newEmails.length > 0) {
-        console.log('[Vibechekk] Found new emails:', newEmails);
-        chrome.runtime.sendMessage({
-          type: 'EMAILS_FOUND',
-          emails: newEmails
-        });
+    // 4. JSON-LD structured data
+    document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
+      try {
+        const data = JSON.parse(script.textContent || '{}');
+        const extractEmails = (obj: any) => {
+          if (typeof obj === 'string') {
+            const matches = obj.match(emailRegex);
+            if (matches) matches.forEach(e => foundEmails.add(e.toLowerCase()));
+          } else if (Array.isArray(obj)) {
+            obj.forEach(extractEmails);
+          } else if (typeof obj === 'object' && obj !== null) {
+            Object.values(obj).forEach(extractEmails);
+          }
+        };
+        extractEmails(data);
+      } catch (e) { /* ignore parse errors */ }
+    });
+
+    // 5. Hidden input fields with email-like names
+    document.querySelectorAll('input[type="hidden"][name*="email"], input[type="hidden"][name*="Email"]').forEach(el => {
+      const val = (el as HTMLInputElement).value;
+      if (val) {
+        const matches = val.match(emailRegex);
+        if (matches) matches.forEach(e => foundEmails.add(e.toLowerCase()));
       }
+    });
+
+    // 6. Meta tags
+    document.querySelectorAll('meta[name*="email"], meta[property*="email"], meta[name="author"]').forEach(el => {
+      const content = el.getAttribute('content') || '';
+      const matches = content.match(emailRegex);
+      if (matches) matches.forEach(e => foundEmails.add(e.toLowerCase()));
+    });
+
+    // Filter out common spam/system emails
+    const spamDomains = ['example.com', 'test.com', 'localhost', 'sentry.io', 'wixpress.com', 'placeholder.com'];
+    const spamPatterns = ['noreply', 'no-reply', 'donotreply', 'mailer-daemon', 'postmaster', 'support@', 'info@', 'contact@', 'admin@'];
+
+    const cleanedEmails = Array.from(foundEmails).filter(email => {
+      const domain = email.split('@')[1];
+      if (spamDomains.some(d => domain?.includes(d))) return false;
+      if (spamPatterns.some(p => email.includes(p))) return false;
+      return true;
+    });
+
+    // Find new emails not yet scanned
+    const newEmails = cleanedEmails.filter(email => {
+      if (!scannedEmails.has(email)) {
+        scannedEmails.add(email);
+        return true;
+      }
+      return false;
+    });
+
+    if (newEmails.length > 0) {
+      console.log('[Vibechekk] Found new emails:', newEmails);
+      chrome.runtime.sendMessage({
+        type: 'EMAILS_FOUND',
+        emails: newEmails
+      });
     }
-  }, 1000); // 1s Debounce
+  }, 1500); // 1.5s Debounce for SPAs
 }
 
 // Initialize State
@@ -321,3 +394,59 @@ chrome.storage.onChanged.addListener((changes) => {
     }
   }
 });
+
+// Listen for cache clear messages from popup
+chrome.runtime.onMessage.addListener((request) => {
+  if (request.type === 'CLEAR_SCANNED_CACHE') {
+    console.log('[Vibechekk] Clearing in-memory caches');
+    scannedProfiles.clear();
+    scannedEmails.clear();
+    lastScannedHandle = '';
+    lastScanTime = 0;
+    // Re-scan immediately if enabled
+    if (isAutochekkEnabled) {
+      scanForGitHubProfile();
+      scanForEmails();
+    }
+  }
+});
+
+// --- Auth Success Detection ---
+function checkAuthSuccess() {
+  const authData = document.getElementById('vibechekk-auth-data');
+  if (authData) {
+    const token = authData.getAttribute('data-token');
+    const userStr = authData.getAttribute('data-user');
+
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        console.log('[Vibechekk] Auth Success Detected via Content Script');
+        console.log('[Vibechekk] User data received:', user);
+        console.log('[Vibechekk] GitHub Login:', user.githubLogin);
+
+        // Update Extension Storage
+        chrome.storage.local.set({
+          user_data: user,
+          auth_token: token
+        }, () => {
+          console.log('[Vibechekk] User logged in!');
+          const h1 = document.querySelector('h1');
+          if (h1) h1.innerText = 'Setup Complete! Closing...';
+
+          setTimeout(() => {
+            // chrome.runtime.sendMessage({ type: 'AUTH_SUCCESS_CLOSE_TAB' });
+            window.close();
+          }, 1500);
+        });
+
+      } catch (e) {
+        console.error('[Vibechekk] Failed to parse auth data', e);
+      }
+    }
+  }
+}
+
+// Run immediately and on load
+checkAuthSuccess();
+window.addEventListener('load', checkAuthSuccess);

@@ -342,18 +342,162 @@ app.get('/api/auth/github/callback', async (req, res) => {
         const userWithGithub = { ...user, githubLogin: githubUser.login };
 
         res.send(`
+            <!DOCTYPE html>
             <html>
-            <body style="font-family: sans-serif; text-align: center; padding: 40px; background: #fdfaf6; color: #1a1a1a;">
-                <div style="background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 400px; margin: 0 auto;">
-                    <h1 style="color: #22c55e; margin-bottom: 10px;">Transformation Complete!</h1>
-                    <p style="color: #666; margin-bottom: 20px;">Your GitHub account has been linked.</p>
-                    <p style="font-size: 12px; color: #999;">You can close this window.</p>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>GitHub Connected | Vibechekk</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body {
+                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                        min-height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        background: linear-gradient(135deg, #fdfaf6 0%, #f5f0e8 100%);
+                        color: #1a1a1a;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 48px;
+                        max-width: 420px;
+                        animation: fadeIn 0.5s ease-out;
+                    }
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(20px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    .logo {
+                        width: 64px;
+                        height: 64px;
+                        margin: 0 auto 24px;
+                        background: linear-gradient(135deg, #1a1a1a 0%, #333 100%);
+                        border-radius: 16px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                    }
+                    .logo svg {
+                        width: 32px;
+                        height: 32px;
+                    }
+                    .checkmark-circle {
+                        width: 80px;
+                        height: 80px;
+                        margin: 0 auto 28px;
+                        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 8px 32px rgba(34, 197, 94, 0.35);
+                        animation: scaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.2s both;
+                    }
+                    @keyframes scaleIn {
+                        from { transform: scale(0); }
+                        to { transform: scale(1); }
+                    }
+                    .checkmark-circle svg {
+                        width: 40px;
+                        height: 40px;
+                        stroke: white;
+                        stroke-width: 3;
+                        fill: none;
+                        animation: drawCheck 0.5s ease-out 0.5s both;
+                    }
+                    @keyframes drawCheck {
+                        from { stroke-dashoffset: 50; }
+                        to { stroke-dashoffset: 0; }
+                    }
+                    .checkmark-circle svg path {
+                        stroke-dasharray: 50;
+                        stroke-dashoffset: 50;
+                        animation: drawCheck 0.5s ease-out 0.5s forwards;
+                    }
+                    h1 {
+                        font-size: 28px;
+                        font-weight: 800;
+                        letter-spacing: -0.02em;
+                        margin-bottom: 12px;
+                        background: linear-gradient(135deg, #1a1a1a 0%, #444 100%);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        background-clip: text;
+                    }
+                    .username {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 8px;
+                        padding: 8px 16px;
+                        background: rgba(0,0,0,0.05);
+                        border-radius: 100px;
+                        font-size: 15px;
+                        font-weight: 600;
+                        color: #1a1a1a;
+                        margin-bottom: 20px;
+                    }
+                    .username svg {
+                        width: 20px;
+                        height: 20px;
+                    }
+                    p {
+                        font-size: 14px;
+                        color: #666;
+                        line-height: 1.5;
+                        margin-bottom: 8px;
+                    }
+                    .closing {
+                        font-size: 12px;
+                        color: #999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 8px;
+                        margin-top: 24px;
+                    }
+                    .spinner {
+                        width: 14px;
+                        height: 14px;
+                        border: 2px solid #ddd;
+                        border-top-color: #1a1a1a;
+                        border-radius: 50%;
+                        animation: spin 0.8s linear infinite;
+                    }
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="checkmark-circle">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <h1>GitHub Connected!</h1>
+                    <div class="username">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                        </svg>
+                        @${githubUser.login}
+                    </div>
+                    <p>Your GitHub account has been successfully linked to Vibechekk.</p>
+                    <p style="color: #22c55e; font-weight: 600;">You now have access to enhanced reports!</p>
+                    <div class="closing">
+                        <div class="spinner"></div>
+                        Closing automatically...
+                    </div>
                 </div>
                 <script>
                     if (window.opener) {
                         window.opener.postMessage({ type: 'GITHUB_AUTH_SUCCESS', token: '${token}', user: ${JSON.stringify(userWithGithub)} }, '*');
                     }
-                    setTimeout(() => window.close(), 2000);
+                    setTimeout(() => window.close(), 2500);
                 </script>
                 <div id="vibechekk-auth-data" style="display:none" data-token="${token}" data-user='${JSON.stringify(userWithGithub)}'></div>
             </body>
