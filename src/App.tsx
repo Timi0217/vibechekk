@@ -171,6 +171,10 @@ function App() {
   const [showBulkChekkForm, setShowBulkChekkForm] = useState(false)
   const [bulkChekkTab, setBulkChekkTab] = useState<'import' | 'history'>('import')
   const [bulkHistory, setBulkHistory] = useState<any[]>([])
+  const [bulkFile, setBulkFile] = useState<File | null>(null)
+  const [bulkProcessing, setBulkProcessing] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, status: '' })
+  const [bulkResults, setBulkResults] = useState<any[]>([])
   const [checklistTab, setChecklistTab] = useState<'configure' | 'active'>('configure')
   const [checklistForm, setChecklistForm] = useState({
     jobTitle: '',
@@ -262,12 +266,16 @@ function App() {
   }
 
   useEffect(() => {
-    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data', 'auth_token'], (res) => {
+    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data', 'auth_token', 'bulk_history'], (res) => {
       setTokens({
         github: (res.github_token as string) || '',
         deepseek: (res.deepseek_key as string) || '',
         vibeToken: (res.vibe_token as string) || ''
       })
+      // Load bulk history from storage
+      if (res.bulk_history && Array.isArray(res.bulk_history)) {
+        setBulkHistory(res.bulk_history)
+      }
       if (res.user_data) {
         setUser(res.user_data)
       } else {
@@ -349,6 +357,245 @@ function App() {
       console.warn('Analytics failed')
     } finally {
       setAnalyticsLoading(false)
+    }
+  }
+
+  // ===== BULKCHEKK FUNCTIONS =====
+
+  // Parse CSV/JSON file and extract GitHub handles/emails
+  const parseUploadedFile = async (file: File): Promise<{ handles: string[], emails: string[] }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string
+          let handles: string[] = []
+
+          if (file.name.endsWith('.json')) {
+            // Parse JSON - expect array of strings or objects with username/handle/url/email field
+            const json = JSON.parse(text)
+            if (Array.isArray(json)) {
+              handles = json.map((item: any) => {
+                if (typeof item === 'string') return item
+                return item.username || item.handle || item.github || item.url || item.email || ''
+              }).filter(Boolean)
+            }
+          } else {
+            // Parse CSV - look for github handles, urls, emails, usernames
+            const lines = text.split(/\r?\n/).filter(line => line.trim())
+            const header = lines[0]?.toLowerCase() || ''
+
+            // Detect column indices
+            const cols = header.split(',').map(c => c.trim())
+            const usernameCol = cols.findIndex(c =>
+              c.includes('username') || c.includes('handle') || c.includes('github') ||
+              c.includes('user') || c.includes('email') || c.includes('url')
+            )
+
+            // If we found a header, skip it; otherwise process all lines
+            const startIdx = usernameCol >= 0 ? 1 : 0
+            const colIdx = usernameCol >= 0 ? usernameCol : 0
+
+            for (let i = startIdx; i < lines.length; i++) {
+              const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
+              if (values[colIdx]) {
+                handles.push(values[colIdx])
+              }
+            }
+          }
+
+          // Separate emails from regular handles
+          const emails: string[] = []
+          const directHandles: string[] = []
+
+          for (const item of handles) {
+            if (isEmail(item)) {
+              emails.push(item.trim())
+            } else {
+              const handle = extractGithubHandle(item)
+              if (handle) directHandles.push(handle)
+            }
+          }
+
+          // Remove duplicates
+          const uniqueHandles = [...new Set(directHandles)]
+          const uniqueEmails = [...new Set(emails)]
+
+          // Return combined (handles first, then emails to be resolved)
+          resolve({ handles: uniqueHandles, emails: uniqueEmails })
+        } catch (err) {
+          reject(err)
+        }
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsText(file)
+    })
+  }
+
+  // Extract GitHub handle from various formats (URL, @username, plain username)
+  // Returns null for emails - those need backend lookup
+  const extractGithubHandle = (input: string): string | null => {
+    if (!input) return null
+    input = input.trim()
+
+    // GitHub URL: https://github.com/username or github.com/username
+    const urlMatch = input.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9][-a-zA-Z0-9]*)(?:\/|$)/i)
+    if (urlMatch) return urlMatch[1]
+
+    // @username format
+    if (input.startsWith('@')) return input.slice(1)
+
+    // Plain username (validate it looks like a valid GitHub username - NOT an email)
+    if (!input.includes('@') && /^[a-zA-Z0-9][-a-zA-Z0-9]*$/.test(input) && input.length <= 39) {
+      return input
+    }
+
+    return null
+  }
+
+  // Check if input looks like an email
+  const isEmail = (input: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.trim())
+  }
+
+  // Lookup GitHub username from email via backend API
+  const lookupEmailToHandle = async (email: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/lookup/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      const data = await response.json()
+      return data.success ? data.username : null
+    } catch {
+      return null
+    }
+  }
+
+  // Process bulk analysis
+  const processBulkAnalysis = async () => {
+    if (!bulkFile) return
+
+    setBulkProcessing(true)
+    setBulkResults([])
+    setBulkProgress({ current: 0, total: 0, status: 'Parsing file...' })
+
+    try {
+      const parsed = await parseUploadedFile(bulkFile)
+
+      // Phase 1: Resolve emails to GitHub handles via backend API
+      setBulkProgress({ current: 0, total: parsed.emails.length, status: `Looking up ${parsed.emails.length} email(s)...` })
+
+      const emailResolvedHandles: string[] = []
+      for (const email of parsed.emails) {
+        const handle = await lookupEmailToHandle(email)
+        if (handle) {
+          emailResolvedHandles.push(handle)
+        }
+      }
+
+      // Combine all handles
+      const allHandles = [...parsed.handles, ...emailResolvedHandles].slice(0, 100)
+
+      if (allHandles.length === 0) {
+        setBulkProgress({ current: 0, total: 0, status: 'No valid GitHub profiles found in file' })
+        setBulkProcessing(false)
+        return
+      }
+
+      setBulkProgress({ current: 0, total: allHandles.length, status: `Found ${allHandles.length} profiles to analyze` })
+
+      const results: any[] = []
+      const batchId = Date.now().toString()
+
+      for (let i = 0; i < allHandles.length; i++) {
+        const handle = allHandles[i]
+        setBulkProgress({
+          current: i + 1,
+          total: allHandles.length,
+          status: `Analyzing ${handle} (${i + 1}/${allHandles.length})`
+        })
+
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              githubUrl: `https://github.com/${handle}`,
+              userId: user?.id || 'guest'
+            })
+          })
+
+          const data = await response.json()
+
+          if (data.success && data.data) {
+            results.push({
+              handle,
+              success: true,
+              report: data.data,
+              timestamp: Date.now()
+            })
+          } else {
+            results.push({
+              handle,
+              success: false,
+              error: data.error || 'Analysis failed',
+              timestamp: Date.now()
+            })
+          }
+        } catch (err: any) {
+          results.push({
+            handle,
+            success: false,
+            error: err.message || 'Network error',
+            timestamp: Date.now()
+          })
+        }
+
+        // Update results in real-time
+        setBulkResults([...results])
+
+        // Rate limiting - wait 1.5 seconds between requests
+        if (i < allHandles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500))
+        }
+      }
+
+      // Save batch to history
+      const successCount = results.filter(r => r.success).length
+      const batchRecord = {
+        id: batchId,
+        filename: bulkFile.name,
+        totalProfiles: allHandles.length,
+        successCount,
+        failedCount: allHandles.length - successCount,
+        results,
+        timestamp: Date.now()
+      }
+
+      const updatedHistory = [batchRecord, ...bulkHistory]
+      setBulkHistory(updatedHistory)
+
+      // Save to storage
+      chrome.storage.local.set({ bulk_history: updatedHistory })
+
+      setBulkProgress({
+        current: allHandles.length,
+        total: allHandles.length,
+        status: `Complete! ${successCount}/${allHandles.length} profiles analyzed successfully`
+      })
+
+      // Switch to history tab to show results
+      setTimeout(() => {
+        setBulkChekkTab('history')
+      }, 2000)
+
+    } catch (err: any) {
+      setBulkProgress({ current: 0, total: 0, status: `Error: ${err.message}` })
+    } finally {
+      setBulkProcessing(false)
+      setBulkFile(null)
     }
   }
 
@@ -1459,10 +1706,10 @@ function App() {
                       {/* Account Card */}
                       <div style={{
                         background: 'white',
-                        borderRadius: '20px',
-                        padding: '20px',
+                        borderRadius: '16px',
+                        padding: '16px',
                         border: '1px solid rgba(0,0,0,0.05)',
-                        boxShadow: '0 10px 30px rgba(0,0,0,0.04)',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
                         position: 'relative',
                         overflow: 'hidden'
                       }}>
@@ -1614,9 +1861,9 @@ function App() {
                           borderRadius: '16px',
                           marginBottom: '12px',
                           position: 'relative',
-                          overflow: 'hidden',
+                          overflow: 'visible',
                           transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                          boxShadow: (showActivityFeed) ? '0 10px 40px rgba(0, 0, 0, 0.2)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
+                          boxShadow: (showActivityFeed) ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
                           background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
                           border: showActivityFeed ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
                         }}
@@ -1688,7 +1935,7 @@ function App() {
                                 </span>
                               )}
                             </div>
-                            <span style={{ fontSize: '10px', opacity: 0.8, fontWeight: 500, letterSpacing: '0.01em', marginBottom: '4px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                            <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, whiteSpace: 'nowrap' }}>
                               Chekk devs as you browse
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1701,11 +1948,11 @@ function App() {
                                 />
                                 <div className="autochekk-tooltip" style={{
                                   position: 'absolute',
-                                  top: '100%',
+                                  bottom: '100%',
                                   left: '0',
-                                  marginTop: '8px',
+                                  marginBottom: '8px',
                                   background: 'white',
-                                  color: 'var(--text-main)',
+                                  color: '#1a1a1a',
                                   padding: '10px 12px',
                                   borderRadius: '8px',
                                   fontSize: '11px',
@@ -1768,16 +2015,6 @@ function App() {
                               boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                             }} />
                           </div>
-                          {/* Arrow icon for consistency */}
-                          <ChevronRight
-                            size={18}
-                            color="rgba(255, 255, 255, 0.5)"
-                            style={{
-                              flexShrink: 0,
-                              transform: showActivityFeed ? 'rotate(90deg)' : 'rotate(0deg)',
-                              transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                            }}
-                          />
                         </div>
 
                         {/* Autochekk Live Activity Feed Dropdown */}
@@ -1952,26 +2189,33 @@ function App() {
                       <div style={{
                         marginBottom: '12px',
                         borderRadius: '16px',
-                        overflow: 'hidden',
+                        overflow: 'visible',
                         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: showChecklistForm ? '0 10px 40px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
+                        boxShadow: showChecklistForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
                         background: 'linear-gradient(135deg, #450a0a 0%, #2a0505 100%)',
                         border: showChecklistForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent',
                         position: 'relative'
                       }}>
-                        {/* Decorative background element */}
+                        {/* Blob container with overflow hidden */}
                         <div style={{
                           position: 'absolute',
-                          right: '-125px',
-                          top: '-60px',
-                          width: '220px',
-                          height: '220px',
-                          borderRadius: '40px',
-                          transform: 'rotate(20deg)',
-                          background: 'rgba(255,255,255,0.05)',
-                          pointerEvents: 'none',
-                          zIndex: 0
-                        }} />
+                          inset: 0,
+                          borderRadius: '16px',
+                          overflow: 'hidden',
+                          pointerEvents: 'none'
+                        }}>
+                          <div style={{
+                            position: 'absolute',
+                            right: '-125px',
+                            top: '-60px',
+                            width: '220px',
+                            height: '220px',
+                            borderRadius: '40px',
+                            transform: 'rotate(20deg)',
+                            background: 'rgba(255,255,255,0.05)',
+                            zIndex: 0
+                          }} />
+                        </div>
 
                         <div
                           onClick={() => setShowChecklistForm(!showChecklistForm)}
@@ -2041,11 +2285,11 @@ function App() {
                                 />
                                 <div className="chekklist-tooltip" style={{
                                   position: 'absolute',
-                                  top: '100%',
+                                  bottom: '100%',
                                   left: '0',
-                                  marginTop: '8px',
+                                  marginBottom: '8px',
                                   background: 'white',
-                                  color: 'var(--text-main)',
+                                  color: '#1a1a1a',
                                   padding: '10px 12px',
                                   borderRadius: '8px',
                                   fontSize: '11px',
@@ -2057,7 +2301,7 @@ function App() {
                                   opacity: 0,
                                   visibility: 'hidden',
                                   transition: 'all 0.2s ease',
-                                  zIndex: 100,
+                                  zIndex: 1000,
                                   pointerEvents: 'none'
                                 }}>
                                   Paste your job description and get 50 matched GitHub profiles
@@ -2602,26 +2846,33 @@ function App() {
                       {/* BULKCHEKK Card */}
                       <div style={{
                         position: 'relative',
-                        marginBottom: '8px',
+                        marginBottom: '12px',
                         borderRadius: '16px',
-                        overflow: 'hidden',
+                        overflow: 'visible',
                         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: showBulkChekkForm ? '0 10px 40px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
+                        boxShadow: showBulkChekkForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
                         background: 'linear-gradient(135deg, #020617 0%, #172554 100%)',
                         border: showBulkChekkForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
                       }}>
-                        {/* Decorative background element */}
+                        {/* Blob container with overflow hidden */}
                         <div style={{
                           position: 'absolute',
-                          right: '-30px',
-                          top: '-30px',
-                          width: '160px',
-                          height: '160px',
-                          background: 'rgba(255, 255, 255, 0.06)',
-                          borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
-                          pointerEvents: 'none',
-                          zIndex: 0
-                        }} />
+                          inset: 0,
+                          borderRadius: '16px',
+                          overflow: 'hidden',
+                          pointerEvents: 'none'
+                        }}>
+                          <div style={{
+                            position: 'absolute',
+                            right: '-30px',
+                            top: '-30px',
+                            width: '160px',
+                            height: '160px',
+                            background: 'rgba(255, 255, 255, 0.06)',
+                            borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
+                            zIndex: 0
+                          }} />
+                        </div>
 
                         {/* Content Layer */}
                         <div style={{ position: 'relative', zIndex: 1 }}>
@@ -2684,7 +2935,37 @@ function App() {
 
                               {/* Mini Icons Row */}
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                <Info size={13} color="rgba(255, 255, 255, 0.5)" />
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="bulkchekk-tooltip-wrapper">
+                                  <Info
+                                    size={13}
+                                    color="rgba(255, 255, 255, 0.5)"
+                                    style={{ cursor: 'help', opacity: 0.7 }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <div className="bulkchekk-tooltip" style={{
+                                    position: 'absolute',
+                                    bottom: '100%',
+                                    left: '0',
+                                    marginBottom: '8px',
+                                    background: 'white',
+                                    color: '#1a1a1a',
+                                    padding: '10px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '11px',
+                                    fontWeight: 500,
+                                    width: '200px',
+                                    textAlign: 'left',
+                                    lineHeight: 1.4,
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                    opacity: 0,
+                                    visibility: 'hidden',
+                                    transition: 'all 0.2s ease',
+                                    pointerEvents: 'none',
+                                    zIndex: 1000
+                                  }}>
+                                    Upload a CSV with Github usernames to analyze multiple profiles at once
+                                  </div>
+                                </div>
                                 {/* Status Dot */}
                                 <div style={{
                                   width: '10px',
@@ -2761,35 +3042,143 @@ function App() {
 
                               {bulkChekkTab === 'import' ? (
                                 <>
-                                  <div style={{
-                                    border: '2px dashed #e2e8f0',
-                                    borderRadius: '12px',
-                                    padding: '30px',
-                                    textAlign: 'center',
-                                    background: '#f8fafc',
-                                    cursor: 'pointer',
-                                    marginBottom: '16px'
-                                  }}>
-                                    <FileSpreadsheet size={32} color="#cbd5e1" style={{ marginBottom: '10px' }} />
-                                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
-                                      Click to upload CSV or JSON
+                                  {/* File upload area */}
+                                  <input
+                                    type="file"
+                                    accept=".csv,.json"
+                                    style={{ display: 'none' }}
+                                    id="bulk-file-input"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0]
+                                      if (file) setBulkFile(file)
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor="bulk-file-input"
+                                    style={{
+                                      display: 'block',
+                                      border: bulkFile ? '2px solid #4f46e5' : '2px dashed #e2e8f0',
+                                      borderRadius: '12px',
+                                      padding: '30px',
+                                      textAlign: 'center',
+                                      background: bulkFile ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc',
+                                      cursor: bulkProcessing ? 'not-allowed' : 'pointer',
+                                      marginBottom: '16px',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                  >
+                                    {bulkFile ? (
+                                      <>
+                                        <FileSpreadsheet size={32} color="#4f46e5" style={{ marginBottom: '10px' }} />
+                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#4f46e5' }}>
+                                          {bulkFile.name}
+                                        </div>
+                                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                                          Click to change file
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <FileSpreadsheet size={32} color="#cbd5e1" style={{ marginBottom: '10px' }} />
+                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
+                                          Click to upload CSV or JSON
+                                        </div>
+                                        <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                                          Max 100 profiles per batch
+                                        </div>
+                                      </>
+                                    )}
+                                  </label>
+
+                                  {/* Progress indicator */}
+                                  {bulkProcessing && (
+                                    <div style={{
+                                      background: 'rgba(79, 70, 229, 0.1)',
+                                      borderRadius: '8px',
+                                      padding: '16px',
+                                      marginBottom: '16px'
+                                    }}>
+                                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#4f46e5', marginBottom: '8px' }}>
+                                        {bulkProgress.status}
+                                      </div>
+                                      {bulkProgress.total > 0 && (
+                                        <>
+                                          <div style={{
+                                            height: '6px',
+                                            background: '#e2e8f0',
+                                            borderRadius: '3px',
+                                            overflow: 'hidden',
+                                            marginBottom: '6px'
+                                          }}>
+                                            <div style={{
+                                              height: '100%',
+                                              background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
+                                              width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
+                                              transition: 'width 0.3s ease'
+                                            }} />
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>
+                                            {bulkProgress.current} of {bulkProgress.total} profiles
+                                          </div>
+                                        </>
+                                      )}
                                     </div>
-                                    <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
-                                      Max 100 profiles per batch
+                                  )}
+
+                                  {/* Real-time results preview */}
+                                  {bulkResults.length > 0 && (
+                                    <div style={{
+                                      maxHeight: '120px',
+                                      overflowY: 'auto',
+                                      marginBottom: '16px',
+                                      background: '#f8fafc',
+                                      borderRadius: '8px',
+                                      padding: '8px'
+                                    }}>
+                                      {bulkResults.slice(-5).map((r, i) => (
+                                        <div key={i} style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                          padding: '6px 8px',
+                                          fontSize: '10px',
+                                          color: r.success ? '#059669' : '#dc2626'
+                                        }}>
+                                          <span style={{
+                                            width: '8px',
+                                            height: '8px',
+                                            borderRadius: '50%',
+                                            background: r.success ? '#059669' : '#dc2626'
+                                          }} />
+                                          <span style={{ fontWeight: 600 }}>{r.handle}</span>
+                                          <span style={{ opacity: 0.7 }}>
+                                            {r.success ? (r.report?.archetype || 'Analyzed') : r.error}
+                                          </span>
+                                        </div>
+                                      ))}
                                     </div>
-                                  </div>
-                                  <button style={{
-                                    width: '100%',
-                                    padding: '12px',
-                                    borderRadius: '8px',
-                                    border: 'none',
-                                    background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
-                                    color: 'white',
-                                    fontSize: '12px',
-                                    fontWeight: 700,
-                                    cursor: 'pointer'
-                                  }}>
-                                    START BULK ANALYSIS
+                                  )}
+
+                                  <button
+                                    onClick={processBulkAnalysis}
+                                    disabled={!bulkFile || bulkProcessing}
+                                    style={{
+                                      width: '100%',
+                                      padding: '12px',
+                                      borderRadius: '8px',
+                                      border: 'none',
+                                      background: (!bulkFile || bulkProcessing)
+                                        ? '#94a3b8'
+                                        : 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                                      color: 'white',
+                                      fontSize: '12px',
+                                      fontWeight: 700,
+                                      cursor: (!bulkFile || bulkProcessing) ? 'not-allowed' : 'pointer',
+                                      opacity: (!bulkFile || bulkProcessing) ? 0.6 : 1,
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                  >
+                                    {bulkProcessing ? 'PROCESSING...' : 'START BULK ANALYSIS'}
                                   </button>
                                 </>
                               ) : (
@@ -2809,11 +3198,76 @@ function App() {
                                       <span style={{ fontSize: '11px' }}>No past imports found</span>
                                     </div>
                                   ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                      {bulkHistory.map((item, i) => (
-                                        <div key={i} style={{ padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                                          {/* Mock Item */}
-                                          <span style={{ color: 'white', fontSize: '11px' }}>Import #{i + 1}</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto' }}>
+                                      {bulkHistory.map((batch, i) => (
+                                        <div
+                                          key={batch.id || i}
+                                          style={{
+                                            padding: '12px',
+                                            background: 'rgba(255,255,255,0.08)',
+                                            borderRadius: '10px',
+                                            border: '1px solid rgba(255,255,255,0.1)'
+                                          }}
+                                        >
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                            <span style={{ color: 'white', fontSize: '12px', fontWeight: 600 }}>
+                                              {batch.filename || `Batch ${i + 1}`}
+                                            </span>
+                                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>
+                                              {new Date(batch.timestamp).toLocaleDateString()}
+                                            </span>
+                                          </div>
+                                          <div style={{ display: 'flex', gap: '12px' }}>
+                                            <div style={{
+                                              fontSize: '10px',
+                                              padding: '4px 8px',
+                                              background: 'rgba(16, 185, 129, 0.2)',
+                                              color: '#10b981',
+                                              borderRadius: '4px',
+                                              fontWeight: 600
+                                            }}>
+                                              ✓ {batch.successCount || 0} success
+                                            </div>
+                                            {batch.failedCount > 0 && (
+                                              <div style={{
+                                                fontSize: '10px',
+                                                padding: '4px 8px',
+                                                background: 'rgba(239, 68, 68, 0.2)',
+                                                color: '#ef4444',
+                                                borderRadius: '4px',
+                                                fontWeight: 600
+                                              }}>
+                                                ✗ {batch.failedCount} failed
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* Show results preview */}
+                                          {batch.results && batch.results.length > 0 && (
+                                            <div style={{ marginTop: '10px', fontSize: '10px' }}>
+                                              {batch.results.filter((r: any) => r.success).slice(0, 3).map((r: any, idx: number) => (
+                                                <div key={idx} style={{
+                                                  display: 'flex',
+                                                  justifyContent: 'space-between',
+                                                  padding: '4px 0',
+                                                  borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none'
+                                                }}>
+                                                  <span style={{ color: 'rgba(255,255,255,0.8)' }}>{r.handle}</span>
+                                                  <span style={{
+                                                    color: '#f59e0b',
+                                                    fontWeight: 600,
+                                                    fontSize: '9px'
+                                                  }}>
+                                                    {r.report?.archetype || 'Analyzed'}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                              {batch.results.filter((r: any) => r.success).length > 3 && (
+                                                <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                                  +{batch.results.filter((r: any) => r.success).length - 3} more profiles
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
                                       ))}
                                     </div>

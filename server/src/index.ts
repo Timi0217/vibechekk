@@ -553,6 +553,28 @@ app.get('/api/auth/github/callback', async (req, res) => {
     }
 });
 
+// Email to GitHub username lookup
+app.post('/api/lookup/email', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+
+    if (!GITHUB_TOKEN) return res.status(500).json({ success: false, error: 'GitHub Token missing' });
+
+    try {
+        const { searchUserByEmail } = await import('./lib/github.js');
+        const username = await searchUserByEmail(GITHUB_TOKEN, email);
+
+        if (username) {
+            res.json({ success: true, username });
+        } else {
+            res.json({ success: false, error: 'No GitHub user found for this email' });
+        }
+    } catch (e: any) {
+        console.error('[Email Lookup Error]', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.get('/api/history', async (req, res) => {
     const { userId } = req.query;
     try {

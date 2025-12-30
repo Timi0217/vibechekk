@@ -690,3 +690,38 @@ export const searchCandidates = async (token: string, criteria: any) => {
     return [];
   }
 };
+
+// Search for a GitHub user by email using GitHub's Search API
+export const searchUserByEmail = async (token: string, email: string): Promise<string | null> => {
+  const octokit = new Octokit({ auth: token });
+
+  try {
+    // GitHub's user search API supports searching by email
+    const { data } = await octokit.rest.search.users({
+      q: `${email} in:email`,
+      per_page: 1
+    });
+
+    if (data.items && data.items.length > 0) {
+      console.log(`[GitHub] Found user ${data.items[0].login} for email ${email}`);
+      return data.items[0].login;
+    }
+
+    // Fallback: Try searching commits with that email
+    const { data: commitData } = await octokit.rest.search.commits({
+      q: `author-email:${email}`,
+      per_page: 1
+    });
+
+    if (commitData.items && commitData.items.length > 0 && commitData.items[0].author) {
+      console.log(`[GitHub] Found user ${commitData.items[0].author.login} from commit email ${email}`);
+      return commitData.items[0].author.login;
+    }
+
+    console.log(`[GitHub] No user found for email ${email}`);
+    return null;
+  } catch (error) {
+    console.error(`[GitHub] Email search failed for ${email}:`, error);
+    return null;
+  }
+};
