@@ -357,8 +357,8 @@ app.get('/api/auth/github/callback', async (req, res) => {
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        background: linear-gradient(135deg, #fdfaf6 0%, #f5f0e8 100%);
-                        color: #1a1a1a;
+                        background: #0d1117;
+                        color: #f0f6fc;
                     }
                     .container {
                         text-align: center;
@@ -370,31 +370,16 @@ app.get('/api/auth/github/callback', async (req, res) => {
                         from { opacity: 0; transform: translateY(20px); }
                         to { opacity: 1; transform: translateY(0); }
                     }
-                    .logo {
-                        width: 64px;
-                        height: 64px;
-                        margin: 0 auto 24px;
-                        background: linear-gradient(135deg, #1a1a1a 0%, #333 100%);
-                        border-radius: 16px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                    }
-                    .logo svg {
-                        width: 32px;
-                        height: 32px;
-                    }
                     .checkmark-circle {
                         width: 80px;
                         height: 80px;
                         margin: 0 auto 28px;
-                        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+                        background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
                         border-radius: 50%;
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        box-shadow: 0 8px 32px rgba(34, 197, 94, 0.35);
+                        box-shadow: 0 8px 32px rgba(46, 160, 67, 0.4);
                         animation: scaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.2s both;
                     }
                     @keyframes scaleIn {
@@ -407,38 +392,35 @@ app.get('/api/auth/github/callback', async (req, res) => {
                         stroke: white;
                         stroke-width: 3;
                         fill: none;
-                        animation: drawCheck 0.5s ease-out 0.5s both;
-                    }
-                    @keyframes drawCheck {
-                        from { stroke-dashoffset: 50; }
-                        to { stroke-dashoffset: 0; }
                     }
                     .checkmark-circle svg path {
                         stroke-dasharray: 50;
                         stroke-dashoffset: 50;
                         animation: drawCheck 0.5s ease-out 0.5s forwards;
                     }
+                    @keyframes drawCheck {
+                        from { stroke-dashoffset: 50; }
+                        to { stroke-dashoffset: 0; }
+                    }
                     h1 {
                         font-size: 28px;
                         font-weight: 800;
                         letter-spacing: -0.02em;
                         margin-bottom: 12px;
-                        background: linear-gradient(135deg, #1a1a1a 0%, #444 100%);
-                        -webkit-background-clip: text;
-                        -webkit-text-fill-color: transparent;
-                        background-clip: text;
+                        color: #f0f6fc;
                     }
                     .username {
                         display: inline-flex;
                         align-items: center;
                         gap: 8px;
-                        padding: 8px 16px;
-                        background: rgba(0,0,0,0.05);
+                        padding: 10px 18px;
+                        background: #21262d;
+                        border: 1px solid #30363d;
                         border-radius: 100px;
                         font-size: 15px;
                         font-weight: 600;
-                        color: #1a1a1a;
-                        margin-bottom: 20px;
+                        color: #f0f6fc;
+                        margin-bottom: 24px;
                     }
                     .username svg {
                         width: 20px;
@@ -446,24 +428,28 @@ app.get('/api/auth/github/callback', async (req, res) => {
                     }
                     p {
                         font-size: 14px;
-                        color: #666;
-                        line-height: 1.5;
+                        color: #8b949e;
+                        line-height: 1.6;
                         margin-bottom: 8px;
+                    }
+                    .success-text {
+                        color: #3fb950 !important;
+                        font-weight: 600;
                     }
                     .closing {
                         font-size: 12px;
-                        color: #999;
+                        color: #6e7681;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         gap: 8px;
-                        margin-top: 24px;
+                        margin-top: 28px;
                     }
                     .spinner {
                         width: 14px;
                         height: 14px;
-                        border: 2px solid #ddd;
-                        border-top-color: #1a1a1a;
+                        border: 2px solid #30363d;
+                        border-top-color: #f0f6fc;
                         border-radius: 50%;
                         animation: spin 0.8s linear infinite;
                     }
@@ -487,7 +473,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
                         @${githubUser.login}
                     </div>
                     <p>Your GitHub account has been successfully linked to Vibechekk.</p>
-                    <p style="color: #22c55e; font-weight: 600;">You now have access to enhanced reports!</p>
+                    <p class="success-text">You now have access to enhanced reports!</p>
                     <div class="closing">
                         <div class="spinner"></div>
                         Closing automatically...
