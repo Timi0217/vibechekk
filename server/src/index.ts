@@ -274,7 +274,6 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
         console.error('Analysis error:', error);
         res.status(500).json({ success: false, error: error.message || 'Internal server error' });
     }
-}
 });
 
 app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
