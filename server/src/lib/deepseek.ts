@@ -744,4 +744,70 @@ Golden rules:
             }))
         };
     }
-}
+
+    export const rankCandidates = async (apiKey: string, jobDescription: string, candidates: any[]) => {
+        // Improve efficiency by sending batched requests or a single summarized list if small enough.
+        // 50 candidates with simple Bio/Repo info is likely ~5-10k tokens. DeepSeek creates 32k context, so this is fine.
+
+        const candidateSummaries = candidates.map((c: any) => ({
+            handle: c.login,
+            name: c.name || c.login,
+            bio: c.bio,
+            location: c.location,
+            top_repo: c.repositories.nodes[0] ? `${c.repositories.nodes[0].name}: ${c.repositories.nodes[0].description} (${c.repositories.nodes[0].primaryLanguage?.name})` : 'None',
+            other_repos: c.repositories.nodes.slice(1, 3).map((r: any) => `${r.name} (${r.primaryLanguage?.name})`).join(', ')
+        }));
+
+        const prompt = `
+    JOB DESCRIPTION:
+    ${jobDescription.substring(0, 1000)}
+
+    CANDIDATES:
+    ${JSON.stringify(candidateSummaries, null, 2)}
+
+    TASK:
+    Rate each candidate from 0-100 based on fit for this job description.
+    High scores (80+) require relevant languages, tech stack match, and experience signals (projects, bio).
+    Low scores (<50) are for irrelevant tech stacks (e.g., C++ dev for a React role).
+    
+    Return JSON format:
+    {
+        "rankings": [
+            { "handle": "user1", "score": 85, "reason": "Strong match for React/Node..." },
+            ...
+        ]
+    }
+    `;
+
+        try {
+            const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: 'deepseek-chat',
+                    messages: [
+                        { role: 'system', content: 'You are a technical recruiter assistant. Output valid JSON only.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    response_format: { type: 'json_object' }
+                })
+            });
+
+            const data: any = await response.json();
+            const content = data.choices[0].message.content;
+            const result = JSON.parse(content);
+
+            // Convert to map for easy lookup
+            return result.rankings.reduce((acc: any, r: any) => {
+                acc[r.handle] = { score: r.score, reason: r.reason };
+                return acc;
+            }, {});
+
+        } catch (error) {
+            console.error('[DeepSeek Rank] Error:', error);
+            return {}; // Return empty map on failure (fallback to default scoring)
+        }
+    };

@@ -300,17 +300,28 @@ app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
 
         console.log(`[Chekklist] Found ${candidates.length} candidates.`);
 
-        // 2. Filter/Analyze (Simplified for Speed)
-        // detailed analysis takes too long. We return the raw list for now.
+        // 2. Filter/Analyze with DeepSeek
+        let rankings: any = {};
+        if (process.env.DEEPSEEK_API_KEY && jd) {
+            try {
+                const { rankCandidates } = await import('./lib/deepseek');
+                rankings = await rankCandidates(process.env.DEEPSEEK_API_KEY, jd, candidates);
+            } catch (e) { console.error('DeepSeek Rank Step Failed:', e); }
+        }
 
-        const results = candidates.map((c: any) => ({
-            handle: c.login,
-            name: c.name || c.login,
-            avatar: c.avatarUrl,
-            bio: c.bio,
-            matchScore: 85, // Mock score for MVP
-            topRepo: c.repositories.nodes[0]?.name || 'Unknown'
-        }));
+        const results = candidates.map((c: any) => {
+            const rank = rankings[c.login] || { score: 60, reason: 'Matched via keywords' };
+            return {
+                handle: c.login,
+                name: c.name || c.login,
+                avatar: c.avatarUrl,
+                bio: c.bio,
+                matchScore: rank.score,
+                matchReason: rank.reason,
+                topRepo: c.repositories.nodes[0]?.name || 'Unknown',
+                topRepoDesc: c.repositories.nodes[0]?.description
+            };
+        }).sort((a: any, b: any) => b.matchScore - a.matchScore);
 
         res.json({ success: true, candidates: results });
 

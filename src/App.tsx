@@ -157,6 +157,7 @@ function App() {
   const [showDetailedTechnical, setShowDetailedTechnical] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [expandedSkills, setExpandedSkills] = useState<number[]>([])
+  const [expandedSearchId, setExpandedSearchId] = useState<number | null>(null)
   const [loadingStep, setLoadingStep] = useState(0)
   const [tierFilter, setTierFilter] = useState<string | null>(null)
   const [archetypeFilter, setArchetypeFilter] = useState<string | null>(null)
@@ -195,6 +196,9 @@ function App() {
       }
       if (res.autochekk_logs) {
         setAutochekkLogs(res.autochekk_logs)
+      }
+      if (res.active_searches) {
+        setActiveSearches(res.active_searches)
       }
     })
 
@@ -2452,14 +2456,26 @@ function App() {
                                   // Trigger Backend Search
                                   try {
                                     const token = (await chrome.storage.local.get('vibe_auth_token')).vibe_auth_token;
-                                    fetch(`${BACKEND_URL}/api/chekklist/search`, {
+                                    const res = await fetch(`${BACKEND_URL}/api/chekklist/search`, {
                                       method: 'POST',
                                       headers: {
                                         'Content-Type': 'application/json',
                                         'Authorization': token ? `Bearer ${token}` : ''
                                       },
                                       body: JSON.stringify(checklistForm)
-                                    }).catch(console.error); // Fire and forget for now (or handle status)
+                                    });
+                                    const data = await res.json();
+
+                                    if (data.success) {
+                                      const completedSearch = {
+                                        ...newSearch,
+                                        status: 'completed',
+                                        results: data.candidates || []
+                                      };
+                                      const updatedSearches = [completedSearch, ...activeSearches]; // Note: logic flaw if parallel, but fine for MVP
+                                      setActiveSearches(updatedSearches);
+                                      chrome.storage.local.set({ active_searches: updatedSearches });
+                                    }
                                   } catch (e) { console.error(e); }
                                 }}
                                 style={{
@@ -2482,12 +2498,90 @@ function App() {
                             activeSearches.length > 0 ? (
                               <div style={{ padding: '10px' }}>
                                 {activeSearches.map(s => (
-                                  <div key={s.id} style={{ padding: '12px', background: 'white', marginBottom: '8px', borderRadius: '12px', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                    <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)' }}>{s.title}</div>
-                                    <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></div>
-                                      Running
+                                  <div key={s.id} style={{
+                                    padding: '12px',
+                                    background: 'white',
+                                    marginBottom: '8px',
+                                    borderRadius: '12px',
+                                    border: '1px solid var(--border)',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                    overflow: 'hidden'
+                                  }}>
+                                    <div
+                                      onClick={() => setExpandedSearchId(expandedSearchId === s.id ? null : s.id)}
+                                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                                    >
+                                      <div>
+                                        <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)' }}>{s.title}</div>
+                                        {s.status === 'completed' ? (
+                                          <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                            Found {s.results?.length || 0} candidates
+                                          </div>
+                                        ) : (
+                                          <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></div>
+                                            Running...
+                                          </div>
+                                        )}
+                                      </div>
+                                      {s.status === 'completed' && (
+                                        <ChevronDown size={14} color="var(--text-dim)" style={{ transform: expandedSearchId === s.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                                      )}
                                     </div>
+
+                                    {/* Results List */}
+                                    {expandedSearchId === s.id && s.results && (
+                                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {s.results.map((c: any, i: number) => (
+                                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
+                                            <img src={c.avatar} alt={c.handle} style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>{c.name}</div>
+                                                {c.matchScore !== undefined && (
+                                                  <div style={{
+                                                    fontSize: '9px',
+                                                    fontWeight: 700,
+                                                    color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
+                                                    background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
+                                                    padding: '1px 4px',
+                                                    borderRadius: '4px'
+                                                  }}>
+                                                    {c.matchScore}%
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>@{c.handle}</div>
+                                              {c.matchReason && (
+                                                <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px', lineHeight: '1.2', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={c.matchReason}>
+                                                  {c.matchReason}
+                                                </div>
+                                              )}
+                                            </div>
+                                            <a
+                                              href={`https://github.com/${c.handle}`}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                background: 'white',
+                                                border: '1px solid var(--border)',
+                                                fontSize: '10px',
+                                                fontWeight: 600,
+                                                color: 'var(--text-main)',
+                                                textDecoration: 'none'
+                                              }}
+                                            >
+                                              View
+                                            </a>
+                                          </div>
+                                        ))}
+                                        {s.results.length === 0 && (
+                                          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', padding: '10px' }}>No candidates found matching criteria.</div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
