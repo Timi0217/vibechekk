@@ -3083,7 +3083,7 @@ function App() {
                                   {/* File upload area */}
                                   <input
                                     type="file"
-                                    accept=".csv,.json"
+                                    accept=".csv"
                                     style={{ display: 'none' }}
                                     id="bulk-file-input"
                                     onChange={(e) => {
@@ -3603,7 +3603,7 @@ function App() {
                               <FileSpreadsheet size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
                               <div>
                                 <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>BULKCHEKK</span>
-                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Analyze hundreds of profiles from CSV/JSON</span>
+                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Analyze hundreds of profiles from CSV</span>
                               </div>
                             </div>
                           </div>
