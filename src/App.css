@@ -687,7 +687,19 @@ main {
   transition: all 0.2s ease;
   z-index: 1000;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  pointer-events: none;
+  pointer-events: auto;
+  /* Allow interaction for copy button */
+}
+
+/* Invisible bridge to prevent tooltip from closing when crossing the gap */
+.archetype-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  width: 100%;
+  height: 12px;
+  background: transparent;
 }
 
 .archetype-tooltip::after {
@@ -708,6 +720,12 @@ main {
 
 /* Autochekk Tooltip */
 .autochekk-tooltip-wrapper:hover .autochekk-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Chekklist Tooltip */
+.chekklist-tooltip-wrapper:hover .chekklist-tooltip {
   opacity: 1 !important;
   visibility: visible !important;
 }

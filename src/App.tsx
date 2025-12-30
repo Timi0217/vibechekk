@@ -1,5 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, Activity } from 'lucide-react'
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<string> => {
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map((item: any) => item.str).join(' ') + '\n';
+  }
+  return text;
+};
 import { BACKEND_URL } from './constants'
 import './App.css'
 
@@ -136,6 +149,7 @@ function App() {
   const [user, setUser] = useState<any>(null)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [selectedReport, setSelectedReport] = useState<any>(null)
+  const [limitPaywallOpen, setLimitPaywallOpen] = useState(false)
   const [expandedMerits, setExpandedMerits] = useState<number[]>([])
   const [showFullSummary, setShowFullSummary] = useState(false)
   const [showDetailedSummary, setShowDetailedSummary] = useState(false)
@@ -151,8 +165,20 @@ function App() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showConcurrentModal, setShowConcurrentModal] = useState(false)
   const [autoChekk, setAutoChekk] = useState(false)
+  const [showActivityFeed, setShowActivityFeed] = useState(true)
+  const [showChecklistForm, setShowChecklistForm] = useState(false)
+  const [checklistTab, setChecklistTab] = useState<'configure' | 'active'>('configure')
+  const [checklistForm, setChecklistForm] = useState({
+    jobTitle: '',
+    jd: '',
+    experience: '',
+    archetypes: [] as string[],
+    languages: [] as string[],
+    tiers: [] as string[]
+  })
+  const [activeSearches, setActiveSearches] = useState<any[]>([])
   const [autochekkLogs, setAutochekkLogs] = useState<any[]>([])
-  const [pendingAnalyses, setPendingAnalyses] = useState<{ handle: string, avatar: string, timestamp: number }[]>([])
+  const [pendingAnalyses, setPendingAnalyses] = useState<{ handle: string, name?: string, avatar: string, timestamp: number }[]>([])
   const [githubLinked, setGithubLinked] = useState(false)
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
   const activeTabRef = useRef(activeTab)
@@ -195,6 +221,7 @@ function App() {
           })
           .map((l: any) => ({
             handle: l.data?.githubHandle,
+            name: l.data?.name,
             avatar: '',
             timestamp: l.timestamp
           }));
@@ -239,9 +266,12 @@ function App() {
       if (res.auth_token) {
         setGithubLinked(true)
       }
-      // Get GitHub username from user_data - try multiple sources
+      // Get GitHub username/name from user_data - try multiple sources
+      // Get GitHub username/name from user_data - try multiple sources
       if (res.user_data?.githubLogin) {
-        setGithubUsername(res.user_data.githubLogin)
+        setGithubUsername(res.user_data.githubLogin) // Prioritize handle
+      } else if (res.user_data?.name) {
+        setGithubUsername(res.user_data.name.split(' ')[0])
       } else if (res.user_data?.email?.endsWith('@github.no-email')) {
         // Extract username from generated email like "username@github.no-email"
         setGithubUsername(res.user_data.email.replace('@github.no-email', ''))
@@ -253,10 +283,21 @@ function App() {
     })
 
     // Listen for storage changes (e.g., when GitHub auth completes in another tab)
+    // Listen for storage changes (e.g., when GitHub auth completes in another tab)
     const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      // If auth token changes (login/re-login), verify user data
       if (changes.auth_token && changes.auth_token.newValue) {
         setGithubLinked(true)
+        // Also fetch user data to ensure username is set (in case user_data didn't change)
+        chrome.storage.local.get(['user_data'], (res) => {
+          if (res.user_data?.githubLogin) {
+            setGithubUsername(res.user_data.githubLogin)
+          } else if (res.user_data?.name) {
+            setGithubUsername(res.user_data.name)
+          }
+        })
       }
+
       if (changes.user_data && changes.user_data.newValue) {
         setUser(changes.user_data.newValue)
         // Update GitHub username when user_data changes
@@ -299,6 +340,17 @@ function App() {
       setAnalyticsLoading(false)
     }
   }
+
+  // Auto-refresh history when a new analysis completes (detected via logs)
+  useEffect(() => {
+    if (activeTab === 'history' && autochekkLogs.length > 0) {
+      const latest = autochekkLogs[0];
+      // If the latest log is a completed analysis (not analyzing), refresh the list
+      if (latest.type === 'analysis' && !latest.data?.analyzing) {
+        fetchHistory();
+      }
+    }
+  }, [autochekkLogs, activeTab])
 
   const [pendingHandles, setPendingHandles] = useState<string[]>([])
 
@@ -385,7 +437,12 @@ function App() {
           handleOpenReport(finalReport)
         }
       } else {
-        alert(`Failed to analyze ${ownerHandle}: ${response?.error || 'Unknown error'}`)
+        const err = response?.error || 'Unknown error';
+        if (err.includes('Limit reached') || err.includes('Upgrade to Pro')) {
+          setLimitPaywallOpen(true);
+        } else {
+          alert(`Failed to analyze ${ownerHandle}: ${err}`)
+        }
       }
     })
   }
@@ -613,7 +670,7 @@ function App() {
                               style={{ textDecoration: 'none' }}
                             >
                               <h2 className="history-name clickable" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>
-                                {handle || 'Guest Profile'}
+                                {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || handle || 'Guest Profile'}
                               </h2>
                             </a>
                             {selectedReport.rarity_badge && (
@@ -621,14 +678,35 @@ function App() {
                             )}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity} size={14} />
+                            <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity || getRarityFromLabel(selectedReport.label)} size={14} />
                             <div className="archetype-tooltip-wrapper">
-                              <div className={`archetype-badge ${getRarityClass(selectedReport.rarity)}`}>
+                              <div className={`archetype-badge ${getRarityClass(selectedReport.rarity || getRarityFromLabel(selectedReport.label))}`}>
                                 {stripThe(selectedReport.label) || 'Profile'}
                               </div>
                               <div className="archetype-tooltip">
-                                <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
-                                {selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.'}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                  <div>
+                                    <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
+                                    {(selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.').replace('Classified as THE ', 'Classified as ')}
+                                  </div>
+                                  <div
+                                    style={{ cursor: 'pointer', padding: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const rawText = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.';
+                                      const cleanText = rawText.replace('Classified as THE ', 'Classified as ');
+                                      navigator.clipboard.writeText(cleanText);
+                                      const btn = e.currentTarget;
+                                      btn.style.background = 'rgba(34, 197, 94, 0.4)'; // Green flash
+                                      setTimeout(() => {
+                                        btn.style.background = 'rgba(255,255,255,0.1)';
+                                      }, 500);
+                                    }}
+                                    title="Copy description"
+                                  >
+                                    <Copy size={12} color="white" />
+                                  </div>
+                                </div>
                               </div>
                             </div>
                             {selectedReport.rarity_percentile && (
@@ -1083,7 +1161,7 @@ function App() {
                           </div>
                         )}
                         <div className="history-meta">
-                          <span className="history-name">{pending.handle || 'Analyzing...'}</span>
+                          <span className="history-name">{pending.name || pending.handle || 'Analyzing...'}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <Loader2 size={12} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
                             <div style={{
@@ -1125,9 +1203,11 @@ function App() {
                             </div>
                           )}
                           <div className="history-meta">
-                            <span className="history-name">{handle || 'Guest Profile'}</span>
+                            <span className="history-name">
+                              {(item.metadata?.userStats?.name ? item.metadata.userStats.name : handle) || 'Guest Profile'}
+                            </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <ArchetypeIcon label={item.label || 'Profile'} rarity={item.rarity} size={12} />
+                              <ArchetypeIcon label={item.label || 'Profile'} rarity={item.rarity || getRarityFromLabel(item.label)} size={12} />
                               <div style={{
                                 padding: '4px 10px',
                                 borderRadius: '6px',
@@ -1489,63 +1569,39 @@ function App() {
                                 </span>
                               )}
                             </div>
-                            <p style={{
-                              fontSize: '13px',
-                              color: 'var(--text-dim)',
-                              margin: 0,
-                              fontWeight: 500,
-                              opacity: 0.8,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              marginTop: '4px',
+                              width: 'fit-content',
+                              padding: '3px 8px',
+                              background: 'rgba(124, 58, 237, 0.08)',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(124, 58, 237, 0.1)'
                             }}>
-                              {user.email}
-                            </p>
+                              <BadgeCheck size={10} color="#7c3aed" strokeWidth={2.5} />
+                              <span style={{
+                                fontSize: '9px',
+                                fontWeight: 800,
+                                color: '#7c3aed',
+                                letterSpacing: '0.04em'
+                              }}>
+                                AUTHENTICATED
+                              </span>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Tier Badge / Status */}
-                        <div style={{
-                          marginTop: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          position: 'relative',
-                          zIndex: 1
-                        }}>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 10px',
-                            background: 'rgba(124, 58, 237, 0.08)',
-                            borderRadius: '8px',
-                            border: '1px solid rgba(124, 58, 237, 0.1)'
-                          }}>
-                            <BadgeCheck size={12} color="#7c3aed" strokeWidth={2.5} />
-                            <span style={{
-                              fontSize: '10px',
-                              fontWeight: 800,
-                              color: '#7c3aed',
-                              letterSpacing: '0.04em'
-                            }}>
-                              AUTHENTICATED
-                            </span>
-                          </div>
-                        </div>
+
                       </div>
 
-                      {/* Autochekk - Premium Feature Card */}
                       {/* AUTOCHEKK - Premium Feature Card */}
                       <div
-                        onClick={() => {
-                          setAutoChekk(!autoChekk);
-                        }}
                         style={{
                           width: '100%',
                           borderRadius: '16px',
                           color: 'white',
-                          cursor: 'pointer',
                           position: 'relative',
                           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                           transition: 'all 0.2s ease'
@@ -1596,19 +1652,15 @@ function App() {
                             <Binoculars size={22} color="white" strokeWidth={2} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{
-                              fontSize: '13px',
-                              fontWeight: 800,
-                              letterSpacing: '0.05em',
-                              textTransform: 'uppercase',
-                              marginBottom: '1px'
-                            }}>
-                              AUTOCHEKK
-                            </span>
-                            <span style={{ fontSize: '10px', opacity: 0.8, fontWeight: 500, letterSpacing: '0.01em', marginBottom: '4px' }}>
-                              Chekk devs as you browse
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1px' }}>
+                              <span style={{
+                                fontSize: '13px',
+                                fontWeight: 800,
+                                letterSpacing: '0.05em',
+                                textTransform: 'uppercase'
+                              }}>
+                                AUTOCHEKK
+                              </span>
                               {user.tier !== 'PRO' && (
                                 <span style={{
                                   fontSize: '8px',
@@ -1623,6 +1675,11 @@ function App() {
                                   PRO
                                 </span>
                               )}
+                            </div>
+                            <span style={{ fontSize: '10px', opacity: 0.8, fontWeight: 500, letterSpacing: '0.01em', marginBottom: '4px' }}>
+                              Chekk devs as you browse
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="autochekk-tooltip-wrapper">
                                 <Info
                                   size={13}
@@ -1633,8 +1690,7 @@ function App() {
                                 <div className="autochekk-tooltip" style={{
                                   position: 'absolute',
                                   top: '100%',
-                                  left: '50%',
-                                  transform: 'translateX(-50%)',
+                                  left: '0',
                                   marginTop: '8px',
                                   background: 'white',
                                   color: 'var(--text-main)',
@@ -1643,7 +1699,7 @@ function App() {
                                   fontSize: '11px',
                                   fontWeight: 500,
                                   width: '200px',
-                                  textAlign: 'center',
+                                  textAlign: 'left',
                                   lineHeight: 1.4,
                                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                                   opacity: 0,
@@ -1655,19 +1711,39 @@ function App() {
                                   Automatically find and analyze Github profiles across all webpages you visit
                                 </div>
                               </div>
+                              <div
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowActivityFeed(!showActivityFeed); }}
+                                style={{
+                                  cursor: 'pointer',
+                                  opacity: showActivityFeed ? 0.9 : 0.4,
+                                  transition: 'opacity 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: '16px',
+                                  height: '16px',
+                                  flexShrink: 0
+                                }}
+                                title={showActivityFeed ? "Hide Activity Feed" : "Show Activity Feed"}
+                              >
+                                <Radio size={13} color={(autoChekk && showActivityFeed) ? "#22c55e" : "white"} strokeWidth={2.5} />
+                              </div>
                             </div>
                           </div>
-                          <div style={{
-                            width: '52px',
-                            height: '30px',
-                            borderRadius: '15px',
-                            background: autoChekk
-                              ? '#22c55e'
-                              : 'rgba(255,255,255,0.3)',
-                            position: 'relative',
-                            transition: 'all 0.3s ease',
-                            flexShrink: 0
-                          }}>
+                          <div
+                            onClick={() => setAutoChekk(!autoChekk)}
+                            style={{
+                              width: '52px',
+                              height: '30px',
+                              borderRadius: '15px',
+                              background: autoChekk
+                                ? '#22c55e'
+                                : 'rgba(255,255,255,0.3)',
+                              position: 'relative',
+                              transition: 'all 0.3s ease',
+                              flexShrink: 0,
+                              cursor: 'pointer'
+                            }}>
                             <div style={{
                               width: '24px',
                               height: '24px',
@@ -1685,7 +1761,7 @@ function App() {
 
 
                       {/* Autochekk Live Activity Feed */}
-                      {autoChekk && (
+                      {autoChekk && showActivityFeed && (
                         <div style={{
                           marginTop: '12px',
                           background: 'white',
@@ -1723,24 +1799,10 @@ function App() {
                               </h4>
                             </div>
 
-                            {autochekkLogs.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Clear both visual logs AND dedup cache for fresh testing
-                                  chrome.storage.local.set({ autochekk_logs: [], dedup_cache: [] });
-                                  setAutochekkLogs([]);
-                                  setPendingAnalyses([]);
-                                  // Also notify content scripts to clear their in-memory caches
-                                  chrome.tabs.query({}, (tabs) => {
-                                    tabs.forEach(tab => {
-                                      if (tab.id) {
-                                        chrome.tabs.sendMessage(tab.id, { type: 'CLEAR_SCANNED_CACHE' }).catch(() => { });
-                                      }
-                                    });
-                                  });
-                                }}
-                                title="Clear Activity Log"
+                                onClick={(e) => { e.stopPropagation(); setShowActivityFeed(false); }}
+                                title="Collapse Activity Feed"
                                 style={{
                                   background: 'none',
                                   border: 'none',
@@ -1751,20 +1813,60 @@ function App() {
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  transition: 'background 0.2s ease'
+                                  transition: 'all 0.2s ease'
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                                  e.currentTarget.style.color = '#ef4444';
+                                  e.currentTarget.style.background = 'rgba(100, 100, 100, 0.1)';
                                 }}
                                 onMouseLeave={(e) => {
                                   e.currentTarget.style.background = 'none';
-                                  e.currentTarget.style.color = 'var(--text-dim)';
                                 }}
                               >
-                                <Trash size={12} />
+                                <Radio size={13} />
                               </button>
-                            )}
+                              {autochekkLogs.length > 0 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Clear both visual logs AND dedup cache for fresh testing
+                                    chrome.storage.local.set({ autochekk_logs: [], dedup_cache: [] });
+                                    setAutochekkLogs([]);
+                                    setPendingAnalyses([]);
+                                    // Also notify content scripts to clear their in-memory caches
+                                    chrome.tabs.query({}, (tabs) => {
+                                      tabs.forEach(tab => {
+                                        if (tab.id) {
+                                          chrome.tabs.sendMessage(tab.id, { type: 'CLEAR_SCANNED_CACHE' }).catch(() => { });
+                                        }
+                                      });
+                                    });
+                                  }}
+                                  title="Clear Activity Log"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-dim)',
+                                    cursor: 'pointer',
+                                    padding: '4px',
+                                    borderRadius: '4px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'background 0.2s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                    e.currentTarget.style.color = '#ef4444';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'none';
+                                    e.currentTarget.style.color = 'var(--text-dim)';
+                                  }}
+                                >
+                                  <Trash size={12} />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           <div style={{
@@ -1838,6 +1940,567 @@ function App() {
                               ))
                             )}
                           </div>
+                        </div>
+                      )}
+
+                      {/* CHEKKLIST - Batch Sourcing CTA */}
+                      <div
+                        onClick={() => {
+                          console.log('Open Chekklist');
+                        }}
+                        style={{
+                          marginTop: '4px',
+                          width: '100%',
+                          borderRadius: '16px',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          boxShadow: '0 4px 12px rgba(69, 10, 10, 0.25)',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(69, 10, 10, 0.25)';
+                        }}
+                      >
+                        {/* Background Layer with Decoration */}
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: '16px',
+                          background: 'linear-gradient(135deg, #450a0a 0%, #2a0505 100%)',
+                          border: '1px solid rgba(239, 68, 68, 0.15)',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            position: 'absolute',
+                            right: '-30px',
+                            bottom: '-40px',
+                            width: '130px',
+                            height: '130px',
+                            borderRadius: '32px',
+                            transform: 'rotate(15deg)',
+                            background: 'rgba(255,255,255,0.03)',
+                            pointerEvents: 'none'
+                          }} />
+                        </div>
+
+                        {/* Content Layer */}
+                        <div style={{
+                          position: 'relative',
+                          zIndex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '14px',
+                          padding: '16px 20px'
+                        }}>
+                          {/* Icon */}
+                          <div style={{
+                            width: '42px',
+                            height: '42px',
+                            borderRadius: '12px',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <ClipboardList size={24} color="white" strokeWidth={2.5} />
+                          </div>
+
+                          {/* Text */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <span style={{
+                                fontSize: '13px',
+                                fontWeight: 800,
+                                letterSpacing: '0.05em',
+                                textTransform: 'uppercase',
+                                color: 'white'
+                              }}>
+                                CHEKKLIST
+                              </span>
+                              <span style={{
+                                fontSize: '8px',
+                                fontWeight: 900,
+                                color: '#1a1a1a',
+                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                padding: '2px 6px',
+                                borderRadius: '3px',
+                                letterSpacing: '0.02em',
+                                lineHeight: 1
+                              }}>
+                                PRO
+                              </span>
+                            </div>
+                            <span style={{
+                              fontSize: '11px',
+                              color: 'rgba(255, 255, 255, 0.7)',
+                              fontWeight: 500
+                            }}>
+                              Find 50 devs for your JD
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="chekklist-tooltip-wrapper">
+                                <Info
+                                  size={13}
+                                  color="rgba(255, 255, 255, 0.5)"
+                                  style={{ cursor: 'help' }}
+                                />
+                                <div className="chekklist-tooltip" style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  left: '0',
+                                  marginTop: '8px',
+                                  background: 'white',
+                                  color: 'var(--text-main)',
+                                  padding: '10px 12px',
+                                  borderRadius: '8px',
+                                  fontSize: '11px',
+                                  fontWeight: 500,
+                                  width: '200px',
+                                  textAlign: 'left',
+                                  lineHeight: 1.4,
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                  opacity: 0,
+                                  visibility: 'hidden',
+                                  transition: 'all 0.2s ease',
+                                  zIndex: 100,
+                                  pointerEvents: 'none'
+                                }}>
+                                  Paste your job description and get 50 matched GitHub profiles
+                                </div>
+                              </div>
+                              {/* Search toggle icon */}
+                              <div
+                                onClick={(e) => { e.stopPropagation(); setShowChecklistForm(!showChecklistForm); }}
+                                style={{
+                                  cursor: 'pointer',
+                                  opacity: showChecklistForm ? 0.9 : 0.5,
+                                  transition: 'opacity 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: '16px',
+                                  height: '16px',
+                                  flexShrink: 0
+                                }}
+                                title={showChecklistForm ? "Hide Search Form" : "Open Search Form"}
+                              >
+                                <div style={{
+                                  width: '10px',
+                                  height: '10px',
+                                  borderRadius: '50%',
+                                  background: showChecklistForm ? (activeSearches.length > 0 ? '#22c55e' : '#f59e0b') : 'transparent',
+                                  border: `1.5px solid ${showChecklistForm ? (activeSearches.length > 0 ? '#22c55e' : '#f59e0b') : 'rgba(255, 255, 255, 0.6)'}`,
+                                  transition: 'all 0.2s ease',
+                                  boxShadow: showChecklistForm ? `0 0 8px ${activeSearches.length > 0 ? 'rgba(34, 197, 94, 0.6)' : 'rgba(245, 158, 11, 0.6)'}` : 'none'
+                                }} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Arrow */}
+                          <ChevronRight
+                            size={18}
+                            color="rgba(255, 255, 255, 0.5)"
+                            style={{ flexShrink: 0, cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); setShowChecklistForm(!showChecklistForm); }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Chekklist Form Dropdown */}
+                      {showChecklistForm && (
+                        <div style={{
+                          marginTop: '8px',
+                          background: 'white',
+                          borderRadius: '12px',
+                          border: '1px solid var(--border)',
+                          padding: '16px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px'
+                        }}>
+                          {/* Tabs Header */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', padding: '2px', borderRadius: '8px' }}>
+                              <button
+                                onClick={() => setChecklistTab('configure')}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: checklistTab === 'configure' ? 'white' : 'transparent',
+                                  color: checklistTab === 'configure' ? 'var(--text-main)' : 'var(--text-dim)',
+                                  boxShadow: checklistTab === 'configure' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                Configure
+                              </button>
+                              <button
+                                onClick={() => setChecklistTab('active')}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: checklistTab === 'active' ? 'white' : 'transparent',
+                                  color: checklistTab === 'active' ? 'var(--text-main)' : 'var(--text-dim)',
+                                  boxShadow: checklistTab === 'active' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                Active Searches
+                              </button>
+                            </div>
+                            <X size={14} color="var(--text-dim)" style={{ cursor: 'pointer' }} onClick={() => setShowChecklistForm(false)} />
+                          </div>
+
+                          {checklistTab === 'configure' ? (
+                            <>
+                              {/* Job Title */}
+                              <div>
+                                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                                  Job Title
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Senior Frontend Engineer"
+                                  value={checklistForm.jobTitle}
+                                  onChange={(e) => setChecklistForm({ ...checklistForm, jobTitle: e.target.value })}
+                                  style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                    fontSize: '11px',
+                                    fontFamily: 'inherit',
+                                    background: 'var(--bg-gray)',
+                                    marginBottom: '4px'
+                                  }}
+                                />
+                              </div>
+
+                              {/* Job Description */}
+                              <div>
+                                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                                  Job Description
+                                </label>
+                                <textarea
+                                  placeholder="Paste your job description here..."
+                                  value={checklistForm.jd}
+                                  onChange={(e) => setChecklistForm({ ...checklistForm, jd: e.target.value })}
+                                  style={{
+                                    width: '100%',
+                                    minHeight: '80px',
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                    fontSize: '11px',
+                                    fontFamily: 'inherit',
+                                    resize: 'vertical',
+                                    background: 'var(--bg-gray)'
+                                  }}
+                                />
+                                <label
+                                  className="upload-btn"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    marginTop: '8px',
+                                    padding: '8px 14px',
+                                    borderRadius: '20px',
+                                    border: '1.5px dashed #d1d5db',
+                                    background: 'white',
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    color: '#6b7280',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    width: 'fit-content'
+                                  }}
+                                >
+                                  <Upload size={12} />
+                                  Upload PDF or TXT
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.txt"
+                                    style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        let text = '';
+                                        if (file.type === 'application/pdf') {
+                                          const arrayBuffer = await file.arrayBuffer();
+                                          text = await extractTextFromPDF(arrayBuffer);
+                                        } else {
+                                          text = await file.text();
+                                        }
+                                        setChecklistForm(prev => ({ ...prev, jd: text }));
+                                      } catch (err) {
+                                        console.error('File parsing error:', err);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+
+                              {/* Years of Experience */}
+                              <div>
+                                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                                  Years of Experience
+                                </label>
+                                <select
+                                  value={checklistForm.experience}
+                                  onChange={(e) => setChecklistForm({ ...checklistForm, experience: e.target.value })}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                    fontSize: '11px',
+                                    fontFamily: 'inherit',
+                                    background: 'var(--bg-gray)',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <option value="">Any experience</option>
+                                  <option value="0-2">0-2 years</option>
+                                  <option value="2-5">2-5 years</option>
+                                  <option value="5-10">5-10 years</option>
+                                  <option value="10+">10+ years</option>
+                                </select>
+                              </div>
+
+                              {/* Languages */}
+                              <div>
+                                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                                  Languages / Skills
+                                </label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {['Python', 'TypeScript', 'JavaScript', 'Go', 'Rust', 'Java', 'C++', 'Ruby'].map(lang => (
+                                    <button
+                                      key={lang}
+                                      onClick={() => {
+                                        const langs = checklistForm.languages.includes(lang)
+                                          ? checklistForm.languages.filter(l => l !== lang)
+                                          : [...checklistForm.languages, lang];
+                                        setChecklistForm({ ...checklistForm, languages: langs });
+                                      }}
+                                      style={{
+                                        padding: '4px 10px',
+                                        borderRadius: '12px',
+                                        fontSize: '10px',
+                                        fontWeight: 600,
+                                        border: checklistForm.languages.includes(lang) ? '1px solid #7c3aed' : '1px solid var(--border)',
+                                        background: checklistForm.languages.includes(lang) ? 'rgba(124, 58, 237, 0.1)' : 'white',
+                                        color: checklistForm.languages.includes(lang) ? '#7c3aed' : 'var(--text-dim)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                      }}
+                                    >
+                                      {lang}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Archetypes - All 15 from deepseek.ts */}
+                              <div>
+                                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                                  Preferred Archetypes
+                                </label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {[
+                                    // LEGENDARY - Amber #f59e0b
+                                    { name: 'THE 10X ENGINEER', color: '#f59e0b' },
+                                    { name: 'THE PROFESSOR', color: '#f59e0b' },
+                                    // ULTRA RARE - Purple #a855f7
+                                    { name: 'THE ARCHITECT', color: '#a855f7' },
+                                    // RARE - Blue #3b82f6
+                                    { name: 'THE SPECIALIST', color: '#3b82f6' },
+                                    { name: 'THE SYSTEMS THINKER', color: '#3b82f6' },
+                                    { name: 'THE MAINTAINER', color: '#3b82f6' },
+                                    // UNCOMMON - Green #22c55e
+                                    { name: 'THE BUILDER', color: '#22c55e' },
+                                    { name: 'THE CONTRIBUTOR', color: '#22c55e' },
+                                    { name: 'THE CRAFTSPERSON', color: '#22c55e' },
+                                    { name: 'THE HIDDEN GEM', color: '#22c55e' },
+                                    { name: 'THE TINKERER', color: '#22c55e' },
+                                    // COMMON - Stone #78716c
+                                    { name: 'THE GRINDER', color: '#78716c' },
+                                    { name: 'THE HOBBYIST', color: '#78716c' },
+                                    { name: 'THE EXPLORER', color: '#78716c' },
+                                    { name: 'THE APPRENTICE', color: '#78716c' }
+                                  ].map(arch => {
+                                    const isSelected = checklistForm.archetypes.includes(arch.name);
+                                    return (
+                                      <button
+                                        key={arch.name}
+                                        onClick={() => {
+                                          const archs = isSelected
+                                            ? checklistForm.archetypes.filter(a => a !== arch.name)
+                                            : [...checklistForm.archetypes, arch.name];
+                                          setChecklistForm({ ...checklistForm, archetypes: archs });
+                                        }}
+                                        style={{
+                                          padding: '4px 8px',
+                                          borderRadius: '12px',
+                                          fontSize: '9px',
+                                          fontWeight: 600,
+                                          border: `1px solid ${arch.color}`,
+                                          background: isSelected ? arch.color : 'white',
+                                          color: isSelected ? 'white' : arch.color,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s ease'
+                                        }}
+                                      >
+                                        {arch.name.replace('THE ', '')}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Tiers - 5 tiers from deepseek.ts */}
+                              <div>
+                                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                                  Tier Filter
+                                </label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {[
+                                    { name: 'LEGENDARY', badge: '🌟🌟🌟', color: '#f59e0b' },
+                                    { name: 'ULTRA RARE', badge: '🌟🌟', color: '#a855f7' },
+                                    { name: 'RARE', badge: '⭐', color: '#3b82f6' },
+                                    { name: 'UNCOMMON', badge: '◆', color: '#22c55e' },
+                                    { name: 'COMMON', badge: '●', color: '#78716c' }
+                                  ].map(tier => {
+                                    const isSelected = checklistForm.tiers.includes(tier.name);
+                                    return (
+                                      <button
+                                        key={tier.name}
+                                        onClick={() => {
+                                          const tierArchetypes: Record<string, string[]> = {
+                                            'LEGENDARY': ['THE 10X ENGINEER', 'THE PROFESSOR'],
+                                            'ULTRA RARE': ['THE ARCHITECT'],
+                                            'RARE': ['THE SPECIALIST', 'THE SYSTEMS THINKER', 'THE MAINTAINER'],
+                                            'UNCOMMON': ['THE BUILDER', 'THE CONTRIBUTOR', 'THE CRAFTSPERSON', 'THE HIDDEN GEM', 'THE TINKERER'],
+                                            'COMMON': ['THE GRINDER', 'THE HOBBYIST', 'THE EXPLORER', 'THE APPRENTICE']
+                                          };
+
+                                          const associatedArchetypes = tierArchetypes[tier.name] || [];
+                                          let newTiers;
+                                          let newArchetypes;
+
+                                          if (isSelected) {
+                                            // Deselecting: Remove tier and its archetypes from selection
+                                            newTiers = checklistForm.tiers.filter(t => t !== tier.name);
+                                            newArchetypes = checklistForm.archetypes.filter(a => !associatedArchetypes.includes(a));
+                                          } else {
+                                            // Selecting: Add tier and its archetypes
+                                            newTiers = [...checklistForm.tiers, tier.name];
+                                            // Add associated archetypes without duplicates
+                                            const combined = new Set([...checklistForm.archetypes, ...associatedArchetypes]);
+                                            newArchetypes = Array.from(combined);
+                                          }
+
+                                          setChecklistForm({ ...checklistForm, tiers: newTiers, archetypes: newArchetypes });
+                                        }}
+                                        style={{
+                                          padding: '4px 10px',
+                                          borderRadius: '12px',
+                                          fontSize: '10px',
+                                          fontWeight: 600,
+                                          border: `1px solid ${tier.color}`,
+                                          background: isSelected ? tier.color : 'white',
+                                          color: isSelected ? 'white' : tier.color,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s ease'
+                                        }}
+                                      >
+                                        {tier.badge} {tier.name}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Search Button */}
+                              <button
+                                onClick={async () => {
+                                  console.log('Search with:', checklistForm);
+                                  const newSearch = {
+                                    id: Date.now(),
+                                    title: checklistForm.jobTitle || 'Untitled Search',
+                                    timestamp: Date.now()
+                                  };
+                                  setActiveSearches([newSearch, ...activeSearches]);
+                                  setChecklistTab('active');
+
+                                  // Trigger Backend Search
+                                  try {
+                                    const token = (await chrome.storage.local.get('vibe_auth_token')).vibe_auth_token;
+                                    fetch(`${BACKEND_URL}/api/chekklist/search`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': token ? `Bearer ${token}` : ''
+                                      },
+                                      body: JSON.stringify(checklistForm)
+                                    }).catch(console.error); // Fire and forget for now (or handle status)
+                                  } catch (e) { console.error(e); }
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  border: 'none',
+                                  background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
+                                  color: 'white',
+                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                Find Devs
+                              </button>
+                            </>
+                          ) : (
+                            activeSearches.length > 0 ? (
+                              <div style={{ padding: '10px' }}>
+                                {activeSearches.map(s => (
+                                  <div key={s.id} style={{ padding: '12px', background: 'white', marginBottom: '8px', borderRadius: '12px', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                                    <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)' }}>{s.title}</div>
+                                    <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></div>
+                                      Running
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '11px' }}>
+                                <div style={{ fontSize: '24px', marginBottom: '12px' }}>🔍</div>
+                                <p style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>No active searches</p>
+                                <p style={{ opacity: 0.7, lineHeight: 1.4 }}>
+                                  Configure your first search to find<br />developers matching your criteria.
+                                </p>
+                              </div>
+                            )
+                          )}
                         </div>
                       )}
 
@@ -2109,11 +2772,18 @@ function App() {
                                 <span style={{ fontSize: '10px', opacity: 0.75 }}>No chekk limits, analyze your entire ATS</span>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
                               <Zap size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
                               <div>
                                 <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>AUTOCHEKK</span>
                                 <span style={{ fontSize: '10px', opacity: 0.75 }}>Scan for Github profiles as you browse</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <ClipboardList size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>CHEKKLIST</span>
+                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Find 50 devs matched to your JD</span>
                               </div>
                             </div>
                           </div>
@@ -2137,6 +2807,40 @@ function App() {
                           </button>
                         </div>
                       )}
+
+                      {/* Danger Zone - Clear Data */}
+                      <div style={{ marginTop: '24px', marginBottom: '16px' }}>
+                        <h4 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                          Danger Zone
+                        </h4>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Are you sure you want to clear all local data (history, caches, login)? This cannot be undone.')) {
+                              chrome.storage.local.clear(() => {
+                                window.location.reload();
+                              });
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: 'rgba(239, 68, 68, 0.05)',
+                            color: '#ef4444',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            border: '1px solid rgba(239, 68, 68, 0.15)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
+                          }}
+                        >
+                          <Trash size={14} />
+                          Clear Local Cache
+                        </button>
+                      </div>
 
                       {/* Sign Out Button */}
                       <button
@@ -2468,6 +3172,42 @@ function App() {
                   Sign In to Unlock
                 </button>
               </div>
+            </div>
+          </div>
+        )
+      }
+      {/* Limit Reached Paywall Modal */}
+      {
+        limitPaywallOpen && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s ease-out'
+          }} onClick={() => setLimitPaywallOpen(false)}>
+            <div
+              className="paywall-overlay"
+              style={{ position: 'relative', width: '100%', maxWidth: '300px', padding: '32px 24px', animation: 'slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setLimitPaywallOpen(false)}
+                style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+
+              <div style={{ marginBottom: '16px', background: 'rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '50%', display: 'inline-flex' }}>
+                <Gem size={32} color="#f59e0b" />
+              </div>
+
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>Limit Reached</h3>
+              <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                You've hit your free analysis limit. <br />Upgrade to <strong>Pro</strong> for unlimited access.
+              </p>
+
+              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setLimitPaywallOpen(false); setActiveTab('settings'); }}>
+                <Zap size={16} fill="white" />
+                Upgrade Now
+              </button>
             </div>
           </div>
         )

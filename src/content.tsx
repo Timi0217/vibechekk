@@ -51,14 +51,15 @@ const injectVibeButton = () => {
   });
 };
 
-const handleVibeCheck = async (url: string, isSilent: boolean = false, avatar: string = '') => {
+const handleVibeCheck = async (url: string, isSilent: boolean = false, avatar: string = '', name: string = '') => {
   console.log('[Vibechekk] Checking analysis in background for:', url, isSilent ? '(Silent)' : '(Interactive)');
 
   chrome.runtime.sendMessage({
     type: 'START_VIBE_CHECK',
     url,
     isSilent,
-    avatar
+    avatar,
+    name
   }, (response) => {
     if (response && response.success) {
       if (!isSilent) {
@@ -267,8 +268,12 @@ function scanForGitHubProfile() {
         const avatar = document.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
           document.querySelector('img.avatar-user')?.getAttribute('src') || '';
 
+        // Scrape Name
+        const name = document.querySelector('.vcard-names .p-name')?.textContent?.trim() ||
+          document.querySelector('span[itemprop="name"]')?.textContent?.trim() || '';
+
         // Trigger analysis directly
-        handleVibeCheck(fullUrl, true, avatar);
+        handleVibeCheck(fullUrl, true, avatar, name);
       }
     }
   }

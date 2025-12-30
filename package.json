@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "parse5-htmlparser2-tree-adapter": "^8.0.0",
+    "pdfjs-dist": "^5.4.530",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -23,6 +24,7 @@
     "@eslint/js": "^9.39.1",
     "@types/chrome": "^0.1.32",
     "@types/node": "^24.10.1",
+    "@types/pdfjs-dist": "^2.10.377",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",

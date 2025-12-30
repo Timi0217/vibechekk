@@ -47,14 +47,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     console.log(`[Autochekk] Skipping existing profile (History): ${handle}`);
                     sendResponse({ success: true, cached: true });
                 } else {
-                    processVibeCheck(request.url, handle, sendResponse, request.avatar, true); // isAutochekk = true
+                    processVibeCheck(request.url, handle, sendResponse, request.avatar, true, request.name); // isAutochekk = true
                 }
             });
             return true;
         }
 
         // Manual scans - don't log to Live Activity
-        processVibeCheck(request.url, handle, sendResponse, request.avatar, false); // isAutochekk = false
+        processVibeCheck(request.url, handle, sendResponse, request.avatar, false, request.name); // isAutochekk = false
         return true;
     }
 
@@ -72,7 +72,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-async function processVibeCheck(url: string, handle: string, sendResponse: any, avatar: string = '', isAutochekk: boolean = false) {
+async function processVibeCheck(url: string, handle: string, sendResponse: any, avatar: string = '', isAutochekk: boolean = false, name: string = '') {
     // Cache immediately to prevent race conditions during analysis
     addToDedupCache('analysis', handle);
 
@@ -82,7 +82,7 @@ async function processVibeCheck(url: string, handle: string, sendResponse: any, 
         await logActivity('resolution', `Profile Found: ${handle}`, { githubHandle: handle, avatar });
 
         // Then log "Analyzing..." - await to ensure it appears after Profile Found
-        await logActivity('analysis', `Analyzing ${handle}...`, { githubHandle: handle, analyzing: true });
+        await logActivity('analysis', `Analyzing ${handle}...`, { githubHandle: handle, analyzing: true, name });
     }
 
     handleVibeCheck(url).then(async (res) => {
@@ -142,6 +142,7 @@ async function handleEmailDiscovery(emails: string[], tabId?: number) {
             const res = await fetch(`https://api.github.com/search/users?q=${encodeURIComponent(email + ' in:email')}`);
             if (res.status === 403 || res.status === 429) {
                 console.warn('[Autochekk] Rate limited by GitHub API');
+                logActivity('resolution', `Rate Limited (GitHub API)`, { email, error: 'API limit reached' });
                 break; // Stop for now
             }
             const data = await res.json();
@@ -174,8 +175,8 @@ async function handleEmailDiscovery(emails: string[], tabId?: number) {
                     logActivity('analysis', `Analysis Failed: ${user.login}`, { error: analysisResult.error });
                 }
             } else {
-                // Optional: Log failure to resolve if we want verbose mode
-                // logActivity('resolution', `No GitHub found for ${email}`, { email, success: false });
+                // Log failure to resolve so user knows why it stopped
+                logActivity('resolution', `No GitHub linked to ${email}`, { email, success: false });
             }
         } catch (e: any) {
             console.error(`[Autochekk] Failed to resolve ${email}:`, e);

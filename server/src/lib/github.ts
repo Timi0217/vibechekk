@@ -10,6 +10,7 @@ export const fetchUserStats = async (token: string, username: string) => {
   const query = `
     query($username: String!, $from: DateTime!) {
       user(login: $username) {
+        name
         createdAt
         contributionsCollection {
           totalCommitContributions
@@ -48,6 +49,7 @@ export const fetchUserStats = async (token: string, username: string) => {
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.totalCommitContributions,
       createdAt: response.user.createdAt,
+      name: response.user.name,
       languages: [...new Set(repos.map((r: any) => r.primaryLanguage?.name).filter(Boolean))],
       forkRatio: repos.length > 0 ? repos.filter((r: any) => r.isFork).length / repos.length : 0
     };
@@ -576,6 +578,7 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     externalContributions: 0,
     last90DaysCommits: 0,
     createdAt: new Date().toISOString(),
+    name: '',
     languages: [],
     forkRatio: 0
   };
@@ -635,4 +638,55 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     aiCodeAnalysis,
     avgAILikelihood
   };
+};
+
+export const searchCandidates = async (token: string, criteria: any) => {
+  const octokit = new Octokit({ auth: token });
+  const { languages, experience, jobTitle } = criteria;
+
+  // Construct Query
+  // "language:Python language:TypeScript location:San Francisco pushed:>2024-09-01"
+  const langQuery = (languages || []).map((l: string) => `language:${l}`).join(' ');
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const dateStr = threeMonthsAgo.toISOString().split('T')[0];
+
+  // Base query: Active recently, has languages
+  let q = `type:user pushed:>${dateStr} ${langQuery}`;
+
+  console.log(`[GitHub Search] Query: ${q}`);
+
+  const query = `
+    query($q: String!) {
+      search(query: $q, type: USER, first: 50) {
+        userCount
+        nodes {
+          ... on User {
+            login
+            name
+            avatarUrl
+            bio
+            location
+            url
+            repositories(first: 5, orderBy: {field: STARGAZERS, direction: DESC}, privacy: PUBLIC) {
+              nodes {
+                name
+                stargazerCount
+                primaryLanguage { name }
+                description
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response: any = await octokit.graphql(query, { q });
+    return response.search.nodes;
+  } catch (error) {
+    console.error('[GitHub] Search failed:', error);
+    return [];
+  }
 };
