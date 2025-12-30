@@ -338,6 +338,9 @@ app.get('/api/auth/github/callback', async (req, res) => {
 
         const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, process.env.JWT_SECRET || 'vibe-secret-shhhh');
 
+        // Include GitHub login for display in extension
+        const userWithGithub = { ...user, githubLogin: githubUser.login };
+
         res.send(`
             <html>
             <body style="font-family: sans-serif; text-align: center; padding: 40px; background: #fdfaf6; color: #1a1a1a;">
@@ -348,11 +351,11 @@ app.get('/api/auth/github/callback', async (req, res) => {
                 </div>
                 <script>
                     if (window.opener) {
-                        window.opener.postMessage({ type: 'GITHUB_AUTH_SUCCESS', token: '${token}', user: ${JSON.stringify(user)} }, '*');
+                        window.opener.postMessage({ type: 'GITHUB_AUTH_SUCCESS', token: '${token}', user: ${JSON.stringify(userWithGithub)} }, '*');
                     }
                     setTimeout(() => window.close(), 2000);
                 </script>
-                <div id="vibechekk-auth-data" style="display:none" data-token="${token}" data-user='${JSON.stringify(user)}'></div>
+                <div id="vibechekk-auth-data" style="display:none" data-token="${token}" data-user='${JSON.stringify(userWithGithub)}'></div>
             </body>
             </html>
         `);
