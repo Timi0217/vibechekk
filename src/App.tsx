@@ -3586,7 +3586,7 @@ function App() {
                               </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
-                              <Zap size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                              <Binoculars size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
                               <div>
                                 <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>AUTOCHEKK</span>
                                 <span style={{ fontSize: '10px', opacity: 0.75 }}>Scan for Github profiles as you browse</span>
