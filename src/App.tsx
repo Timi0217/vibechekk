@@ -3592,11 +3592,18 @@ function App() {
                                 <span style={{ fontSize: '10px', opacity: 0.75 }}>Scan for Github profiles as you browse</span>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
                               <ClipboardList size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
                               <div>
                                 <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>CHEKKLIST</span>
                                 <span style={{ fontSize: '10px', opacity: 0.75 }}>Find 50 devs matched to your JD</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <FileSpreadsheet size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>BULKCHEKK</span>
+                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Analyze hundreds of profiles from CSV/JSON</span>
                               </div>
                             </div>
                           </div>
