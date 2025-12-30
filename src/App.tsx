@@ -140,13 +140,22 @@ const stripThe = (name: string) => {
   return name.replace(/^THE\s+/i, '');
 }
 
+interface User {
+  id: string;
+  email: string;
+  name?: string;
+  picture?: string;
+  tier: 'GUEST' | 'AUTHENTICATED' | 'PRO';
+  githubLogin?: string;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('analyze')
   const [manualUrl, setManualUrl] = useState('')
   const [tokens, setTokens] = useState({ github: '', deepseek: '', vibeToken: '' })
   const [history, setHistory] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [selectedReport, setSelectedReport] = useState<any>(null)
   const [limitPaywallOpen, setLimitPaywallOpen] = useState(false)
@@ -276,8 +285,9 @@ function App() {
       if (res.bulk_history && Array.isArray(res.bulk_history)) {
         setBulkHistory(res.bulk_history)
       }
-      if (res.user_data) {
-        setUser(res.user_data)
+      const userData = res.user_data as User | undefined;
+      if (userData) {
+        setUser(userData)
       } else {
         setUser(null)
       }
@@ -286,22 +296,20 @@ function App() {
         setGithubLinked(true)
       }
       // Get GitHub username/name from user_data - try multiple sources
-      // Get GitHub username/name from user_data - try multiple sources
-      if (res.user_data?.githubLogin) {
-        setGithubUsername(res.user_data.githubLogin) // Prioritize handle
-      } else if (res.user_data?.name) {
-        setGithubUsername(res.user_data.name.split(' ')[0])
-      } else if (res.user_data?.email?.endsWith('@github.no-email')) {
+      if (userData?.githubLogin) {
+        setGithubUsername(userData.githubLogin) // Prioritize handle
+      } else if (userData?.name) {
+        setGithubUsername(userData.name.split(' ')[0])
+      } else if (userData?.email?.endsWith('@github.no-email')) {
         // Extract username from generated email like "username@github.no-email"
-        setGithubUsername(res.user_data.email.replace('@github.no-email', ''))
-      } else if (res.auth_token && res.user_data?.name) {
+        setGithubUsername(userData.email.replace('@github.no-email', ''))
+      } else if (res.auth_token && userData?.name) {
         // Fallback to name if GitHub auth exists but no githubLogin field
-        setGithubUsername(res.user_data.name)
+        setGithubUsername(userData.name)
       }
       setAuthLoading(false)
     })
 
-    // Listen for storage changes (e.g., when GitHub auth completes in another tab)
     // Listen for storage changes (e.g., when GitHub auth completes in another tab)
     const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       // If auth token changes (login/re-login), verify user data
@@ -309,19 +317,21 @@ function App() {
         setGithubLinked(true)
         // Also fetch user data to ensure username is set (in case user_data didn't change)
         chrome.storage.local.get(['user_data'], (res) => {
-          if (res.user_data?.githubLogin) {
-            setGithubUsername(res.user_data.githubLogin)
-          } else if (res.user_data?.name) {
-            setGithubUsername(res.user_data.name)
+          const userData = res.user_data as User | undefined;
+          if (userData?.githubLogin) {
+            setGithubUsername(userData.githubLogin)
+          } else if (userData?.name) {
+            setGithubUsername(userData.name)
           }
         })
       }
 
       if (changes.user_data && changes.user_data.newValue) {
-        setUser(changes.user_data.newValue)
+        const userData = changes.user_data.newValue as User | undefined;
+        setUser(userData || null)
         // Update GitHub username when user_data changes
-        if (changes.user_data.newValue?.githubLogin) {
-          setGithubUsername(changes.user_data.newValue.githubLogin)
+        if (userData?.githubLogin) {
+          setGithubUsername(userData.githubLogin)
         }
       }
     }
@@ -2681,18 +2691,27 @@ function App() {
                                 {/* Search Button */}
                                 <button
                                   onClick={async () => {
+                                    if (checklistForm.loading) return;
+
+                                    setChecklistForm(prev => ({ ...prev, loading: true }));
                                     console.log('Search with:', checklistForm);
+
+                                    const searchId = Date.now();
                                     const newSearch = {
-                                      id: Date.now(),
+                                      id: searchId,
                                       title: checklistForm.jobTitle || 'Untitled Search',
-                                      timestamp: Date.now()
+                                      status: 'running',
+                                      timestamp: Date.now(),
+                                      results: []
                                     };
-                                    setActiveSearches([newSearch, ...activeSearches]);
+
+                                    setActiveSearches(prev => [newSearch, ...prev]);
                                     setChecklistTab('active');
 
-                                    // Trigger Backend Search
                                     try {
-                                      const token = (await chrome.storage.local.get('vibe_auth_token')).vibe_auth_token;
+                                      const tokenData = await chrome.storage.local.get('vibe_token');
+                                      const token = tokenData.vibe_token;
+
                                       const res = await fetch(`${BACKEND_URL}/api/chekklist/search`, {
                                         method: 'POST',
                                         headers: {
@@ -2704,17 +2723,36 @@ function App() {
                                       const data = await res.json();
 
                                       if (data.success) {
-                                        const completedSearch = {
-                                          ...newSearch,
-                                          status: 'completed',
-                                          results: data.candidates || []
-                                        };
-                                        const updatedSearches = [completedSearch, ...activeSearches]; // Note: logic flaw if parallel, but fine for MVP
-                                        setActiveSearches(updatedSearches);
-                                        chrome.storage.local.set({ active_searches: updatedSearches });
+                                        setActiveSearches(prev => prev.map(s =>
+                                          s.id === searchId
+                                            ? { ...s, status: 'completed', results: data.candidates || [] }
+                                            : s
+                                        ));
+
+                                        // Update storage with latest searches
+                                        setActiveSearches(current => {
+                                          chrome.storage.local.set({ active_searches: current });
+                                          return current;
+                                        });
+                                      } else {
+                                        setActiveSearches(prev => prev.map(s =>
+                                          s.id === searchId
+                                            ? { ...s, status: 'completed', results: [], error: data.error }
+                                            : s
+                                        ));
                                       }
-                                    } catch (e) { console.error(e); }
+                                    } catch (e) {
+                                      console.error(e);
+                                      setActiveSearches(prev => prev.map(s =>
+                                        s.id === searchId
+                                          ? { ...s, status: 'completed', results: [], error: 'Search failed' }
+                                          : s
+                                      ));
+                                    } finally {
+                                      setChecklistForm(prev => ({ ...prev, loading: false }));
+                                    }
                                   }}
+                                  disabled={checklistForm.loading}
                                   style={{
                                     width: '100%',
                                     padding: '12px',

@@ -648,11 +648,21 @@ export const searchCandidates = async (token: string, criteria: any) => {
   // "language:Python language:TypeScript location:San Francisco pushed:>2024-09-01"
   const langQuery = (languages || []).map((l: string) => `language:${l}`).join(' ');
   const threeMonthsAgo = new Date();
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-  const dateStr = threeMonthsAgo.toISOString().split('T')[0];
+  const twoMonthsAgo = new Date();
+  twoMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 2); // Slightly tighter for better quality
+  const dateStr = twoMonthsAgo.toISOString().split('T')[0];
 
-  // Base query: Active recently, has languages
-  let q = `type:user pushed:>${dateStr} ${langQuery}`;
+  // Base query: Active recently
+  let q = `type:user pushed:>${dateStr}`;
+
+  // Add job title/keywords to query if provided
+  if (jobTitle) {
+    q += ` ${jobTitle}`;
+  }
+
+  if (langQuery) {
+    q += ` ${langQuery}`;
+  }
 
   console.log(`[GitHub Search] Query: ${q}`);
 
