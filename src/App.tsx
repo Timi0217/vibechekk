@@ -2083,7 +2083,7 @@ function App() {
                                 onClick={(e) => { e.stopPropagation(); setShowChecklistForm(!showChecklistForm); }}
                                 style={{
                                   cursor: 'pointer',
-                                  opacity: showChecklistForm ? 0.9 : 0.5,
+                                  opacity: (showChecklistForm || activeSearches.length > 0) ? 1 : 0.5,
                                   transition: 'opacity 0.2s',
                                   display: 'flex',
                                   alignItems: 'center',
@@ -2098,10 +2098,10 @@ function App() {
                                   width: '10px',
                                   height: '10px',
                                   borderRadius: '50%',
-                                  background: showChecklistForm ? (activeSearches.length > 0 ? '#22c55e' : '#f59e0b') : 'transparent',
-                                  border: `1.5px solid ${showChecklistForm ? (activeSearches.length > 0 ? '#22c55e' : '#f59e0b') : 'rgba(255, 255, 255, 0.6)'}`,
+                                  background: activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'transparent'),
+                                  border: `1.5px solid ${activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)')}`,
                                   transition: 'all 0.2s ease',
-                                  boxShadow: showChecklistForm ? `0 0 8px ${activeSearches.length > 0 ? 'rgba(34, 197, 94, 0.6)' : 'rgba(245, 158, 11, 0.6)'}` : 'none'
+                                  boxShadow: activeSearches.length > 0 ? '0 0 8px rgba(34, 197, 94, 0.6)' : (showChecklistForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none')
                                 }} />
                               </div>
                             </div>
@@ -2551,7 +2551,14 @@ function App() {
                                                   </div>
                                                 )}
                                               </div>
-                                              <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>@{c.handle}</div>
+                                              <div style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                @{c.handle}
+                                                {c.archetype && (
+                                                  <span style={{ fontSize: '9px', background: '#e5e7eb', padding: '0 4px', borderRadius: '4px', color: '#374151', fontWeight: 500 }}>
+                                                    {c.archetype.replace('THE ', '')}
+                                                  </span>
+                                                )}
+                                              </div>
                                               {c.matchReason && (
                                                 <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px', lineHeight: '1.2', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={c.matchReason}>
                                                   {c.matchReason}

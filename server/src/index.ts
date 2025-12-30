@@ -318,6 +318,8 @@ app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
                 bio: c.bio,
                 matchScore: rank.score,
                 matchReason: rank.reason,
+                archetype: rank.archetype,
+                tier: rank.tier,
                 topRepo: c.repositories.nodes[0]?.name || 'Unknown',
                 topRepoDesc: c.repositories.nodes[0]?.description
             };

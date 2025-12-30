@@ -759,33 +759,67 @@ export const rankCandidates = async (apiKey: string, criteria: any, candidates: 
     }));
 
     const prompt = `
+    You are VibeChekk's Senior Talent Assessor. Your goal is to strictly filter candidates based on Archetype/Tier first, then Score based on JD.
+
+    === VIBECHEKK DEFINITIONS (STRICT) ===
+    TIERS:
+    - LEGENDARY (Top 1%): Industry-defining talent, library authors, maintainers of massive OSS.
+    - ULTRA RARE (Top 5%): Systems architects, deep specialists, staff+ level engineers.
+    - RARE (Top 15%): Strong senior engineers, high quality, consistent.
+    - UNCOMMON (Top 30%): Solid mid-senior, huge contributors, builders.
+    - COMMON: Junior/Mid, learners, average activity.
+
+    ARCHETYPES:
+    - THE 10X ENGINEER: Builds tools/frameworks used by thousands.
+    - THE ARCHITECT: Designs scalable systems, infra, distributed systems.
+    - THE SPECIALIST: Deep niche expertise (ML, Security, Graphics).
+    - THE MAINTAINER: Keeps meaningful OSS projects alive.
+    - THE BUILDER: Pragmatic shipper, high volume of "real" apps.
+    - THE CRAFTSPERSON: Obsessed with testing, clean code, docs.
+    - THE HIDDEN GEM: High quality code, low visibility/stars. (Often Enterprise/Private).
+    - THE TINKERER/GRINDER: High activity, learning by doing.
+    - THE PROFESSOR: Educational content, tutorials.
+
+    === USER REQUEST ===
     JOB TITLE: ${criteria.jobTitle}
-    JOB DESCRIPTION:
-    ${criteria.jd.substring(0, 1000)}
-
-    TARGET CRITERIA:
+    JOB DESCRIPTION: ${criteria.jd.substring(0, 800)}...
+    
+    STRICT FILTERS (MUST MATCH OR EXCLUDE):
+    - Target Archetypes: ${criteria.archetypes && criteria.archetypes.length > 0 ? criteria.archetypes.join(', ') : '(No strict filter - allow all good matches)'}
+    - Target Tiers: ${criteria.tiers && criteria.tiers.length > 0 ? criteria.tiers.join(', ') : '(No strict filter)'}
     - Languages: ${criteria.languages?.join(', ') || 'Any'}
-    - Experience Level: ${criteria.experience || 'Any'}
-    - Target Archetypes: ${criteria.archetypes?.join(', ') || 'Any'}
-    - Target Tiers: ${criteria.tiers?.join(', ') || 'Any'}
 
-    CANDIDATES:
+    === CANDIDATES ===
     ${JSON.stringify(candidateSummaries, null, 2)}
 
-    TASK:
-    Rate each candidate from 0-100 based on fit for this job description AND the specific archetypes/tiers requested.
+    === TASK ===
+    For each candidate:
+    1. CLASSIFY: Determine their most likely Archetype & Tier based on their bio/repos using the Strict Definitions above.
+    2. FILTER (CRITICAL): 
+       - If user specified [Target Archetypes] or [Target Tiers] and the candidate's classification DOES NOT match, SCORE = 0.
+       - If candidate tech stack (languages) is completely irrelevant to JD, SCORE = 0.
+    3. JD MATCH:
+       - Only if they pass strict filters, rate 0-100 on fit for the JD.
     
-    Scoring Guide:
-    - 90-100: Perfect match for Tech Stack AND Archetype (e.g. requested "The Architect" and user has complex system design repos).
-    - 70-89: Good match for Tech Stack, acceptable Archetype fit.
-    - 50-69: Weak tech match OR wrong archetype (e.g. asked for "The Builder" (fast shipper) but user is "The Academic" (slow/theory)).
-    - <50: Irrelevant tech stack.
+    Return JSON format with 'rankings' array. Include 'archetype', 'tier', 'score', and 'reason'.
     
-    Return JSON format:
+    Example Return:
     {
         "rankings": [
-            { "handle": "user1", "score": 85, "reason": "Strong React skills, fits 'Builder' archetype with high activity." },
-            ...
+            { 
+                "handle": "userA", 
+                "archetype": "THE BUILDER",
+                "tier": "UNCOMMON",
+                "score": 85, 
+                "reason": "Correct Archetype (Builder). Strong React match for JD." 
+            },
+           { 
+                "handle": "userB", 
+                "archetype": "THE ACADEMIC", 
+                "tier": "COMMON", 
+                "score": 0, 
+                "reason": "Filtered: Wrong Archetype." 
+            }
         ]
     }
     `;
@@ -813,7 +847,12 @@ export const rankCandidates = async (apiKey: string, criteria: any, candidates: 
 
         // Convert to map for easy lookup
         return result.rankings.reduce((acc: any, r: any) => {
-            acc[r.handle] = { score: r.score, reason: r.reason };
+            acc[r.handle] = {
+                score: r.score,
+                reason: r.reason,
+                archetype: r.archetype,
+                tier: r.tier
+            };
             return acc;
         }, {});
 
