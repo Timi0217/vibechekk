@@ -305,7 +305,7 @@ app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
         if (process.env.DEEPSEEK_API_KEY && jd) {
             try {
                 const { rankCandidates } = await import('./lib/deepseek');
-                rankings = await rankCandidates(process.env.DEEPSEEK_API_KEY, jd, candidates);
+                rankings = await rankCandidates(process.env.DEEPSEEK_API_KEY, { jobTitle, jd, experience, languages, archetypes, tiers }, candidates);
             } catch (e) { console.error('DeepSeek Rank Step Failed:', e); }
         }
 
