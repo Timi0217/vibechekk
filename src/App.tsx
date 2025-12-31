@@ -159,6 +159,7 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [selectedReport, setSelectedReport] = useState<any>(null)
   const [limitPaywallOpen, setLimitPaywallOpen] = useState(false)
+  const [proFeaturePaywallOpen, setProFeaturePaywallOpen] = useState(false)
   const [expandedMerits, setExpandedMerits] = useState<number[]>([])
   const [showFullSummary, setShowFullSummary] = useState(false)
   const [showDetailedSummary, setShowDetailedSummary] = useState(false)
@@ -2006,7 +2007,7 @@ function App() {
                             onClick={(e) => {
                               e.stopPropagation();
                               if (user?.tier !== 'PRO') {
-                                setLimitPaywallOpen(true);
+                                setProFeaturePaywallOpen(true);
                                 return;
                               }
                               setAutoChekk(!autoChekk);
@@ -2240,7 +2241,7 @@ function App() {
                         <div
                           onClick={() => {
                             if (user?.tier !== 'PRO') {
-                              setLimitPaywallOpen(true);
+                              setProFeaturePaywallOpen(true);
                               return;
                             }
                             setShowChecklistForm(!showChecklistForm);
@@ -2934,7 +2935,7 @@ function App() {
                           <div
                             onClick={() => {
                               if (user?.tier !== 'PRO') {
-                                setLimitPaywallOpen(true);
+                                setProFeaturePaywallOpen(true);
                                 return;
                               }
                               setShowBulkChekkForm(!showBulkChekkForm);
@@ -4048,6 +4049,42 @@ function App() {
               <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setLimitPaywallOpen(false); setActiveTab('settings'); }}>
                 <Zap size={16} fill="white" />
                 Upgrade Now
+              </button>
+            </div>
+          </div>
+        )
+      }
+      {/* Pro Feature Required Paywall Modal */}
+      {
+        proFeaturePaywallOpen && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s ease-out'
+          }} onClick={() => setProFeaturePaywallOpen(false)}>
+            <div
+              className="paywall-overlay"
+              style={{ position: 'relative', width: '100%', maxWidth: '300px', padding: '32px 24px', animation: 'slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setProFeaturePaywallOpen(false)}
+                style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+
+              <div style={{ marginBottom: '16px', background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%)', padding: '16px', borderRadius: '50%', display: 'inline-flex' }}>
+                <Lock size={32} color="#7c3aed" />
+              </div>
+
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>Pro Feature</h3>
+              <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                This feature is exclusive to <strong>Pro</strong> subscribers. Upgrade to unlock AutoChekk, Chekklist, BulkChekk and more.
+              </p>
+
+              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setProFeaturePaywallOpen(false); setActiveTab('settings'); }}>
+                <Zap size={16} fill="white" />
+                Upgrade to Pro
               </button>
             </div>
           </div>
