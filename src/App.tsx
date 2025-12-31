@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, Activity, FileSpreadsheet, Share2, Gift, Shield } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, FileSpreadsheet, Shield } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
-import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
 // Disable worker to run PDF parsing in main thread (required for Chrome Extension CSP)
 pdfjsLib.GlobalWorkerOptions.workerSrc = '';
@@ -2998,7 +2997,9 @@ function App() {
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
-                        e.currentTarget.parentElement.style.background = 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)';
+                        if (e.currentTarget.parentElement) {
+                          e.currentTarget.parentElement.style.background = 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)';
+                        }
                       }}
                     />
                   </div>
@@ -3327,7 +3328,7 @@ function App() {
 
                   // Combine BOTH manual (pendingHandles) and autochekk (pendingAnalyses) into one list
                   const allPending = [
-                    ...pendingHandles.map(h => ({ handle: h, avatar: '', timestamp: Date.now() })),
+                    ...pendingHandles.map(h => ({ handle: h, name: undefined as string | undefined, avatar: '', timestamp: Date.now() })),
                     ...pendingAnalyses
                   ];
 
