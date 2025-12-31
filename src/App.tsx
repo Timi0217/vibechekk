@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, FileSpreadsheet, Shield } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
+import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
 // Disable worker to run PDF parsing in main thread (required for Chrome Extension CSP)
 pdfjsLib.GlobalWorkerOptions.workerSrc = '';
@@ -483,60 +484,70 @@ function App() {
   // Parse CSV file and extract GitHub handles/emails
   const parseUploadedFile = async (file: File): Promise<{ handles: string[], emails: string[] }> => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const text = e.target?.result as string
-          let handles: string[] = []
-
-          // Parse CSV - look for github handles, urls, emails, usernames
-          const lines = text.split(/\r?\n/).filter(line => line.trim())
-          const header = lines[0]?.toLowerCase() || ''
-
-          // Detect column indices
-          const cols = header.split(',').map(c => c.trim())
-          const usernameCol = cols.findIndex(c =>
-            c.includes('username') || c.includes('handle') || c.includes('github') ||
-            c.includes('user') || c.includes('email') || c.includes('url')
-          )
-
-          // If we found a header, skip it; otherwise process all lines
-          const startIdx = usernameCol >= 0 ? 1 : 0
-          const colIdx = usernameCol >= 0 ? usernameCol : 0
-
-          for (let i = startIdx; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
-            if (values[colIdx]) {
-              handles.push(values[colIdx])
+      // Use PapaParse for robust CSV parsing (handles quotes, commas, etc.)
+      Papa.parse(file, {
+        header: false, // We'll detect headers manually to be safer
+        skipEmptyLines: true,
+        complete: (results) => {
+          try {
+            const rows = results.data as string[][];
+            if (!rows || rows.length === 0) {
+              resolve({ handles: [], emails: [] });
+              return;
             }
-          }
 
-          // Separate emails from regular handles
-          const emails: string[] = []
-          const directHandles: string[] = []
+            let dataRows = rows;
+            let targetColIndex = 0;
 
-          for (const item of handles) {
-            if (isEmail(item)) {
-              emails.push(item.trim())
-            } else {
-              const handle = extractGithubHandle(item)
-              if (handle) directHandles.push(handle)
+            // Simple heuristic to detect if first row is a header
+            const firstRow = rows[0].map(c => c.toLowerCase().trim());
+            const potentialHeaderIndex = firstRow.findIndex(c =>
+              c.includes('username') || c.includes('handle') || c.includes('github') ||
+              c.includes('user') || c.includes('email') || c.includes('url')
+            );
+
+            if (potentialHeaderIndex >= 0) {
+              // Header found
+              targetColIndex = potentialHeaderIndex;
+              dataRows = rows.slice(1); // Skip header
             }
+
+            // Extract values
+            const rawValues: string[] = [];
+            for (const row of dataRows) {
+              if (row[targetColIndex]) {
+                rawValues.push(row[targetColIndex]);
+              }
+            }
+
+            // Process values (separate emails vs handles)
+            const emails: string[] = [];
+            const directHandles: string[] = [];
+
+            for (const item of rawValues) {
+              if (isEmail(item)) {
+                emails.push(item.trim());
+              } else {
+                const handle = extractGithubHandle(item);
+                if (handle) directHandles.push(handle);
+              }
+            }
+
+            // Deduplicate
+            resolve({
+              handles: [...new Set(directHandles)],
+              emails: [...new Set(emails)]
+            });
+
+          } catch (err) {
+            reject(err);
           }
-
-          // Remove duplicates
-          const uniqueHandles = [...new Set(directHandles)]
-          const uniqueEmails = [...new Set(emails)]
-
-          // Return combined (handles first, then emails to be resolved)
-          resolve({ handles: uniqueHandles, emails: uniqueEmails })
-        } catch (err) {
-          reject(err)
+        },
+        error: (err: any) => {
+          reject(err);
         }
-      }
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsText(file)
-    })
+      });
+    });
   }
 
   // Extract GitHub handle from various formats (URL, @username, plain username)
