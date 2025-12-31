@@ -519,7 +519,10 @@ function App() {
         try {
           const response = await fetch(`${BACKEND_URL}/api/analyze`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': tokens.vibeToken ? `Bearer ${tokens.vibeToken}` : ''
+            },
             body: JSON.stringify({
               githubUrl: `https://github.com/${handle}`,
               userId: user?.id || 'guest'
