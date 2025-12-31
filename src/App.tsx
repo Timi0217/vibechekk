@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, Activity, FileSpreadsheet, Share2, Gift, Shield } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
 import Papa from 'papaparse';
+import html2canvas from 'html2canvas';
 // Disable worker to run PDF parsing in main thread (required for Chrome Extension CSP)
 pdfjsLib.GlobalWorkerOptions.workerSrc = '';
 
@@ -2900,13 +2901,52 @@ function App() {
                   </div>
                   <button
                     className="download-card-btn"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!user) {
                         setSelectedReport(null);
                         setActiveTab('settings');
                       } else {
-                        // TODO: Implement actual PDF download
-                        console.log('Downloading report card...');
+                        // Capture report card
+                        const element = document.querySelector('.detail-view') as HTMLElement;
+                        if (!element) return;
+
+                        const btn = document.querySelector('.download-card-btn') as HTMLElement;
+                        const backBtn = document.querySelector('.back-btn') as HTMLElement;
+
+                        // Default text indicating processing
+                        const originalText = btn.innerText;
+                        btn.innerText = 'GENERATING...';
+
+                        try {
+                          // Hide buttons for clean capture
+                          if (btn) btn.style.opacity = '0';
+                          if (backBtn) backBtn.style.opacity = '0';
+
+                          const canvas = await html2canvas(element, {
+                            backgroundColor: '#fafaf9', // Match app bg
+                            scale: 2, // Retina quality
+                            logging: false,
+                            useCORS: true // For GitHub avatars
+                          });
+
+                          const link = document.createElement('a');
+                          link.download = `vibe-check-${selectedReport.candidate?.githubHandle || 'report'}.png`;
+                          link.href = canvas.toDataURL('image/png');
+                          link.click();
+                        } catch (err) {
+                          console.error('Download failed:', err);
+                          alert('Could not generate image. Please try again.');
+                        } finally {
+                          // Restore buttons
+                          if (btn) {
+                            btn.style.opacity = '1';
+                            btn.innerHTML = `
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-down"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+                              DOWNLOAD REPORT CARD
+                            `;
+                          }
+                          if (backBtn) backBtn.style.opacity = '1';
+                        }
                       }
                     }}
                   >
