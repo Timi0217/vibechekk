@@ -825,7 +825,7 @@ app.get('/api/referral/info', async (req, res) => {
     const token = authHeader.split(' ')[1];
     try {
         const decoded: any = jwt.verify(token, SECURE_JWT_SECRET);
-        const user = await prisma.user.findUnique({
+        let user = await prisma.user.findUnique({
             where: { id: decoded.userId },
             include: {
                 referrals: {
@@ -836,6 +836,21 @@ app.get('/api/referral/info', async (req, res) => {
 
         if (!user) {
             return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        // Generate referral code if user doesn't have one (legacy users)
+        if (!user.referralCode) {
+            const newCode = `${user.id.slice(0, 8)}${Date.now().toString(36).slice(-4)}`;
+            user = await prisma.user.update({
+                where: { id: user.id },
+                data: { referralCode: newCode },
+                include: {
+                    referrals: {
+                        select: { id: true, name: true, createdAt: true, usageCount: true }
+                    }
+                }
+            });
+            console.log(`[Referral] Generated code for legacy user: ${user.email} -> ${newCode}`);
         }
 
         // Calculate active referrals (those who have run at least 1 chekk)

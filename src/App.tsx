@@ -4402,10 +4402,17 @@ function App() {
                 <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', color: 'var(--text-main)' }}>
                   Invite Friends
                 </h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
-                  Refer 3 friends who run a chekk and get <strong style={{ color: 'var(--accent)' }}>1 week unlimited</strong>!
-                </p>
-                {/* Progress bar */}
+                {user?.tier !== 'PRO' && (
+                  <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
+                    Refer 3 friends who run a chekk and get <strong style={{ color: 'var(--accent)' }}>1 week unlimited</strong>!
+                  </p>
+                )}
+                {user?.tier === 'PRO' && (
+                  <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
+                    Share Vibechekk with your network
+                  </p>
+                )}
+                {/* Progress bar for non-Pro, Count for Pro */}
                 {referralInfo && (
                   <div style={{ marginTop: '16px' }}>
                     <div style={{
@@ -4415,25 +4422,30 @@ function App() {
                       color: 'var(--text-dim)',
                       marginBottom: '6px'
                     }}>
-                      <span>Progress</span>
+                      <span>{user?.tier === 'PRO' ? 'Referrals' : 'Progress'}</span>
                       <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
-                        {referralInfo.progressToReward.current}/{referralInfo.progressToReward.target}
+                        {user?.tier === 'PRO'
+                          ? referralInfo.activeReferrals
+                          : `${referralInfo.progressToReward.current}/${referralInfo.progressToReward.target}`
+                        }
                       </span>
                     </div>
-                    <div style={{
-                      height: '8px',
-                      background: 'var(--bg-gray)',
-                      borderRadius: '4px',
-                      overflow: 'hidden'
-                    }}>
+                    {user?.tier !== 'PRO' && (
                       <div style={{
-                        height: '100%',
-                        width: `${(referralInfo.progressToReward.current / referralInfo.progressToReward.target) * 100}%`,
-                        background: 'linear-gradient(90deg, var(--accent) 0%, #b45309 100%)',
+                        height: '8px',
+                        background: 'var(--bg-gray)',
                         borderRadius: '4px',
-                        transition: 'width 0.3s ease'
-                      }} />
-                    </div>
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${(referralInfo.progressToReward.current / referralInfo.progressToReward.target) * 100}%`,
+                          background: 'linear-gradient(90deg, var(--accent) 0%, #b45309 100%)',
+                          borderRadius: '4px',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
