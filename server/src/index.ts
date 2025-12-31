@@ -13,18 +13,125 @@ dotenv.config();
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 8080;
-const JWT_SECRET = process.env.JWT_SECRET || 'vibe-secret-shhhh';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECURITY: Enforce JWT_SECRET - MUST be set in production
+// ═══════════════════════════════════════════════════════════════════════════
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('❌ FATAL: JWT_SECRET environment variable is not set!');
+    console.error('   Set a secure random string in your environment variables.');
+    console.error('   Generate one with: openssl rand -base64 32');
+    if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+    } else {
+        console.warn('⚠️  DEV MODE: Using insecure fallback JWT_SECRET');
+    }
+}
+const SECURE_JWT_SECRET = JWT_SECRET || 'dev-only-insecure-secret-do-not-use-in-prod';
 
 // Use environment variables for API keys
 const GITHUB_TOKEN = process.env.GITHUB_API_TOKEN;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
+// Validate critical API keys
+if (!GITHUB_TOKEN) {
+    console.warn('⚠️  WARNING: GITHUB_API_TOKEN not set. API calls will be rate limited.');
+}
+if (!DEEPSEEK_KEY) {
+    console.warn('⚠️  WARNING: DEEPSEEK_API_KEY not set. AI analysis will fail.');
+}
+
 // Initialize Stripe
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+if (!stripe) {
+    console.warn('⚠️  WARNING: STRIPE_SECRET_KEY not set. Payments disabled.');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECURITY: CORS Configuration - Restrict origins in production
+// ═══════════════════════════════════════════════════════════════════════════
+const ALLOWED_ORIGINS = [
+    'chrome-extension://pbnpceefkjmpchjfldfpjjnbmdingpjn', // Production extension ID
+    'chrome-extension://efmkmikfihdiflhoahpomphlobpplnon', // Dev extension ID (update if different)
+    'https://vibechekk.com',
+    'https://www.vibechekk.com',
+    'https://vibechekk-landing.vercel.app',
+    'http://localhost:3000', // Local landing page dev
+    'http://localhost:5173', // Local Vite dev
+];
+
+const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        // Allow requests with no origin (mobile apps, Postman, etc.) in dev
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        // Allow any chrome-extension:// origin (for dev extensions)
+        if (origin.startsWith('chrome-extension://')) {
+            callback(null, true);
+            return;
+        }
+        if (ALLOWED_ORIGINS.includes(origin)) {
+            callback(null, true);
+        } else if (process.env.NODE_ENV !== 'production') {
+            // In dev, allow any origin but log it
+            console.log(`[CORS] Allowing dev origin: ${origin}`);
+            callback(null, true);
+        } else {
+            console.warn(`[CORS] Blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECURITY: Simple Rate Limiting (in-memory, consider Redis for production)
+// ═══════════════════════════════════════════════════════════════════════════
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
+
+const rateLimiter = (req: any, res: any, next: any) => {
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const key = typeof ip === 'string' ? ip : ip[0] || 'unknown';
+    const now = Date.now();
+
+    const entry = rateLimitStore.get(key);
+
+    if (!entry || entry.resetAt < now) {
+        rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+        return next();
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+        return res.status(429).json({
+            success: false,
+            error: 'Too many requests. Please slow down and try again in a minute.',
+            retryAfter: Math.ceil((entry.resetAt - now) / 1000)
+        });
+    }
+
+    entry.count++;
+    next();
+};
+
+// Clean up rate limit store periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of rateLimitStore.entries()) {
+        if (entry.resetAt < now) {
+            rateLimitStore.delete(key);
+        }
+    }
+}, 60000); // Clean every minute
 
 // --- AUTH UTILS ---
-// ... (rest of imports/utils remains same)
 const verifyAtsToken = async (token: string, type: 'ashby' | 'greenhouse') => {
     // Mocking ATS verification for now
     if (token.startsWith('ash_') || token.startsWith('gh_')) {
@@ -33,7 +140,9 @@ const verifyAtsToken = async (token: string, type: 'ashby' | 'greenhouse') => {
     return null;
 };
 
-// --- MIDDLEWARE ---
+// ═══════════════════════════════════════════════════════════════════════════
+// MIDDLEWARE: Tier-based Usage Limits with better error messages
+// ═══════════════════════════════════════════════════════════════════════════
 const checkTierLimit = async (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization;
     const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown-ip';
@@ -48,20 +157,30 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
             if (guestCount >= 2) {
                 return res.status(429).json({
                     success: false,
-                    error: 'Guest limit reached. Login to get one extra check!'
+                    error: 'You\'ve used your 2 free Vibechekks! Sign in with GitHub to unlock 3 more, or upgrade to Pro for unlimited checks.',
+                    code: 'GUEST_LIMIT_REACHED',
+                    limit: 2,
+                    used: guestCount
                 });
             }
             return next();
         } catch (e) {
+            console.error('[Tier Check] Database error:', e);
             return next(); // Fallback if DB fails
         }
     }
 
     const token = authHeader.split(' ')[1];
     try {
-        const decoded: any = jwt.verify(token, JWT_SECRET);
+        const decoded: any = jwt.verify(token, SECURE_JWT_SECRET);
         const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
-        if (!user) return res.status(401).json({ success: false, error: 'User session invalid' });
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                error: 'Your session has expired. Please sign in again.',
+                code: 'SESSION_EXPIRED'
+            });
+        }
 
         const now = new Date();
         const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -75,34 +194,49 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
             user.usageCount = 0;
         }
 
-        const limits = { GUEST: 2, AUTHENTICATED: 5, PRO: 100 };
+        const limits: Record<string, number> = { GUEST: 2, AUTHENTICATED: 3, PRO: Infinity };
         const userLimit = limits[user.tier] || 2;
 
         if (user.usageCount >= userLimit) {
+            const resetTime = 'at the start of next week';
             return res.status(429).json({
                 success: false,
                 error: user.tier === 'PRO'
-                    ? `Monthly limit reached (${userLimit} profiles).`
-                    : `Limit reached. Upgrade to Pro for unlimited chekks.`
+                    ? 'Something went wrong - PRO users have unlimited checks!'
+                    : `You've reached your limit of ${userLimit} checks this week. Upgrade to Pro for unlimited checks!`,
+                code: 'USAGE_LIMIT_REACHED',
+                tier: user.tier,
+                limit: userLimit,
+                used: user.usageCount,
+                resetTime
             });
         }
 
         req.user = user;
         next();
-    } catch (e) {
-        return res.status(401).json({ success: false, error: 'Invalid token' });
+    } catch (e: any) {
+        if (e.name === 'TokenExpiredError') {
+            return res.status(401).json({
+                success: false,
+                error: 'Your session has expired. Please sign in again.',
+                code: 'TOKEN_EXPIRED'
+            });
+        }
+        return res.status(401).json({
+            success: false,
+            error: 'Invalid authentication. Please sign in again.',
+            code: 'INVALID_TOKEN'
+        });
     }
 };
 
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+// Apply middleware
+app.use(cors(corsOptions));
 app.use(express.json());
+app.use(rateLimiter);
 
 // Explicitly handle OPTIONS for all routes
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 
 // --- AUTH ROUTES ---
 app.post('/api/auth/ats', async (req, res) => {
@@ -120,17 +254,26 @@ app.post('/api/auth/ats', async (req, res) => {
         }
     });
 
-    const vibeToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    const vibeToken = jwt.sign({ userId: user.id }, SECURE_JWT_SECRET, { expiresIn: '30d' });
     res.json({ success: true, token: vibeToken, user });
 });
 
 app.post('/api/auth/google', async (req, res) => {
-    const { token, email, name, picture } = req.body;
+    const { token, email, name, picture, referralCode } = req.body;
     if (!token) return res.status(401).json({ success: false, error: 'No token provided' });
 
     // Use real Google profile data sent from extension
     if (!email) {
         return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    // Resolve referral code if provided
+    let referredById = undefined;
+    if (referralCode) {
+        const referrer = await prisma.user.findFirst({ where: { referralCode } });
+        if (referrer && referrer.email !== email) { // Don't refer self
+            referredById = referrer.id;
+        }
     }
 
     // Check if user exists to preserve their tier
@@ -147,11 +290,12 @@ app.post('/api/auth/google', async (req, res) => {
             email,
             name: name || 'User',
             picture: picture || null,
-            tier: 'AUTHENTICATED'
+            tier: 'AUTHENTICATED',
+            referredById // Attribute referral on signup
         }
     });
 
-    const vibeToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    const vibeToken = jwt.sign({ userId: user.id }, SECURE_JWT_SECRET, { expiresIn: '30d' });
     res.json({ success: true, token: vibeToken, user });
 });
 
@@ -275,6 +419,11 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 where: { id: user.id },
                 data: { usageCount: { increment: 1 } }
             });
+
+            // Process referral bonus if this is the user's first chekk
+            if (user.usageCount === 0) {
+                processReferralBonus(user.id);
+            }
         }
 
         res.json({ success: true, data: report, isPro });
@@ -388,20 +537,26 @@ app.get('/api/auth/github/callback', async (req, res) => {
             email = `${githubUser.login}@github.no-email`;
         }
 
-        // Upsert User
-        let user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-            user = await prisma.user.create({
-                data: {
-                    email,
-                    name: githubUser.name || githubUser.login,
-                    picture: githubUser.avatar_url,
-                    tier: 'AUTHENTICATED'
-                }
-            });
-        }
+        // Upsert User (Create or Update)
+        // If user exists (e.g. from Google login), we update their GitHub login
+        // If not, we create a new user
+        const user = await prisma.user.upsert({
+            where: { email },
+            update: {
+                githubLogin: githubUser.login,
+                // Only update picture if they don't have one
+                picture: { set: undefined } // Don't overwrite existing picture
+            },
+            create: {
+                email,
+                name: githubUser.name || githubUser.login,
+                picture: githubUser.avatar_url,
+                githubLogin: githubUser.login,
+                tier: 'AUTHENTICATED'
+            }
+        });
 
-        const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, process.env.JWT_SECRET || 'vibe-secret-shhhh');
+        const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, SECURE_JWT_SECRET);
 
         // Include GitHub login for display in extension
         const userWithGithub = { ...user, githubLogin: githubUser.login };
@@ -641,6 +796,253 @@ app.get('/api/analytics', async (req, res) => {
     }
 });
 
+// ============= REFERRAL SYSTEM ENDPOINTS =============
+
+// Get user's referral info
+app.get('/api/referral/info', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded: any = jwt.verify(token, SECURE_JWT_SECRET);
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            include: {
+                referrals: {
+                    select: { id: true, name: true, createdAt: true, usageCount: true }
+                }
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        // Calculate active referrals (those who have run at least 1 chekk)
+        const activeReferrals = user.referrals.filter((r: any) => r.usageCount > 0);
+
+        res.json({
+            success: true,
+            referralCode: user.referralCode,
+            referralLink: `https://vibechekk.com/r/${user.referralCode}`,
+            totalReferrals: user.referrals.length,
+            activeReferrals: activeReferrals.length,
+            referralCount: user.referralCount,
+            bonusChekks: user.bonusChekks,
+            bonusExpiresAt: user.bonusExpiresAt,
+            // 3 active referrals = 1 week unlimited (100 bonus chekks)
+            progressToReward: {
+                current: activeReferrals.length,
+                target: 3,
+                rewardDescription: '1 week unlimited chekks'
+            }
+        });
+    } catch (error) {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+});
+
+// Apply referral code (for new sign-ups)
+app.post('/api/referral/apply', async (req, res) => {
+    const { referralCode, userId } = req.body;
+
+    if (!referralCode || !userId) {
+        return res.status(400).json({ success: false, error: 'Referral code and user ID required' });
+    }
+
+    try {
+        // Find the referrer by their referral code
+        const referrer = await prisma.user.findUnique({
+            where: { referralCode }
+        });
+
+        if (!referrer) {
+            return res.status(404).json({ success: false, error: 'Invalid referral code' });
+        }
+
+        // Don't allow self-referral
+        if (referrer.id === userId) {
+            return res.status(400).json({ success: false, error: 'Cannot use your own referral code' });
+        }
+
+        // Link the new user to referrer
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { referredById: referrer.id }
+        });
+
+        res.json({
+            success: true,
+            message: `You were referred by ${referrer.name || 'a friend'}! Complete your first chekk to help them earn rewards.`,
+            referrerName: referrer.name
+        });
+    } catch (error) {
+        console.error('[Referral Apply] Error:', error);
+        res.status(500).json({ success: false, error: 'Failed to apply referral code' });
+    }
+});
+
+// Callback when a referred user completes their first chekk (called internally)
+const processReferralBonus = async (userId: string) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { referredBy: true }
+        });
+
+        if (!user || !user.referredById || user.usageCount > 1) {
+            // Only process on first chekk
+            return;
+        }
+
+        // Increment referrer's referral count
+        const referrer = await prisma.user.update({
+            where: { id: user.referredById },
+            data: {
+                referralCount: { increment: 1 }
+            }
+        });
+
+        // Check if referrer has now reached 3 active referrals
+        if (referrer.referralCount === 3) {
+            // Grant 1 week of unlimited chekks (100 bonus)
+            const oneWeekFromNow = new Date();
+            oneWeekFromNow.setDate(oneWeekFromNow.getDate() + 7);
+
+            await prisma.user.update({
+                where: { id: referrer.id },
+                data: {
+                    bonusChekks: 100,
+                    bonusExpiresAt: oneWeekFromNow
+                }
+            });
+
+            console.log(`[Referral] User ${referrer.email} earned a week of unlimited chekks!`);
+        }
+    } catch (error) {
+        console.error('[Referral Bonus] Error:', error);
+    }
+};
+
+// Get usage info for current user
+app.get('/api/usage', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown-ip';
+
+    if (!authHeader) {
+        // Guest user - count reports by IP
+        try {
+            const guestCount = await prisma.vibeReport.count({
+                where: { guestIp: typeof ip === 'string' ? ip : 'unknown-ip', userId: null }
+            });
+            return res.json({
+                success: true,
+                used: guestCount,
+                limit: 2,
+                tier: 'GUEST',
+                remaining: Math.max(0, 2 - guestCount)
+            });
+        } catch (e) {
+            return res.json({ success: true, used: 0, limit: 2, tier: 'GUEST', remaining: 2 });
+        }
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded: any = jwt.verify(token, SECURE_JWT_SECRET);
+        const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        // Check if bonus chekks have expired
+        const now = new Date();
+        let bonusChekks = user.bonusChekks;
+        if (user.bonusExpiresAt && user.bonusExpiresAt < now) {
+            bonusChekks = 0;
+            // Clear expired bonus
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { bonusChekks: 0, bonusExpiresAt: null }
+            });
+        }
+
+        const baseLimits: Record<string, number> = { GUEST: 2, AUTHENTICATED: 3, PRO: Infinity };
+        const baseLimit = baseLimits[user.tier] || 2;
+        const totalLimit = baseLimit + bonusChekks;
+
+        res.json({
+            success: true,
+            used: user.usageCount,
+            limit: totalLimit,
+            baseLimit,
+            bonusChekks,
+            bonusExpiresAt: bonusChekks > 0 ? user.bonusExpiresAt : null,
+            tier: user.tier,
+            remaining: Math.max(0, totalLimit - user.usageCount),
+            resetTime: user.tier === 'PRO' ? 'monthly' : 'hourly'
+        });
+    } catch (error) {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+});
+
+// ============= ADMIN ENDPOINTS =============
+
+const ADMIN_EMAIL = 'timidayokayode@gmail.com';
+
+// Admin: Set tier for testing
+app.post('/api/admin/set-tier', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded: any = jwt.verify(token, SECURE_JWT_SECRET);
+        const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        // Only admin can use this endpoint
+        if (user.email !== ADMIN_EMAIL) {
+            return res.status(403).json({ success: false, error: 'Admin access required' });
+        }
+
+        const { tier, resetUsage } = req.body;
+        if (!['GUEST', 'AUTHENTICATED', 'PRO'].includes(tier)) {
+            return res.status(400).json({ success: false, error: 'Invalid tier' });
+        }
+
+        // Update user tier in database (optionally reset usage for testing)
+        const updatedUser = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                tier: tier as any,
+                ...(resetUsage && { usageCount: 0, lastResetAt: new Date() })
+            }
+        });
+
+        console.log(`[ADMIN] ${ADMIN_EMAIL} changed tier to ${tier}${resetUsage ? ' (usage reset)' : ''}`);
+
+        res.json({
+            success: true,
+            tier: updatedUser.tier,
+            usageCount: updatedUser.usageCount,
+            message: `Tier changed to ${tier}`
+        });
+    } catch (error) {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+});
+
 // ============= STRIPE PAYMENT ENDPOINTS =============
 
 // Create Stripe Checkout Session for Pro subscription
@@ -654,7 +1056,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
     let userId: string;
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
         userId = decoded.userId;
     } catch {
         return res.status(401).json({ success: false, error: 'Invalid token' });

@@ -11,8 +11,9 @@ import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Sparkles, Shield, Zap, Users, Code, Brain, ChevronRight, Github, Chrome } from "lucide-react";
+import { ArrowRight, Sparkles, Shield, Zap, Users, Code, Brain, ChevronRight, Github, Chrome, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CHROME_STORE_URL, GITHUB_REPO_URL } from "@/lib/constants";
 
 // Testimonial data
 const testimonials = [
@@ -114,6 +115,26 @@ const TestimonialCard = ({ name, role, quote, avatar }: { name: string; role: st
 );
 
 export default function LandingPage() {
+  useEffect(() => {
+    // Referral Tracking: Capture ?ref=CODE and save to cookie
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get('ref');
+
+    if (refCode) {
+      // Save for 30 days
+      const d = new Date();
+      d.setTime(d.getTime() + (30 * 24 * 60 * 60 * 1000));
+      const expires = "expires=" + d.toUTCString();
+      // Set cookie accessible to subdomain/root
+      document.cookie = "referral_code=" + refCode + ";" + expires + ";path=/;domain=.vibechekk.dev";
+
+      // Also set without domain for localhost testing or exact match
+      document.cookie = "referral_code=" + refCode + ";" + expires + ";path=/";
+
+      console.log('Ref code captured:', refCode);
+    }
+  }, []);
+
   return (
     <div className="relative min-h-screen bg-background overflow-hidden">
       {/* Particles Background */}
@@ -140,11 +161,16 @@ export default function LandingPage() {
             <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <Github className="w-4 h-4" />
-              Star on GitHub
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">
+                <Github className="w-4 h-4" />
+                Star on GitHub
+              </a>
             </Button>
-            <ShimmerButton className="h-9 px-4">
+            <ShimmerButton
+              className="h-9 px-4"
+              onClick={() => window.open(CHROME_STORE_URL, '_blank')}
+            >
               <Chrome className="w-4 h-4 mr-2" />
               Install Extension
             </ShimmerButton>
@@ -186,13 +212,18 @@ export default function LandingPage() {
 
               <BlurFade delay={0.4}>
                 <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
-                  <ShimmerButton className="h-12 px-8 text-base font-semibold">
+                  <ShimmerButton
+                    className="h-12 px-8 text-base font-semibold"
+                    onClick={() => window.open(CHROME_STORE_URL, '_blank')}
+                  >
                     <Chrome className="w-5 h-5 mr-2" />
                     Install Chrome Extension
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </ShimmerButton>
-                  <Button variant="outline" size="lg" className="h-12 px-6">
-                    Watch Demo
+                  <Button variant="outline" size="lg" className="h-12 px-6" asChild>
+                    <a href="#features">
+                      See Features
+                    </a>
                   </Button>
                 </div>
               </BlurFade>
@@ -323,7 +354,7 @@ export default function LandingPage() {
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 <ul className="space-y-3 mb-8">
-                  {["3 vibechekks/week", "All 15 archetypes", "AI detection", "Chrome extension"].map((feature, i) => (
+                  {["2 vibechekks", "All 15 archetypes", "AI detection", "Chrome extension"].map((feature, i) => (
                     <li key={i} className="flex items-center gap-3 text-sm">
                       <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
                         <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -403,15 +434,19 @@ export default function LandingPage() {
                 Ready to find your next{" "}
                 <TypingAnimation
                   className="inline text-primary"
-                  text="10x Engineer?"
                   duration={100}
-                />
+                >
+                  10x Engineer?
+                </TypingAnimation>
               </h2>
               <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
                 Join 500+ recruiters and engineering managers who use Vibechekk
                 to identify exceptional talent. Free to start.
               </p>
-              <ShimmerButton className="h-14 px-10 text-lg font-semibold">
+              <ShimmerButton
+                className="h-14 px-10 text-lg font-semibold"
+                onClick={() => window.open(CHROME_STORE_URL, '_blank')}
+              >
                 <Chrome className="w-5 h-5 mr-2" />
                 Get Started Free
                 <ArrowRight className="w-5 h-5 ml-2" />
@@ -431,12 +466,12 @@ export default function LandingPage() {
             <span className="font-semibold">Vibechekk</span>
           </div>
           <p className="text-sm text-muted-foreground">
-            © 2024 Vibechekk. Made with ❤️ for technical recruiters.
+            © {new Date().getFullYear()} Vibechekk. Made with ❤️ for technical recruiters.
           </p>
           <div className="flex items-center gap-6">
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition">Privacy</a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition">Terms</a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition">GitHub</a>
+            <a href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition">Privacy</a>
+            <a href="/terms" className="text-sm text-muted-foreground hover:text-foreground transition">Terms</a>
+            <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition">GitHub</a>
           </div>
         </div>
       </footer>

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, Activity, FileSpreadsheet } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, Activity, FileSpreadsheet, Share2, Gift, Shield } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+import Papa from 'papaparse';
+// Disable worker to run PDF parsing in main thread (required for Chrome Extension CSP)
+pdfjsLib.GlobalWorkerOptions.workerSrc = '';
 
 const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<string> => {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -147,6 +149,20 @@ interface User {
   picture?: string;
   tier: 'GUEST' | 'AUTHENTICATED' | 'PRO';
   githubLogin?: string;
+  usageCount?: number;
+}
+
+interface UsageInfo {
+  used: number;
+  limit: number;
+  tier: string;
+  resetTime?: string;
+}
+
+interface ErrorToast {
+  message: string;
+  code?: string;
+  action?: string;
 }
 
 function App() {
@@ -200,6 +216,14 @@ function App() {
   const [pendingAnalyses, setPendingAnalyses] = useState<{ handle: string, name?: string, avatar: string, timestamp: number }[]>([])
   const [githubLinked, setGithubLinked] = useState(false)
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
+  const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null)
+  const [errorToast, setErrorToast] = useState<ErrorToast | null>(null)
+  const [referralInfo, setReferralInfo] = useState<{
+    referralCode: string | null;
+    referralLink: string | null;
+    activeReferrals: number;
+    progressToReward: { current: number; target: number; rewardDescription: string };
+  } | null>(null)
   const activeTabRef = useRef(activeTab)
 
 
@@ -302,25 +326,41 @@ function App() {
       const userData = res.user_data as User | undefined;
       if (userData) {
         setUser(userData)
+        // Initialize usage info based on tier
+        const tierLimits: Record<string, number> = { GUEST: 2, AUTHENTICATED: 3, PRO: Infinity };
+        setUsageInfo({
+          used: userData.usageCount || 0,
+          limit: tierLimits[userData.tier] || 2,
+          tier: userData.tier,
+          resetTime: userData.tier === 'PRO' ? 'monthly' : 'hourly'
+        });
       } else {
         setUser(null)
+        // Guest user - start with 2 free chekks (we'll update this after first request)
+        setUsageInfo({
+          used: 0,
+          limit: 2,
+          tier: 'GUEST',
+          resetTime: undefined
+        });
       }
       // Check if GitHub has been linked (auth_token is set by GitHub OAuth flow)
-      if (res.auth_token) {
+      // Check if GitHub has been linked (auth_token exists OR user data has github login)
+      if (res.auth_token || userData?.githubLogin) {
         setGithubLinked(true)
       }
-      // Get GitHub username/name from user_data - try multiple sources
+      // Get GitHub username - ONLY use actual GitHub login, not Google name
       if (userData?.githubLogin) {
-        setGithubUsername(userData.githubLogin) // Prioritize handle
-      } else if (userData?.name) {
-        setGithubUsername(userData.name.split(' ')[0])
+        setGithubUsername(userData.githubLogin) // Actual GitHub handle
       } else if (userData?.email?.endsWith('@github.no-email')) {
         // Extract username from generated email like "username@github.no-email"
         setGithubUsername(userData.email.replace('@github.no-email', ''))
-      } else if (res.auth_token && userData?.name) {
-        // Fallback to name if GitHub auth exists but no githubLogin field
-        setGithubUsername(userData.name)
+      } else if (res.auth_token) {
+        // GitHub token exists but no username stored - try to extract from somewhere
+        // This fallback shouldn't happen, but just in case
+        setGithubUsername(null)
       }
+      // NOTE: Don't use userData.name as GitHub username - that's Google name!
       setAuthLoading(false)
     })
 
@@ -334,8 +374,6 @@ function App() {
           const userData = res.user_data as User | undefined;
           if (userData?.githubLogin) {
             setGithubUsername(userData.githubLogin)
-          } else if (userData?.name) {
-            setGithubUsername(userData.name)
           }
         })
       }
@@ -346,6 +384,7 @@ function App() {
         // Update GitHub username when user_data changes
         if (userData?.githubLogin) {
           setGithubUsername(userData.githubLogin)
+          setGithubLinked(true) // Ensure linked state is true if we have a handle
         }
       }
     }
@@ -383,6 +422,61 @@ function App() {
       setAnalyticsLoading(false)
     }
   }
+
+  // Fetch usage info from backend
+  const fetchUsage = async () => {
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (tokens.vibeToken) {
+        headers['Authorization'] = `Bearer ${tokens.vibeToken}`
+      }
+      const res = await fetch(`${BACKEND_URL}/api/usage`, { headers })
+      const data = await res.json()
+      if (data.success) {
+        setUsageInfo({
+          used: data.used,
+          limit: data.limit,
+          tier: data.tier,
+          resetTime: data.resetTime
+        })
+      }
+    } catch (e) {
+      console.warn('Usage fetch failed, using defaults')
+    }
+  }
+
+  // Fetch usage on mount and when tokens change
+  useEffect(() => {
+    fetchUsage()
+  }, [tokens.vibeToken])
+
+  // Fetch referral info (only for authenticated users)
+  const fetchReferralInfo = async () => {
+    if (!tokens.vibeToken) return
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/referral/info`, {
+        headers: { 'Authorization': `Bearer ${tokens.vibeToken}` }
+      })
+      const data = await res.json()
+      if (data.success) {
+        setReferralInfo({
+          referralCode: data.referralCode,
+          referralLink: data.referralLink,
+          activeReferrals: data.activeReferrals,
+          progressToReward: data.progressToReward
+        })
+      }
+    } catch (e) {
+      console.warn('Referral info fetch failed')
+    }
+  }
+
+  // Fetch referral info when invite modal opens
+  useEffect(() => {
+    if (showInviteModal && tokens.vibeToken) {
+      fetchReferralInfo()
+    }
+  }, [showInviteModal, tokens.vibeToken])
 
   // ===== BULKCHEKK FUNCTIONS =====
 
@@ -694,6 +788,7 @@ function App() {
     }, (response) => {
       // 5. Cleanup on completion
       setPendingHandles(prev => prev.filter(h => h !== ownerHandle));
+      setLoadingStep(0);
 
       if (response && response.success) {
         const finalReport = {
@@ -706,16 +801,53 @@ function App() {
           }
         };
         setHistory((prev: any[]) => [finalReport, ...prev])
+
+        // Update usage info (increment used count)
+        if (usageInfo) {
+          setUsageInfo({ ...usageInfo, used: usageInfo.used + 1 });
+        }
+
         // 6. Auto-open if still on search page
         if (activeTabRef.current === 'analyze') {
           handleOpenReport(finalReport)
         }
       } else {
         const err = response?.error || 'Unknown error';
-        if (err.includes('Limit reached') || err.includes('Upgrade to Pro')) {
+        const code = response?.code || '';
+
+        // Handle different error types with user-friendly messages
+        if (code === 'GUEST_LIMIT_REACHED' || code === 'USAGE_LIMIT_REACHED' || err.includes('Limit reached') || err.includes('Upgrade to Pro')) {
           setLimitPaywallOpen(true);
+          // Update usage info if provided
+          if (response?.used !== undefined && response?.limit !== undefined) {
+            setUsageInfo({
+              used: response.used,
+              limit: response.limit,
+              tier: response.tier || (user?.tier || 'GUEST'),
+              resetTime: response.resetTime
+            });
+          }
+        } else if (code === 'SESSION_EXPIRED' || code === 'TOKEN_EXPIRED' || code === 'INVALID_TOKEN') {
+          setErrorToast({
+            message: 'Session expired',
+            code: code,
+            action: 'Please sign in again to continue.'
+          });
+          // Auto-dismiss after 5 seconds
+          setTimeout(() => setErrorToast(null), 5000);
+        } else if (err.includes('Too many requests')) {
+          setErrorToast({
+            message: 'Slow down!',
+            code: 'RATE_LIMITED',
+            action: 'Please wait a moment before trying again.'
+          });
+          setTimeout(() => setErrorToast(null), 5000);
         } else {
-          alert(`Failed to analyze ${ownerHandle}: ${err}`)
+          setErrorToast({
+            message: `Could not analyze ${ownerHandle}`,
+            action: err
+          });
+          setTimeout(() => setErrorToast(null), 5000);
         }
       }
     })
@@ -745,6 +877,19 @@ function App() {
 
       const profile = await profileRes.json()
 
+      // Check for referral code from landing page cookie
+      let referralCode = null;
+      try {
+        // Check local development domain first
+        const cookie = await chrome.cookies.get({ url: 'https://vibechekk.dev', name: 'referral_code' });
+        if (cookie) {
+          referralCode = cookie.value;
+          console.log('Applying referral code:', referralCode);
+        }
+      } catch (e) {
+        console.log('No referral cookie found or permission denied');
+      }
+
       // Send to backend for user creation/login
       const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
         method: 'POST',
@@ -753,7 +898,8 @@ function App() {
           token,
           email: profile.email,
           name: profile.name,
-          picture: profile.picture
+          picture: profile.picture,
+          referralCode // Pass referral code if found
         })
       })
 
@@ -2313,6 +2459,41 @@ function App() {
         </div>
       </header>
 
+      {/* Error Toast */}
+      {errorToast && (
+        <div style={{
+          position: 'fixed',
+          top: '60px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          zIndex: 10000,
+          maxWidth: '350px',
+          animation: 'slideIn 0.3s ease-out'
+        }}>
+          <AlertTriangle size={18} color="#dc2626" />
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#991b1b', fontWeight: 600 }}>{errorToast.message}</p>
+            {errorToast.action && (
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#b91c1c' }}>{errorToast.action}</p>
+            )}
+          </div>
+          <button
+            onClick={() => setErrorToast(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+          >
+            <X size={14} color="#dc2626" />
+          </button>
+        </div>
+      )}
+
       <div className="tabs-nav">
         <div className="tab-slider" style={{
           transform: `translateX(${activeTab === 'analyze' ? '0' :
@@ -2796,7 +2977,13 @@ function App() {
                 {user?.tier !== 'PRO' && (
                   <>
                     <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>
-                      3 FREE CHEKKS LEFT THIS WEEK
+                      {usageInfo ? (
+                        usageInfo.used >= usageInfo.limit ? (
+                          <span style={{ color: '#dc2626' }}>NO CHEKKS LEFT - {user ? 'UPGRADE TO PRO' : 'SIGN IN FOR MORE'}</span>
+                        ) : (
+                          `${usageInfo.limit - usageInfo.used} FREE CHEKK${usageInfo.limit - usageInfo.used !== 1 ? 'S' : ''} LEFT THIS WEEK`
+                        )
+                      ) : '2 FREE CHEKKS REMAINING'}
                     </div>
                     <div className="referral-card" style={{
                       marginTop: '24px',
@@ -3735,39 +3922,103 @@ function App() {
                         SIGN OUT
                       </button>
 
-                      {/* Danger Zone - Clear Data */}
-                      <div style={{ marginTop: '24px', marginBottom: '16px' }}>
-                        <h4 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                          Danger Zone
-                        </h4>
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Are you sure you want to clear all local data (history, caches, login)? This cannot be undone.')) {
-                              chrome.storage.local.clear(() => {
-                                window.location.reload();
-                              });
-                            }
-                          }}
-                          style={{
-                            width: '100%',
+                      {/* Admin-only Danger Zone - Only for timidayokayode@gmail.com */}
+                      {user?.email === 'timidayokayode@gmail.com' && (
+                        <div style={{ marginTop: '24px', marginBottom: '16px' }}>
+                          <h4 style={{ fontSize: '11px', fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Shield size={12} /> Admin Zone
+                          </h4>
+
+                          {/* Tier Toggle for Testing */}
+                          <div style={{
                             padding: '12px',
                             borderRadius: '10px',
-                            background: 'rgba(239, 68, 68, 0.05)',
-                            color: '#ef4444',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            border: '1px solid rgba(239, 68, 68, 0.15)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px'
-                          }}
-                        >
-                          <Trash size={14} />
-                          Clear Local Cache
-                        </button>
-                      </div>
+                            background: 'rgba(34, 197, 94, 0.05)',
+                            border: '1px solid rgba(34, 197, 94, 0.15)',
+                            marginBottom: '12px'
+                          }}>
+                            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '8px' }}>
+                              Test Tier Override
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              {(['AUTHENTICATED', 'PRO'] as const).map((tier) => (
+                                <button
+                                  key={tier}
+                                  onClick={async () => {
+                                    // Update local user state
+                                    const newUser = { ...user, tier, usageCount: 0 };
+                                    setUser(newUser);
+                                    // Update chrome storage
+                                    chrome.storage.local.set({ user_data: newUser });
+                                    // Also update backend tier (for persistent testing)
+                                    try {
+                                      await fetch(`${BACKEND_URL}/api/admin/set-tier`, {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${tokens.vibeToken}`
+                                        },
+                                        body: JSON.stringify({ tier, resetUsage: true })
+                                      });
+                                    } catch (e) {
+                                      console.log('Admin tier set (local only)');
+                                    }
+                                    // Update usage info - reset to 0 used
+                                    const tierLimits: Record<string, number> = { AUTHENTICATED: 3, PRO: Infinity };
+                                    setUsageInfo({ used: 0, limit: tierLimits[tier], tier, resetTime: 'weekly' });
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    padding: '8px',
+                                    borderRadius: '6px',
+                                    background: user?.tier === tier
+                                      ? tier === 'PRO' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                                        : 'var(--accent)'
+                                      : 'rgba(0,0,0,0.05)',
+                                    color: user?.tier === tier ? 'white' : 'var(--text-dim)',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
+                                  }}
+                                >
+                                  {tier}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Clear Cache Button */}
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Are you sure you want to clear all local data (history, caches, login)? This cannot be undone.')) {
+                                chrome.storage.local.clear(() => {
+                                  window.location.reload();
+                                });
+                              }
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              borderRadius: '10px',
+                              background: 'rgba(239, 68, 68, 0.05)',
+                              color: '#ef4444',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              border: '1px solid rgba(239, 68, 68, 0.15)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px'
+                            }}
+                          >
+                            <Trash size={14} />
+                            Clear Local Cache
+                          </button>
+                        </div>
+                      )}
 
 
                     </div>
@@ -3941,8 +4192,39 @@ function App() {
                   Invite Friends
                 </h3>
                 <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
-                  Share your link. Each signup gives you <strong style={{ color: 'var(--accent)' }}>+5 free chekks</strong>!
+                  Refer 3 friends who run a chekk and get <strong style={{ color: 'var(--accent)' }}>1 week unlimited</strong>!
                 </p>
+                {/* Progress bar */}
+                {referralInfo && (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      color: 'var(--text-dim)',
+                      marginBottom: '6px'
+                    }}>
+                      <span>Progress</span>
+                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                        {referralInfo.progressToReward.current}/{referralInfo.progressToReward.target}
+                      </span>
+                    </div>
+                    <div style={{
+                      height: '8px',
+                      background: 'var(--bg-gray)',
+                      borderRadius: '4px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${(referralInfo.progressToReward.current / referralInfo.progressToReward.target) * 100}%`,
+                        background: 'linear-gradient(90deg, var(--accent) 0%, #b45309 100%)',
+                        borderRadius: '4px',
+                        transition: 'width 0.3s ease'
+                      }} />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div style={{
@@ -3963,11 +4245,12 @@ function App() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap'
                 }}>
-                  vibechekk.com/r/{user?.id?.slice(0, 8) || 'invite'}
+                  {referralInfo?.referralLink?.replace('https://', '') || `vibechekk.com/r/${user?.id?.slice(0, 8) || 'invite'}`}
                 </div>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`https://vibechekk.com/r/${user?.id?.slice(0, 8) || 'invite'}`);
+                    const link = referralInfo?.referralLink || `https://vibechekk.com/r/${user?.id?.slice(0, 8) || 'invite'}`;
+                    navigator.clipboard.writeText(link);
                     setCopiedId('modal-referral');
                     setTimeout(() => setCopiedId(null), 2000);
                   }}

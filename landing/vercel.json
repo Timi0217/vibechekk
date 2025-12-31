@@ -1,0 +1,31 @@
+{
+    "buildCommand": "npm run build",
+    "outputDirectory": ".next",
+    "framework": "nextjs",
+    "regions": [
+        "iad1"
+    ],
+    "env": {
+        "NEXT_PUBLIC_BACKEND_URL": "https://vibechekk-production.up.railway.app",
+        "NEXT_PUBLIC_EXTENSION_URL": "https://chrome.google.com/webstore/detail/vibechekk/YOUR_EXTENSION_ID"
+    },
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "X-Content-Type-Options",
+                    "value": "nosniff"
+                },
+                {
+                    "key": "X-Frame-Options",
+                    "value": "DENY"
+                },
+                {
+                    "key": "X-XSS-Protection",
+                    "value": "1; mode=block"
+                }
+            ]
+        }
+    ]
+}

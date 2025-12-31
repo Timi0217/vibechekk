@@ -12,7 +12,8 @@
   "permissions": [
     "storage",
     "sidePanel",
-    "identity"
+    "identity",
+    "cookies"
   ],
   "side_panel": {
     "default_path": "index.html",

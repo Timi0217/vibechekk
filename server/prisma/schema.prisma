@@ -12,12 +12,23 @@ model User {
   email                String           @unique
   name                 String?
   picture              String?
+  githubLogin          String?          // GitHub username (e.g. 'timi0217')
   tier                 SubscriptionTier @default(GUEST)
   usageCount           Int              @default(0)
   lastResetAt          DateTime         @default(now())
   createdAt            DateTime         @default(now())
   stripeCustomerId     String?
   stripeSubscriptionId String?
+  
+  // Referral system
+  referralCode         String?          @unique @default(cuid())
+  referredById         String?
+  referredBy           User?            @relation("Referrals", fields: [referredById], references: [id])
+  referrals            User[]           @relation("Referrals")
+  bonusChekks          Int              @default(0)       // Extra chekks earned from referrals
+  bonusExpiresAt       DateTime?                          // When bonus expires (for time-limited promotions)
+  referralCount        Int              @default(0)       // Number of successful referrals (friends who ran a chekk)
+  
   reports              VibeReport[]
 }
 
