@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { analyzeGitHubProfile } from './lib/github.js';
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
+import Stripe from 'stripe';
 
 dotenv.config();
 
@@ -17,6 +18,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'vibe-secret-shhhh';
 // Use environment variables for API keys
 const GITHUB_TOKEN = process.env.GITHUB_API_TOKEN;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+
+// Initialize Stripe
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-12-18.acacia' }) : null;
 
 // --- AUTH UTILS ---
 // ... (rest of imports/utils remains same)
@@ -631,6 +636,202 @@ app.get('/api/analytics', async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed' });
     }
+});
+
+// ============= STRIPE PAYMENT ENDPOINTS =============
+
+// Create Stripe Checkout Session for Pro subscription
+app.post('/api/stripe/create-checkout', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    if (!stripe) {
+        return res.status(500).json({ success: false, error: 'Stripe not configured' });
+    }
+
+    try {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        if (user.tier === 'PRO') {
+            return res.status(400).json({ success: false, error: 'Already a Pro subscriber' });
+        }
+
+        // Create Checkout Session
+        const session = await stripe.checkout.sessions.create({
+            mode: 'subscription',
+            payment_method_types: ['card'],
+            line_items: [{
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: 'Vibechekk Pro',
+                        description: 'Unlimited analyses, AutoChekk, Chekklist, BulkChekk, and more',
+                    },
+                    unit_amount: 2900, // $29.00
+                    recurring: {
+                        interval: 'month',
+                    },
+                },
+                quantity: 1,
+            }],
+            customer_email: user.email,
+            metadata: {
+                userId: user.id,
+            },
+            success_url: `${process.env.BACKEND_URL || 'https://vibechekk-production.up.railway.app'}/api/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.BACKEND_URL || 'https://vibechekk-production.up.railway.app'}/api/stripe/cancel`,
+        });
+
+        console.log(`[Stripe] Created checkout session for user ${user.email}`);
+        res.json({ success: true, url: session.url });
+
+    } catch (error: any) {
+        console.error('[Stripe] Checkout error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Handle successful payment - redirect page
+app.get('/api/stripe/success', async (req, res) => {
+    const { session_id } = req.query;
+
+    if (!session_id || !stripe) {
+        return res.status(400).send('Invalid session');
+    }
+
+    try {
+        const session = await stripe.checkout.sessions.retrieve(session_id as string);
+
+        if (session.payment_status === 'paid' && session.metadata?.userId) {
+            // Upgrade user to PRO
+            await prisma.user.update({
+                where: { id: session.metadata.userId },
+                data: {
+                    tier: 'PRO',
+                    stripeCustomerId: session.customer as string,
+                    stripeSubscriptionId: session.subscription as string,
+                },
+            });
+
+            console.log(`[Stripe] User ${session.metadata.userId} upgraded to PRO`);
+
+            // Return a page that tells the user to return to extension
+            res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Payment Successful!</title>
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
+                        .card { background: white; padding: 48px; border-radius: 24px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1); max-width: 400px; }
+                        .check { width: 80px; height: 80px; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; }
+                        .check svg { width: 40px; height: 40px; color: white; }
+                        h1 { color: #0f172a; font-size: 28px; margin: 0 0 12px; }
+                        p { color: #64748b; font-size: 16px; margin: 0 0 32px; line-height: 1.6; }
+                        .badge { display: inline-block; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); color: white; padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 14px; margin-bottom: 24px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <div class="check">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                        </div>
+                        <div class="badge">PRO ACTIVATED</div>
+                        <h1>Welcome to Pro!</h1>
+                        <p>Your payment was successful. Close this tab and refresh the Vibechekk extension to access your Pro features.</p>
+                    </div>
+                </body>
+                </html>
+            `);
+        } else {
+            res.status(400).send('Payment not completed');
+        }
+    } catch (error: any) {
+        console.error('[Stripe] Success page error:', error);
+        res.status(500).send('Error processing payment confirmation');
+    }
+});
+
+// Handle cancelled payment
+app.get('/api/stripe/cancel', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Payment Cancelled</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc; }
+                .card { background: white; padding: 48px; border-radius: 24px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1); max-width: 400px; }
+                h1 { color: #0f172a; font-size: 24px; margin: 0 0 12px; }
+                p { color: #64748b; font-size: 16px; margin: 0; line-height: 1.6; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>Payment Cancelled</h1>
+                <p>No worries! You can upgrade to Pro anytime from the Vibechekk extension.</p>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// Stripe Webhook for subscription events
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    if (!stripe) {
+        return res.status(500).send('Stripe not configured');
+    }
+
+    const sig = req.headers['stripe-signature'] as string;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event: Stripe.Event;
+
+    try {
+        if (webhookSecret) {
+            event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+        } else {
+            // For testing without webhook signature verification
+            event = JSON.parse(req.body.toString());
+        }
+    } catch (err: any) {
+        console.error('[Stripe Webhook] Signature verification failed:', err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle subscription cancellation
+    if (event.type === 'customer.subscription.deleted') {
+        const subscription = event.data.object as Stripe.Subscription;
+
+        const user = await prisma.user.findFirst({
+            where: { stripeSubscriptionId: subscription.id }
+        });
+
+        if (user) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { tier: 'AUTHENTICATED' }
+            });
+            console.log(`[Stripe] User ${user.email} subscription cancelled - downgraded to AUTHENTICATED`);
+        }
+    }
+
+    res.json({ received: true });
 });
 
 app.use((req, res) => {

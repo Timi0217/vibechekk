@@ -787,6 +787,36 @@ function App() {
     })
   }
 
+  // Handle Stripe checkout for Pro upgrade
+  const handleUpgradeToPro = async () => {
+    if (!tokens.vibeToken) {
+      alert('Please sign in first to upgrade to Pro')
+      return
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/stripe/create-checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.url) {
+        // Open Stripe Checkout in new tab
+        window.open(data.url, '_blank')
+      } else {
+        alert(data.error || 'Failed to start checkout')
+      }
+    } catch (err: any) {
+      console.error('Checkout error:', err)
+      alert('Failed to connect to payment service')
+    }
+  }
+
   return (
     <div className="popup-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderBottom: '1px solid var(--border)' }}>
@@ -3632,7 +3662,7 @@ function App() {
                           </div>
 
                           <button
-                            onClick={() => window.open('https://vibechekk.com/pricing', '_blank')}
+                            onClick={handleUpgradeToPro}
                             style={{
                               width: '100%',
                               padding: '14px',
@@ -4082,7 +4112,7 @@ function App() {
                 This feature is exclusive to <strong>Pro</strong> subscribers. Upgrade to unlock <strong>{proFeaturePaywallOpen}</strong> and more features.
               </p>
 
-              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setProFeaturePaywallOpen(null); setActiveTab('settings'); }}>
+              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setProFeaturePaywallOpen(null); handleUpgradeToPro(); }}>
                 <Zap size={16} fill="white" />
                 Upgrade to Pro
               </button>

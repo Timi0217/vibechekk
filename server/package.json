@@ -20,7 +20,8 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "octokit": "^5.0.5",
-    "prisma": "^6.1.0"
+    "prisma": "^6.1.0",
+    "stripe": "^20.1.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
