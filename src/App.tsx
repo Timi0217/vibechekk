@@ -821,1480 +821,1480 @@ function App() {
 
   const proFeaturesContent = (
     <>
-                      <div
+      <div
+        style={{
+          width: '100%',
+          borderRadius: '16px',
+          marginBottom: '12px',
+          position: 'relative',
+          overflow: 'visible',
+          transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: (showActivityFeed) ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
+          background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
+          border: showActivityFeed ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
+        }}
+      >
+        {/* Decorative background element for the whole card */}
+        <div style={{
+          position: 'absolute',
+          top: '-20px',
+          right: '-20px',
+          width: '90px',
+          height: '90px',
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.08)',
+          zIndex: 0,
+          pointerEvents: 'none'
+        }} />
+
+        {/* Card Header Part */}
+        <div
+          onClick={() => setShowActivityFeed(!showActivityFeed)}
+          style={{
+            width: '100%',
+            cursor: 'pointer',
+            position: 'relative',
+            zIndex: 1,
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px'
+          }}
+        >
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '12px',
+            background: 'rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backdropFilter: 'blur(8px)',
+            flexShrink: 0,
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <Binoculars size={22} color="white" strokeWidth={2} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1px' }}>
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 800,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                color: 'white'
+              }}>
+                AUTOCHEKK
+              </span>
+              <span style={{
+                fontSize: '8px',
+                fontWeight: 900,
+                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+                background: user?.tier === 'PRO'
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                  : 'rgba(255, 255, 255, 0.15)',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                letterSpacing: '0.02em',
+                lineHeight: 1
+              }}>
+                PRO
+              </span>
+            </div>
+            <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              Chekk devs as you browse
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="autochekk-tooltip-wrapper">
+                <Info
+                  size={13}
+                  color="rgba(255, 255, 255, 0.5)"
+                  style={{ cursor: 'help', opacity: 0.7, transform: 'translateY(0.5px)' }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className="autochekk-tooltip" style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '0',
+                  marginBottom: '8px',
+                  background: 'white',
+                  color: '#1a1a1a',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  width: '200px',
+                  textAlign: 'left',
+                  lineHeight: 1.4,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  opacity: 0,
+                  visibility: 'hidden',
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'none',
+                  zIndex: 1000
+                }}>
+                  Automatically find and analyze Github profiles across all webpages you visit
+                </div>
+              </div>
+              <div
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowActivityFeed(!showActivityFeed); }}
+                style={{
+                  cursor: 'pointer',
+                  opacity: showActivityFeed ? 0.9 : 0.4,
+                  transition: 'opacity 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '16px',
+                  height: '16px',
+                  flexShrink: 0
+                }}
+                title={showActivityFeed ? "Hide Activity Feed" : "Show Activity Feed"}
+              >
+                <Radio size={13} color={(autoChekk && showActivityFeed) ? "#22c55e" : "white"} strokeWidth={2.5} />
+              </div>
+            </div>
+          </div>
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              if (user?.tier !== 'PRO') {
+                setProFeaturePaywallOpen('AutoChekk');
+                return;
+              }
+              setAutoChekk(!autoChekk);
+            }}
+            style={{
+              width: '52px',
+              height: '30px',
+              borderRadius: '15px',
+              background: autoChekk
+                ? '#22c55e'
+                : 'rgba(255,255,255,0.3)',
+              position: 'relative',
+              transition: 'all 0.3s ease',
+              flexShrink: 0,
+              cursor: 'pointer'
+            }}>
+            <div style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              background: 'white',
+              position: 'absolute',
+              top: '3px',
+              left: autoChekk ? '25px' : '3px',
+              transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }} />
+          </div>
+        </div>
+
+        {/* Autochekk Live Activity Feed Dropdown */}
+        <div style={{
+          maxHeight: showActivityFeed ? '800px' : '0',
+          opacity: showActivityFeed ? 1 : 0,
+          overflow: 'hidden',
+          transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderTop: showActivityFeed ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+        }}>
+          <div style={{
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h4 style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  margin: 0,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: '#22c55e',
+                    display: 'inline-block',
+                    boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
+                    animation: 'pulse 2s infinite'
+                  }}></span>
+                  ACTIVITY FEED
+                </h4>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowActivityFeed(false); }}
+                  title="Collapse Activity Feed"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <ChevronRight size={14} style={{ transform: 'rotate(-90deg)' }} />
+                </button>
+                {autochekkLogs.length > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      chrome.storage.local.set({ autochekk_logs: [], dedup_cache: [] });
+                      setAutochekkLogs([]);
+                      setPendingAnalyses([]);
+                      chrome.tabs.query({}, (tabs) => {
+                        tabs.forEach(tab => {
+                          if (tab.id) {
+                            chrome.tabs.sendMessage(tab.id, { type: 'CLEAR_SCANNED_CACHE' }).catch(() => { });
+                          }
+                        });
+                      });
+                    }}
+                    title="Clear Activity Log"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-dim)',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.2s ease'
+                    }}
+                  >
+                    <Trash size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              maxHeight: '160px',
+              overflowY: 'auto',
+              paddingRight: '4px'
+            }}>
+              {autochekkLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '12px 0', color: 'rgba(255, 255, 255, 0.5)', fontSize: '11px' }}>
+                  Waiting for new profiles...
+                </div>
+              ) : (
+                autochekkLogs.map((log) => (
+                  <div key={log.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    fontSize: '11px'
+                  }}>
+                    {log.type === 'discovery' && (
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Search size={10} color="var(--text-dim)" />
+                      </div>
+                    )}
+                    {log.type === 'resolution' && (
+                      log.data?.avatar ? (
+                        <img src={log.data.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }} />
+                      ) : (
+                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <User size={10} color="white" />
+                        </div>
+                      )
+                    )}
+                    {log.data?.analyzing && (
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Clock size={10} color="#a78bfa" />
+                      </div>
+                    )}
+                    {log.type === 'analysis' && !log.data?.analyzing && (
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Zap size={10} color="#a78bfa" fill="#a78bfa" />
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                      <span style={{ fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px' }}>
+                        {log.data?.analyzing
+                          ? 'Analyzing...'
+                          : log.type === 'analysis'
+                            ? (log.data?.error
+                              ? 'Analysis Failed'
+                              : (log.data?.archetype ? `${log.data.archetype.replace(/^THE\s+/i, '')} DISCOVERED` : 'Analysis Complete'))
+                            : log.type === 'resolution' ? 'Profile Found' : 'Email Detected'}
+                      </span>
+                      {log.type === 'discovery' && (
+                        <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {log.data?.email || log.message}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.4)', whiteSpace: 'nowrap' }}>
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CHEKKLIST Card */}
+      <div style={{
+        marginBottom: '12px',
+        borderRadius: '16px',
+        overflow: 'visible',
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: showChecklistForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
+        background: 'linear-gradient(135deg, #450a0a 0%, #2a0505 100%)',
+        border: showChecklistForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent',
+        position: 'relative'
+      }}>
+        {/* Blob container with overflow hidden */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '16px',
+          overflow: 'hidden',
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            position: 'absolute',
+            right: '-125px',
+            top: '-60px',
+            width: '220px',
+            height: '220px',
+            borderRadius: '40px',
+            transform: 'rotate(20deg)',
+            background: 'rgba(255,255,255,0.05)',
+            zIndex: 0
+          }} />
+        </div>
+
+        <div
+          onClick={() => {
+            if (user?.tier !== 'PRO') {
+              setProFeaturePaywallOpen('Chekklist');
+              return;
+            }
+            setShowChecklistForm(!showChecklistForm);
+          }}
+          style={{
+            width: '100%',
+            cursor: 'pointer',
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            padding: '16px 20px'
+          }}
+        >
+          {/* Icon */}
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '12px',
+            background: 'rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <ClipboardList size={24} color="white" strokeWidth={2.5} />
+          </div>
+
+          {/* Text */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 800,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                color: 'white'
+              }}>
+                CHEKKLIST
+              </span>
+              <span style={{
+                fontSize: '8px',
+                fontWeight: 900,
+                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+                background: user?.tier === 'PRO'
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                  : 'rgba(255, 255, 255, 0.15)',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                letterSpacing: '0.02em',
+                lineHeight: 1
+              }}>
+                PRO
+              </span>
+            </div>
+            <span style={{
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontWeight: 500
+            }}>
+              Find 50 devs for your JD
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="chekklist-tooltip-wrapper">
+                <Info
+                  size={13}
+                  color="rgba(255, 255, 255, 0.5)"
+                  style={{ cursor: 'help' }}
+                />
+                <div className="chekklist-tooltip" style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '0',
+                  marginBottom: '8px',
+                  background: 'white',
+                  color: '#1a1a1a',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  width: '200px',
+                  textAlign: 'left',
+                  lineHeight: 1.4,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  opacity: 0,
+                  visibility: 'hidden',
+                  transition: 'all 0.2s ease',
+                  zIndex: 1000,
+                  pointerEvents: 'none'
+                }}>
+                  Paste your job description and get 50 matched GitHub profiles
+                </div>
+              </div>
+              {/* Search toggle icon */}
+              <div
+                onClick={(e) => { e.stopPropagation(); setShowChecklistForm(!showChecklistForm); }}
+                style={{
+                  cursor: 'pointer',
+                  opacity: (showChecklistForm || activeSearches.length > 0) ? 1 : 0.5,
+                  transition: 'opacity 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '16px',
+                  height: '16px',
+                  flexShrink: 0
+                }}
+                title={showChecklistForm ? "Hide Search Form" : "Open Search Form"}
+              >
+                <div style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'transparent'),
+                  border: `1.5px solid ${activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)')}`,
+                  transition: 'all 0.2s ease',
+                  boxShadow: activeSearches.length > 0 ? '0 0 8px rgba(34, 197, 94, 0.6)' : (showChecklistForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none')
+                }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <ChevronRight
+            size={18}
+            color="rgba(255, 255, 255, 0.5)"
+            style={{
+              flexShrink: 0,
+              transform: showChecklistForm ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              cursor: 'pointer'
+            }}
+          />
+        </div>
+
+
+        {/* Chekklist Form Dropdown */}
+        <div style={{
+          maxHeight: showChecklistForm ? '800px' : '0',
+          opacity: showChecklistForm ? 1 : 0,
+          overflow: 'hidden',
+          transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderTop: showChecklistForm ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+        }}>
+          <div style={{
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            {/* Tabs Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.08)', padding: '2px', borderRadius: '8px' }}>
+                <button
+                  onClick={() => setChecklistTab('configure')}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: checklistTab === 'configure' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    letterSpacing: '0.02em'
+                  }}
+                >
+                  CONFIGURE
+                </button>
+                <button
+                  onClick={() => setChecklistTab('active')}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: checklistTab === 'active' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    letterSpacing: '0.02em'
+                  }}
+                >
+                  ACTIVE
+                </button>
+              </div>
+              <X size={14} color="rgba(255,255,255,0.4)" style={{ cursor: 'pointer' }} onClick={() => setShowChecklistForm(false)} />
+            </div>
+
+            {checklistTab === 'configure' ? (
+              <>
+                {/* Job Title */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
+                    JOB TITLE
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Senior Frontend Engineer"
+                    value={checklistForm.jobTitle}
+                    onChange={(e) => setChecklistForm({ ...checklistForm, jobTitle: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      fontSize: '11px',
+                      fontFamily: 'inherit',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'white',
+                      marginBottom: '10px'
+                    }}
+                  />
+                </div>
+
+                {/* Job Description */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
+                    JOB DESCRIPTION
+                  </label>
+                  <textarea
+                    placeholder="Paste your job description here..."
+                    value={checklistForm.jd}
+                    onChange={(e) => setChecklistForm({ ...checklistForm, jd: e.target.value })}
+                    style={{
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      fontSize: '11px',
+                      fontFamily: 'inherit',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'white'
+                    }}
+                  />
+                  <label
+                    className="upload-btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginTop: '8px',
+                      padding: '8px 14px',
+                      borderRadius: '20px',
+                      border: '1.5px dashed #d1d5db',
+                      background: 'white',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      color: '#6b7280',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      width: 'fit-content'
+                    }}
+                  >
+                    <Upload size={12} />
+                    Upload PDF or TXT
+                    <input
+                      type="file"
+                      accept=".pdf,.txt"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          let text = '';
+                          if (file.type === 'application/pdf') {
+                            const arrayBuffer = await file.arrayBuffer();
+                            text = await extractTextFromPDF(arrayBuffer);
+                          } else {
+                            text = await file.text();
+                          }
+                          setChecklistForm(prev => ({ ...prev, jd: text }));
+                        } catch (err) {
+                          console.error('File parsing error:', err);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {/* Years of Experience */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Years of Experience
+                  </label>
+                  <select
+                    value={checklistForm.experience}
+                    onChange={(e) => setChecklistForm({ ...checklistForm, experience: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      fontSize: '11px',
+                      fontFamily: 'inherit',
+                      background: 'var(--bg-gray)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Any experience</option>
+                    <option value="0-2">0-2 years</option>
+                    <option value="2-5">2-5 years</option>
+                    <option value="5-10">5-10 years</option>
+                    <option value="10+">10+ years</option>
+                  </select>
+                </div>
+
+                {/* Languages */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Languages / Skills
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {['Python', 'TypeScript', 'JavaScript', 'Go', 'Rust', 'Java', 'C++', 'Ruby'].map(lang => (
+                      <button
+                        key={lang}
+                        onClick={() => {
+                          const langs = checklistForm.languages.includes(lang)
+                            ? checklistForm.languages.filter(l => l !== lang)
+                            : [...checklistForm.languages, lang];
+                          setChecklistForm({ ...checklistForm, languages: langs });
+                        }}
                         style={{
-                          width: '100%',
-                          borderRadius: '16px',
-                          marginBottom: '12px',
-                          position: 'relative',
-                          overflow: 'visible',
-                          transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                          boxShadow: (showActivityFeed) ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
-                          background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-                          border: showActivityFeed ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          border: checklistForm.languages.includes(lang) ? '1px solid #7c3aed' : '1px solid var(--border)',
+                          background: checklistForm.languages.includes(lang) ? 'rgba(124, 58, 237, 0.1)' : 'white',
+                          color: checklistForm.languages.includes(lang) ? '#7c3aed' : 'var(--text-dim)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
                         }}
                       >
-                        {/* Decorative background element for the whole card */}
-                        <div style={{
-                          position: 'absolute',
-                          top: '-20px',
-                          right: '-20px',
-                          width: '90px',
-                          height: '90px',
-                          borderRadius: '50%',
-                          background: 'rgba(255,255,255,0.08)',
-                          zIndex: 0,
-                          pointerEvents: 'none'
-                        }} />
+                        {lang}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                        {/* Card Header Part */}
-                        <div
-                          onClick={() => setShowActivityFeed(!showActivityFeed)}
+                {/* Archetypes - All 15 from deepseek.ts */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Preferred Archetypes
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {[
+                      // LEGENDARY - Amber #f59e0b
+                      { name: 'THE 10X ENGINEER', color: '#f59e0b' },
+                      { name: 'THE PROFESSOR', color: '#f59e0b' },
+                      // ULTRA RARE - Purple #a855f7
+                      { name: 'THE ARCHITECT', color: '#a855f7' },
+                      // RARE - Blue #3b82f6
+                      { name: 'THE SPECIALIST', color: '#3b82f6' },
+                      { name: 'THE SYSTEMS THINKER', color: '#3b82f6' },
+                      { name: 'THE MAINTAINER', color: '#3b82f6' },
+                      // UNCOMMON - Green #22c55e
+                      { name: 'THE BUILDER', color: '#22c55e' },
+                      { name: 'THE CONTRIBUTOR', color: '#22c55e' },
+                      { name: 'THE CRAFTSPERSON', color: '#22c55e' },
+                      { name: 'THE HIDDEN GEM', color: '#22c55e' },
+                      { name: 'THE TINKERER', color: '#22c55e' },
+                      // COMMON - Stone #78716c
+                      { name: 'THE GRINDER', color: '#78716c' },
+                      { name: 'THE HOBBYIST', color: '#78716c' },
+                      { name: 'THE EXPLORER', color: '#78716c' },
+                      { name: 'THE APPRENTICE', color: '#78716c' }
+                    ].map(arch => {
+                      const isSelected = checklistForm.archetypes.includes(arch.name);
+                      return (
+                        <button
+                          key={arch.name}
+                          onClick={() => {
+                            const archs = isSelected
+                              ? checklistForm.archetypes.filter(a => a !== arch.name)
+                              : [...checklistForm.archetypes, arch.name];
+                            setChecklistForm({ ...checklistForm, archetypes: archs });
+                          }}
                           style={{
-                            width: '100%',
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            fontSize: '9px',
+                            fontWeight: 600,
+                            border: `1px solid ${arch.color}`,
+                            background: isSelected ? arch.color : 'white',
+                            color: isSelected ? 'white' : arch.color,
                             cursor: 'pointer',
-                            position: 'relative',
-                            zIndex: 1,
-                            padding: '16px 20px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '14px'
+                            transition: 'all 0.2s ease'
                           }}
                         >
-                          <div style={{
-                            width: '42px',
-                            height: '42px',
-                            borderRadius: '12px',
-                            background: 'rgba(255, 255, 255, 0.08)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backdropFilter: 'blur(8px)',
-                            flexShrink: 0,
-                            border: '1px solid rgba(255, 255, 255, 0.1)'
-                          }}>
-                            <Binoculars size={22} color="white" strokeWidth={2} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1px' }}>
-                              <span style={{
-                                fontSize: '13px',
-                                fontWeight: 800,
-                                letterSpacing: '0.05em',
-                                textTransform: 'uppercase',
-                                color: 'white'
-                              }}>
-                                AUTOCHEKK
-                              </span>
-                              <span style={{
-                                fontSize: '8px',
-                                fontWeight: 900,
-                                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
-                                background: user?.tier === 'PRO'
-                                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                                  : 'rgba(255, 255, 255, 0.15)',
-                                padding: '2px 6px',
-                                borderRadius: '3px',
-                                letterSpacing: '0.02em',
-                                lineHeight: 1
-                              }}>
-                                PRO
-                              </span>
-                            </div>
-                            <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                              Chekk devs as you browse
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="autochekk-tooltip-wrapper">
-                                <Info
-                                  size={13}
-                                  color="rgba(255, 255, 255, 0.5)"
-                                  style={{ cursor: 'help', opacity: 0.7, transform: 'translateY(0.5px)' }}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                                <div className="autochekk-tooltip" style={{
-                                  position: 'absolute',
-                                  bottom: '100%',
-                                  left: '0',
-                                  marginBottom: '8px',
-                                  background: 'white',
-                                  color: '#1a1a1a',
-                                  padding: '10px 12px',
-                                  borderRadius: '8px',
-                                  fontSize: '11px',
-                                  fontWeight: 500,
-                                  width: '200px',
-                                  textAlign: 'left',
-                                  lineHeight: 1.4,
-                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                  opacity: 0,
-                                  visibility: 'hidden',
-                                  transition: 'all 0.2s ease',
-                                  pointerEvents: 'none',
-                                  zIndex: 1000
-                                }}>
-                                  Automatically find and analyze Github profiles across all webpages you visit
-                                </div>
-                              </div>
-                              <div
-                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowActivityFeed(!showActivityFeed); }}
-                                style={{
-                                  cursor: 'pointer',
-                                  opacity: showActivityFeed ? 0.9 : 0.4,
-                                  transition: 'opacity 0.2s',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: '16px',
-                                  height: '16px',
-                                  flexShrink: 0
-                                }}
-                                title={showActivityFeed ? "Hide Activity Feed" : "Show Activity Feed"}
-                              >
-                                <Radio size={13} color={(autoChekk && showActivityFeed) ? "#22c55e" : "white"} strokeWidth={2.5} />
-                              </div>
-                            </div>
-                          </div>
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (user?.tier !== 'PRO') {
-                                setProFeaturePaywallOpen('AutoChekk');
-                                return;
-                              }
-                              setAutoChekk(!autoChekk);
-                            }}
-                            style={{
-                              width: '52px',
-                              height: '30px',
-                              borderRadius: '15px',
-                              background: autoChekk
-                                ? '#22c55e'
-                                : 'rgba(255,255,255,0.3)',
-                              position: 'relative',
-                              transition: 'all 0.3s ease',
-                              flexShrink: 0,
-                              cursor: 'pointer'
-                            }}>
-                            <div style={{
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '50%',
-                              background: 'white',
-                              position: 'absolute',
-                              top: '3px',
-                              left: autoChekk ? '25px' : '3px',
-                              transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                            }} />
-                          </div>
-                        </div>
+                          {arch.name.replace('THE ', '')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                        {/* Autochekk Live Activity Feed Dropdown */}
-                        <div style={{
-                          maxHeight: showActivityFeed ? '800px' : '0',
-                          opacity: showActivityFeed ? 1 : 0,
-                          overflow: 'hidden',
-                          transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
-                          background: 'rgba(255, 255, 255, 0.03)',
-                          borderTop: showActivityFeed ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
-                        }}>
-                          <div style={{
-                            padding: '20px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '12px'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <h4 style={{
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  color: 'rgba(255, 255, 255, 0.5)',
-                                  margin: 0,
-                                  letterSpacing: '0.05em',
-                                  textTransform: 'uppercase',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px'
-                                }}>
-                                  <span style={{
-                                    width: '6px',
-                                    height: '6px',
-                                    borderRadius: '50%',
-                                    background: '#22c55e',
-                                    display: 'inline-block',
-                                    boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
-                                    animation: 'pulse 2s infinite'
-                                  }}></span>
-                                  ACTIVITY FEED
-                                </h4>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setShowActivityFeed(false); }}
-                                  title="Collapse Activity Feed"
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: 'rgba(255, 255, 255, 0.4)',
-                                    cursor: 'pointer',
-                                    padding: '4px',
-                                    borderRadius: '4px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    transition: 'all 0.2s ease'
-                                  }}
-                                >
-                                  <ChevronRight size={14} style={{ transform: 'rotate(-90deg)' }} />
-                                </button>
-                                {autochekkLogs.length > 0 && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      chrome.storage.local.set({ autochekk_logs: [], dedup_cache: [] });
-                                      setAutochekkLogs([]);
-                                      setPendingAnalyses([]);
-                                      chrome.tabs.query({}, (tabs) => {
-                                        tabs.forEach(tab => {
-                                          if (tab.id) {
-                                            chrome.tabs.sendMessage(tab.id, { type: 'CLEAR_SCANNED_CACHE' }).catch(() => { });
-                                          }
-                                        });
-                                      });
-                                    }}
-                                    title="Clear Activity Log"
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      color: 'var(--text-dim)',
-                                      cursor: 'pointer',
-                                      padding: '4px',
-                                      borderRadius: '4px',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      transition: 'background 0.2s ease'
-                                    }}
-                                  >
-                                    <Trash size={12} />
-                                  </button>
+                {/* Tiers - 5 tiers from deepseek.ts */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Tier Filter
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {[
+                      { name: 'LEGENDARY', badge: '🌟🌟🌟', color: '#f59e0b' },
+                      { name: 'ULTRA RARE', badge: '🌟🌟', color: '#a855f7' },
+                      { name: 'RARE', badge: '⭐', color: '#3b82f6' },
+                      { name: 'UNCOMMON', badge: '◆', color: '#22c55e' },
+                      { name: 'COMMON', badge: '●', color: '#78716c' }
+                    ].map(tier => {
+                      const isSelected = checklistForm.tiers.includes(tier.name);
+                      return (
+                        <button
+                          key={tier.name}
+                          onClick={() => {
+                            const tierArchetypes: Record<string, string[]> = {
+                              'LEGENDARY': ['THE 10X ENGINEER', 'THE PROFESSOR'],
+                              'ULTRA RARE': ['THE ARCHITECT'],
+                              'RARE': ['THE SPECIALIST', 'THE SYSTEMS THINKER', 'THE MAINTAINER'],
+                              'UNCOMMON': ['THE BUILDER', 'THE CONTRIBUTOR', 'THE CRAFTSPERSON', 'THE HIDDEN GEM', 'THE TINKERER'],
+                              'COMMON': ['THE GRINDER', 'THE HOBBYIST', 'THE EXPLORER', 'THE APPRENTICE']
+                            };
+
+                            const associatedArchetypes = tierArchetypes[tier.name] || [];
+                            let newTiers;
+                            let newArchetypes;
+
+                            if (isSelected) {
+                              // Deselecting: Remove tier and its archetypes from selection
+                              newTiers = checklistForm.tiers.filter(t => t !== tier.name);
+                              newArchetypes = checklistForm.archetypes.filter(a => !associatedArchetypes.includes(a));
+                            } else {
+                              // Selecting: Add tier and its archetypes
+                              newTiers = [...checklistForm.tiers, tier.name];
+                              // Add associated archetypes without duplicates
+                              const combined = new Set([...checklistForm.archetypes, ...associatedArchetypes]);
+                              newArchetypes = Array.from(combined);
+                            }
+
+                            setChecklistForm({ ...checklistForm, tiers: newTiers, archetypes: newArchetypes });
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            border: `1px solid ${tier.color}`,
+                            background: isSelected ? tier.color : 'white',
+                            color: isSelected ? 'white' : tier.color,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          {tier.badge} {tier.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Search Button */}
+                <button
+                  onClick={async () => {
+                    if (checklistForm.loading) return;
+
+                    setChecklistForm(prev => ({ ...prev, loading: true }));
+                    console.log('Search with:', checklistForm);
+
+                    const searchId = Date.now();
+                    const newSearch = {
+                      id: searchId,
+                      title: checklistForm.jobTitle || 'Untitled Search',
+                      status: 'running',
+                      timestamp: Date.now(),
+                      results: []
+                    };
+
+                    setActiveSearches(prev => [newSearch, ...prev]);
+                    setChecklistTab('active');
+
+                    try {
+                      const tokenData = await chrome.storage.local.get('vibe_token');
+                      const token = tokenData.vibe_token;
+
+                      const res = await fetch(`${BACKEND_URL}/api/chekklist/search`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': token ? `Bearer ${token}` : ''
+                        },
+                        body: JSON.stringify(checklistForm)
+                      });
+                      const data = await res.json();
+
+                      if (data.success) {
+                        setActiveSearches(prev => prev.map(s =>
+                          s.id === searchId
+                            ? { ...s, status: 'completed', results: data.candidates || [] }
+                            : s
+                        ));
+
+                        // Update storage with latest searches
+                        setActiveSearches(current => {
+                          chrome.storage.local.set({ active_searches: current });
+                          return current;
+                        });
+                      } else {
+                        setActiveSearches(prev => prev.map(s =>
+                          s.id === searchId
+                            ? { ...s, status: 'completed', results: [], error: data.error }
+                            : s
+                        ));
+                      }
+                    } catch (e) {
+                      console.error(e);
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, status: 'completed', results: [], error: 'Search failed' }
+                          : s
+                      ));
+                    } finally {
+                      setChecklistForm(prev => ({ ...prev, loading: false }));
+                    }
+                  }}
+                  disabled={checklistForm.loading}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {checklistForm.loading ? 'SEARCHING...' : 'FIND DEVS'}
+                </button>
+              </>
+            ) : (
+              activeSearches.length > 0 ? (
+                <div style={{ padding: '10px' }}>
+                  {activeSearches.map(s => (
+                    <div key={s.id} style={{
+                      padding: '12px',
+                      background: 'white',
+                      marginBottom: '8px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border)',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      overflow: 'hidden'
+                    }}>
+                      <div
+                        onClick={() => setExpandedSearchId(expandedSearchId === s.id ? null : s.id)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)' }}>{s.title}</div>
+                          {s.status === 'completed' ? (
+                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                              Found {s.results?.length || 0} candidates
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></div>
+                              Running...
+                            </div>
+                          )}
+                        </div>
+                        {s.status === 'completed' && (
+                          <ChevronDown size={14} color="var(--text-dim)" style={{ transform: expandedSearchId === s.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        )}
+                      </div>
+
+                      {/* Results List */}
+                      {expandedSearchId === s.id && s.results && (
+                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {s.results.map((c: any, i: number) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
+                              <img src={c.avatar} alt={c.handle} style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>{c.name}</div>
+                                  {c.matchScore !== undefined && (
+                                    <div style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
+                                      background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
+                                      padding: '1px 4px',
+                                      borderRadius: '4px'
+                                    }}>
+                                      {c.matchScore}%
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  @{c.handle}
+                                  {c.archetype && (
+                                    <span style={{ fontSize: '9px', background: '#e5e7eb', padding: '0 4px', borderRadius: '4px', color: '#374151', fontWeight: 500 }}>
+                                      {c.archetype.replace('THE ', '')}
+                                    </span>
+                                  )}
+                                </div>
+                                {c.matchReason && (
+                                  <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px', lineHeight: '1.2', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={c.matchReason}>
+                                    {c.matchReason}
+                                  </div>
                                 )}
                               </div>
+                              <a
+                                href={`https://github.com/${c.handle}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  background: 'white',
+                                  border: '1px solid var(--border)',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  color: 'var(--text-main)',
+                                  textDecoration: 'none'
+                                }}
+                              >
+                                View
+                              </a>
                             </div>
-                            <div style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '8px',
-                              maxHeight: '160px',
-                              overflowY: 'auto',
-                              paddingRight: '4px'
-                            }}>
-                              {autochekkLogs.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '12px 0', color: 'rgba(255, 255, 255, 0.5)', fontSize: '11px' }}>
-                                  Waiting for new profiles...
-                                </div>
-                              ) : (
-                                autochekkLogs.map((log) => (
-                                  <div key={log.id} style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '8px',
-                                    borderRadius: '8px',
-                                    background: 'rgba(255, 255, 255, 0.05)',
-                                    fontSize: '11px'
-                                  }}>
-                                    {log.type === 'discovery' && (
-                                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        <Search size={10} color="var(--text-dim)" />
-                                      </div>
-                                    )}
-                                    {log.type === 'resolution' && (
-                                      log.data?.avatar ? (
-                                        <img src={log.data.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }} />
-                                      ) : (
-                                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                          <User size={10} color="white" />
-                                        </div>
-                                      )
-                                    )}
-                                    {log.data?.analyzing && (
-                                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        <Clock size={10} color="#a78bfa" />
-                                      </div>
-                                    )}
-                                    {log.type === 'analysis' && !log.data?.analyzing && (
-                                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(124, 58, 237, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        <Zap size={10} color="#a78bfa" fill="#a78bfa" />
-                                      </div>
-                                    )}
-
-                                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                      <span style={{ fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px' }}>
-                                        {log.data?.analyzing
-                                          ? 'Analyzing...'
-                                          : log.type === 'analysis'
-                                            ? (log.data?.error
-                                              ? 'Analysis Failed'
-                                              : (log.data?.archetype ? `${log.data.archetype.replace(/^THE\s+/i, '')} DISCOVERED` : 'Analysis Complete'))
-                                            : log.type === 'resolution' ? 'Profile Found' : 'Email Detected'}
-                                      </span>
-                                      {log.type === 'discovery' && (
-                                        <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          {log.data?.email || log.message}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.4)', whiteSpace: 'nowrap' }}>
-                                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
+                          ))}
+                          {s.results.length === 0 && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', padding: '10px' }}>No candidates found matching criteria.</div>
+                          )}
                         </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '11px' }}>
+                  <div style={{ fontSize: '24px', marginBottom: '12px' }}>🔍</div>
+                  <p style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>No active searches</p>
+                  <p style={{ opacity: 0.7, lineHeight: 1.4 }}>
+                    Configure your first search to find<br />developers matching your criteria.
+                  </p>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* BULKCHEKK Card */}
+      <div style={{
+        position: 'relative',
+        marginBottom: '12px',
+        borderRadius: '16px',
+        overflow: 'visible',
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: showBulkChekkForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
+        background: 'linear-gradient(135deg, #020617 0%, #172554 100%)',
+        border: showBulkChekkForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
+      }}>
+        {/* Blob container with overflow hidden */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '16px',
+          overflow: 'hidden',
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            position: 'absolute',
+            right: '-30px',
+            top: '-30px',
+            width: '160px',
+            height: '160px',
+            background: 'rgba(255, 255, 255, 0.06)',
+            borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
+            zIndex: 0
+          }} />
+        </div>
+
+        {/* Content Layer */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Header / Toggle */}
+          <div
+            onClick={() => {
+              if (user?.tier !== 'PRO') {
+                setProFeaturePaywallOpen('BulkChekk');
+                return;
+              }
+              setShowBulkChekkForm(!showBulkChekkForm);
+            }}
+            style={{
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer',
+              gap: '14px',
+              position: 'relative'
+            }}
+          >
+            {/* Icon Box */}
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+            }}>
+              <FileSpreadsheet size={24} color="white" strokeWidth={2.5} />
+            </div>
+
+            {/* Text Info */}
+            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  color: 'white',
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase'
+                }}>
+                  BULKCHEKK
+                </span>
+                <span style={{
+                  fontSize: '8px',
+                  fontWeight: 900,
+                  color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+                  background: user?.tier === 'PRO'
+                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                    : 'rgba(255, 255, 255, 0.15)',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  letterSpacing: '0.02em',
+                  lineHeight: 1
+                }}>
+                  PRO
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, display: 'block' }}>
+                Analyze devs via CSV
+              </span>
+
+              {/* Mini Icons Row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="bulkchekk-tooltip-wrapper">
+                  <Info
+                    size={13}
+                    color="rgba(255, 255, 255, 0.5)"
+                    style={{ cursor: 'help', opacity: 0.7 }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="bulkchekk-tooltip" style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    left: '0',
+                    marginBottom: '8px',
+                    background: 'white',
+                    color: '#1a1a1a',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    width: '200px',
+                    textAlign: 'left',
+                    lineHeight: 1.4,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    opacity: 0,
+                    visibility: 'hidden',
+                    transition: 'all 0.2s ease',
+                    pointerEvents: 'none',
+                    zIndex: 1000
+                  }}>
+                    Upload a CSV with Github usernames to analyze multiple profiles at once
+                  </div>
+                </div>
+                {/* Status Dot */}
+                <div style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: showBulkChekkForm ? '#f59e0b' : 'transparent',
+                  border: `1.5px solid ${showBulkChekkForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)'}`,
+                  transition: 'all 0.2s ease',
+                  boxShadow: showBulkChekkForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none'
+                }} />
+              </div>
+            </div>
+
+            {/* Arrow */}
+            <ChevronRight
+              size={18}
+              color="rgba(255, 255, 255, 0.5)"
+              style={{
+                flexShrink: 0,
+                transform: showBulkChekkForm ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease'
+              }}
+            />
+          </div>
+          {/* Form Content (Correctly Animated) */}
+          <div style={{
+            maxHeight: showBulkChekkForm ? '500px' : '0',
+            opacity: showBulkChekkForm ? 1 : 0,
+            overflow: 'hidden',
+            transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderTop: showBulkChekkForm ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+          }}>
+            <div style={{ padding: '20px' }}>
+              {/* Tabs Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.08)', padding: '2px', borderRadius: '8px' }}>
+                  <button
+                    onClick={() => setBulkChekkTab('import')}
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: bulkChekkTab === 'import' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                      color: 'white',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      letterSpacing: '0.02em'
+                    }}
+                  >
+                    IMPORT
+                  </button>
+                  <button
+                    onClick={() => setBulkChekkTab('history')}
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: bulkChekkTab === 'history' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                      color: 'white',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      letterSpacing: '0.02em'
+                    }}
+                  >
+                    HISTORY
+                  </button>
+                </div>
+              </div>
+
+              {bulkChekkTab === 'import' ? (
+                <>
+                  {/* File upload area */}
+                  <input
+                    type="file"
+                    accept=".csv"
+                    style={{ display: 'none' }}
+                    id="bulk-file-input"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) setBulkFile(file)
+                    }}
+                  />
+                  <label
+                    htmlFor="bulk-file-input"
+                    style={{
+                      display: 'block',
+                      border: bulkFile ? '2px solid #4f46e5' : '2px dashed #e2e8f0',
+                      borderRadius: '12px',
+                      padding: '30px',
+                      textAlign: 'center',
+                      background: bulkFile ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc',
+                      cursor: bulkProcessing ? 'not-allowed' : 'pointer',
+                      marginBottom: '16px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {bulkFile ? (
+                      <>
+                        <FileSpreadsheet size={32} color="#4f46e5" style={{ marginBottom: '10px' }} />
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#4f46e5' }}>
+                          {bulkFile.name}
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                          Click to change file
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <FileSpreadsheet size={32} color="#cbd5e1" style={{ marginBottom: '10px' }} />
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
+                          Click to upload CSV or JSON
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                          Max 100 profiles per batch
+                        </div>
+                      </>
+                    )}
+                  </label>
+
+                  {/* Progress indicator */}
+                  {bulkProcessing && (
+                    <div style={{
+                      background: 'rgba(79, 70, 229, 0.1)',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      marginBottom: '16px'
+                    }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#4f46e5', marginBottom: '8px' }}>
+                        {bulkProgress.status}
                       </div>
-
-                      {/* CHEKKLIST Card */}
-                      <div style={{
-                        marginBottom: '12px',
-                        borderRadius: '16px',
-                        overflow: 'visible',
-                        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: showChecklistForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
-                        background: 'linear-gradient(135deg, #450a0a 0%, #2a0505 100%)',
-                        border: showChecklistForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent',
-                        position: 'relative'
-                      }}>
-                        {/* Blob container with overflow hidden */}
-                        <div style={{
-                          position: 'absolute',
-                          inset: 0,
-                          borderRadius: '16px',
-                          overflow: 'hidden',
-                          pointerEvents: 'none'
-                        }}>
+                      {bulkProgress.total > 0 && (
+                        <>
                           <div style={{
-                            position: 'absolute',
-                            right: '-125px',
-                            top: '-60px',
-                            width: '220px',
-                            height: '220px',
-                            borderRadius: '40px',
-                            transform: 'rotate(20deg)',
-                            background: 'rgba(255,255,255,0.05)',
-                            zIndex: 0
-                          }} />
-                        </div>
+                            height: '6px',
+                            background: '#e2e8f0',
+                            borderRadius: '3px',
+                            overflow: 'hidden',
+                            marginBottom: '6px'
+                          }}>
+                            <div style={{
+                              height: '100%',
+                              background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
+                              width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
+                              transition: 'width 0.3s ease'
+                            }} />
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>
+                            {bulkProgress.current} of {bulkProgress.total} profiles
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
 
+                  {/* Real-time results preview */}
+                  {bulkResults.length > 0 && (
+                    <div style={{
+                      maxHeight: '120px',
+                      overflowY: 'auto',
+                      marginBottom: '16px',
+                      background: '#f8fafc',
+                      borderRadius: '8px',
+                      padding: '8px'
+                    }}>
+                      {bulkResults.slice(-5).map((r, i) => (
+                        <div key={i} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '6px 8px',
+                          fontSize: '10px',
+                          color: r.success ? '#059669' : '#dc2626'
+                        }}>
+                          <span style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            background: r.success ? '#059669' : '#dc2626'
+                          }} />
+                          <span style={{ fontWeight: 600 }}>{r.handle}</span>
+                          <span style={{ opacity: 0.7 }}>
+                            {r.success ? (r.report?.archetype || 'Analyzed') : r.error}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={processBulkAnalysis}
+                    disabled={!bulkFile || bulkProcessing}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: (!bulkFile || bulkProcessing)
+                        ? '#94a3b8'
+                        : 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                      color: 'white',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: (!bulkFile || bulkProcessing) ? 'not-allowed' : 'pointer',
+                      opacity: (!bulkFile || bulkProcessing) ? 0.6 : 1,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {bulkProcessing ? 'PROCESSING...' : 'START BULK ANALYSIS'}
+                  </button>
+                </>
+              ) : (
+                /* History Tab */
+                <div style={{ minHeight: '150px' }}>
+                  {bulkHistory.length === 0 ? (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '150px',
+                      color: 'rgba(255,255,255,0.5)',
+                      gap: '12px'
+                    }}>
+                      <Clock size={24} style={{ opacity: 0.5 }} />
+                      <span style={{ fontSize: '11px' }}>No past imports found</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto' }}>
+                      {bulkHistory.map((batch, i) => (
                         <div
-                          onClick={() => {
-                            if (user?.tier !== 'PRO') {
-                              setProFeaturePaywallOpen('Chekklist');
-                              return;
-                            }
-                            setShowChecklistForm(!showChecklistForm);
-                          }}
+                          key={batch.id || i}
                           style={{
-                            width: '100%',
-                            cursor: 'pointer',
-                            position: 'relative',
-                            zIndex: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '14px',
-                            padding: '16px 20px'
+                            padding: '12px',
+                            background: 'rgba(255,255,255,0.08)',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(255,255,255,0.1)'
                           }}
                         >
-                          {/* Icon */}
-                          <div style={{
-                            width: '42px',
-                            height: '42px',
-                            borderRadius: '12px',
-                            background: 'rgba(255, 255, 255, 0.08)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <ClipboardList size={24} color="white" strokeWidth={2.5} />
-                          </div>
-
-                          {/* Text */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                              <span style={{
-                                fontSize: '13px',
-                                fontWeight: 800,
-                                letterSpacing: '0.05em',
-                                textTransform: 'uppercase',
-                                color: 'white'
-                              }}>
-                                CHEKKLIST
-                              </span>
-                              <span style={{
-                                fontSize: '8px',
-                                fontWeight: 900,
-                                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
-                                background: user?.tier === 'PRO'
-                                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                                  : 'rgba(255, 255, 255, 0.15)',
-                                padding: '2px 6px',
-                                borderRadius: '3px',
-                                letterSpacing: '0.02em',
-                                lineHeight: 1
-                              }}>
-                                PRO
-                              </span>
-                            </div>
-                            <span style={{
-                              fontSize: '11px',
-                              color: 'rgba(255, 255, 255, 0.7)',
-                              fontWeight: 500
-                            }}>
-                              Find 50 devs for your JD
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ color: 'white', fontSize: '12px', fontWeight: 600 }}>
+                              {batch.filename || `Batch ${i + 1}`}
                             </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="chekklist-tooltip-wrapper">
-                                <Info
-                                  size={13}
-                                  color="rgba(255, 255, 255, 0.5)"
-                                  style={{ cursor: 'help' }}
-                                />
-                                <div className="chekklist-tooltip" style={{
-                                  position: 'absolute',
-                                  bottom: '100%',
-                                  left: '0',
-                                  marginBottom: '8px',
-                                  background: 'white',
-                                  color: '#1a1a1a',
-                                  padding: '10px 12px',
-                                  borderRadius: '8px',
-                                  fontSize: '11px',
-                                  fontWeight: 500,
-                                  width: '200px',
-                                  textAlign: 'left',
-                                  lineHeight: 1.4,
-                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                  opacity: 0,
-                                  visibility: 'hidden',
-                                  transition: 'all 0.2s ease',
-                                  zIndex: 1000,
-                                  pointerEvents: 'none'
-                                }}>
-                                  Paste your job description and get 50 matched GitHub profiles
-                                </div>
-                              </div>
-                              {/* Search toggle icon */}
-                              <div
-                                onClick={(e) => { e.stopPropagation(); setShowChecklistForm(!showChecklistForm); }}
-                                style={{
-                                  cursor: 'pointer',
-                                  opacity: (showChecklistForm || activeSearches.length > 0) ? 1 : 0.5,
-                                  transition: 'opacity 0.2s',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: '16px',
-                                  height: '16px',
-                                  flexShrink: 0
-                                }}
-                                title={showChecklistForm ? "Hide Search Form" : "Open Search Form"}
-                              >
-                                <div style={{
-                                  width: '10px',
-                                  height: '10px',
-                                  borderRadius: '50%',
-                                  background: activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'transparent'),
-                                  border: `1.5px solid ${activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)')}`,
-                                  transition: 'all 0.2s ease',
-                                  boxShadow: activeSearches.length > 0 ? '0 0 8px rgba(34, 197, 94, 0.6)' : (showChecklistForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none')
-                                }} />
-                              </div>
-                            </div>
+                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>
+                              {new Date(batch.timestamp).toLocaleDateString()}
+                            </span>
                           </div>
-
-                          {/* Arrow */}
-                          <ChevronRight
-                            size={18}
-                            color="rgba(255, 255, 255, 0.5)"
-                            style={{
-                              flexShrink: 0,
-                              transform: showChecklistForm ? 'rotate(90deg)' : 'rotate(0deg)',
-                              transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                              cursor: 'pointer'
-                            }}
-                          />
-                        </div>
-
-
-                        {/* Chekklist Form Dropdown */}
-                        <div style={{
-                          maxHeight: showChecklistForm ? '800px' : '0',
-                          opacity: showChecklistForm ? 1 : 0,
-                          overflow: 'hidden',
-                          transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
-                          background: 'rgba(255, 255, 255, 0.03)',
-                          borderTop: showChecklistForm ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
-                        }}>
-                          <div style={{
-                            padding: '20px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '12px'
-                          }}>
-                            {/* Tabs Header */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.08)', padding: '2px', borderRadius: '8px' }}>
-                                <button
-                                  onClick={() => setChecklistTab('configure')}
-                                  style={{
-                                    padding: '4px 12px',
-                                    fontSize: '10px',
-                                    fontWeight: 700,
-                                    borderRadius: '6px',
-                                    border: 'none',
-                                    background: checklistTab === 'configure' ? 'rgba(255,255,255,0.15)' : 'transparent',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease',
-                                    letterSpacing: '0.02em'
-                                  }}
-                                >
-                                  CONFIGURE
-                                </button>
-                                <button
-                                  onClick={() => setChecklistTab('active')}
-                                  style={{
-                                    padding: '4px 12px',
-                                    fontSize: '10px',
-                                    fontWeight: 700,
-                                    borderRadius: '6px',
-                                    border: 'none',
-                                    background: checklistTab === 'active' ? 'rgba(255,255,255,0.15)' : 'transparent',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease',
-                                    letterSpacing: '0.02em'
-                                  }}
-                                >
-                                  ACTIVE
-                                </button>
-                              </div>
-                              <X size={14} color="rgba(255,255,255,0.4)" style={{ cursor: 'pointer' }} onClick={() => setShowChecklistForm(false)} />
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <div style={{
+                              fontSize: '10px',
+                              padding: '4px 8px',
+                              background: 'rgba(16, 185, 129, 0.2)',
+                              color: '#10b981',
+                              borderRadius: '4px',
+                              fontWeight: 600
+                            }}>
+                              ✓ {batch.successCount || 0} success
                             </div>
-
-                            {checklistTab === 'configure' ? (
-                              <>
-                                {/* Job Title */}
-                                <div>
-                                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
-                                    JOB TITLE
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Senior Frontend Engineer"
-                                    value={checklistForm.jobTitle}
-                                    onChange={(e) => setChecklistForm({ ...checklistForm, jobTitle: e.target.value })}
-                                    style={{
-                                      width: '100%',
-                                      padding: '10px 12px',
-                                      borderRadius: '8px',
-                                      border: '1px solid rgba(255,255,255,0.1)',
-                                      fontSize: '11px',
-                                      fontFamily: 'inherit',
-                                      background: 'rgba(255,255,255,0.05)',
-                                      color: 'white',
-                                      marginBottom: '10px'
-                                    }}
-                                  />
-                                </div>
-
-                                {/* Job Description */}
-                                <div>
-                                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
-                                    JOB DESCRIPTION
-                                  </label>
-                                  <textarea
-                                    placeholder="Paste your job description here..."
-                                    value={checklistForm.jd}
-                                    onChange={(e) => setChecklistForm({ ...checklistForm, jd: e.target.value })}
-                                    style={{
-                                      width: '100%',
-                                      minHeight: '80px',
-                                      padding: '10px 12px',
-                                      borderRadius: '8px',
-                                      border: '1px solid rgba(255,255,255,0.1)',
-                                      fontSize: '11px',
-                                      fontFamily: 'inherit',
-                                      background: 'rgba(255,255,255,0.05)',
-                                      color: 'white'
-                                    }}
-                                  />
-                                  <label
-                                    className="upload-btn"
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '6px',
-                                      marginTop: '8px',
-                                      padding: '8px 14px',
-                                      borderRadius: '20px',
-                                      border: '1.5px dashed #d1d5db',
-                                      background: 'white',
-                                      fontSize: '10px',
-                                      fontWeight: 600,
-                                      color: '#6b7280',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s ease',
-                                      width: 'fit-content'
-                                    }}
-                                  >
-                                    <Upload size={12} />
-                                    Upload PDF or TXT
-                                    <input
-                                      type="file"
-                                      accept=".pdf,.txt"
-                                      style={{ display: 'none' }}
-                                      onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        try {
-                                          let text = '';
-                                          if (file.type === 'application/pdf') {
-                                            const arrayBuffer = await file.arrayBuffer();
-                                            text = await extractTextFromPDF(arrayBuffer);
-                                          } else {
-                                            text = await file.text();
-                                          }
-                                          setChecklistForm(prev => ({ ...prev, jd: text }));
-                                        } catch (err) {
-                                          console.error('File parsing error:', err);
-                                        }
-                                      }}
-                                    />
-                                  </label>
-                                </div>
-
-                                {/* Years of Experience */}
-                                <div>
-                                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                                    Years of Experience
-                                  </label>
-                                  <select
-                                    value={checklistForm.experience}
-                                    onChange={(e) => setChecklistForm({ ...checklistForm, experience: e.target.value })}
-                                    style={{
-                                      width: '100%',
-                                      padding: '8px 10px',
-                                      borderRadius: '8px',
-                                      border: '1px solid var(--border)',
-                                      fontSize: '11px',
-                                      fontFamily: 'inherit',
-                                      background: 'var(--bg-gray)',
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    <option value="">Any experience</option>
-                                    <option value="0-2">0-2 years</option>
-                                    <option value="2-5">2-5 years</option>
-                                    <option value="5-10">5-10 years</option>
-                                    <option value="10+">10+ years</option>
-                                  </select>
-                                </div>
-
-                                {/* Languages */}
-                                <div>
-                                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                                    Languages / Skills
-                                  </label>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                    {['Python', 'TypeScript', 'JavaScript', 'Go', 'Rust', 'Java', 'C++', 'Ruby'].map(lang => (
-                                      <button
-                                        key={lang}
-                                        onClick={() => {
-                                          const langs = checklistForm.languages.includes(lang)
-                                            ? checklistForm.languages.filter(l => l !== lang)
-                                            : [...checklistForm.languages, lang];
-                                          setChecklistForm({ ...checklistForm, languages: langs });
-                                        }}
-                                        style={{
-                                          padding: '4px 10px',
-                                          borderRadius: '12px',
-                                          fontSize: '10px',
-                                          fontWeight: 600,
-                                          border: checklistForm.languages.includes(lang) ? '1px solid #7c3aed' : '1px solid var(--border)',
-                                          background: checklistForm.languages.includes(lang) ? 'rgba(124, 58, 237, 0.1)' : 'white',
-                                          color: checklistForm.languages.includes(lang) ? '#7c3aed' : 'var(--text-dim)',
-                                          cursor: 'pointer',
-                                          transition: 'all 0.2s ease'
-                                        }}
-                                      >
-                                        {lang}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                {/* Archetypes - All 15 from deepseek.ts */}
-                                <div>
-                                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                                    Preferred Archetypes
-                                  </label>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                    {[
-                                      // LEGENDARY - Amber #f59e0b
-                                      { name: 'THE 10X ENGINEER', color: '#f59e0b' },
-                                      { name: 'THE PROFESSOR', color: '#f59e0b' },
-                                      // ULTRA RARE - Purple #a855f7
-                                      { name: 'THE ARCHITECT', color: '#a855f7' },
-                                      // RARE - Blue #3b82f6
-                                      { name: 'THE SPECIALIST', color: '#3b82f6' },
-                                      { name: 'THE SYSTEMS THINKER', color: '#3b82f6' },
-                                      { name: 'THE MAINTAINER', color: '#3b82f6' },
-                                      // UNCOMMON - Green #22c55e
-                                      { name: 'THE BUILDER', color: '#22c55e' },
-                                      { name: 'THE CONTRIBUTOR', color: '#22c55e' },
-                                      { name: 'THE CRAFTSPERSON', color: '#22c55e' },
-                                      { name: 'THE HIDDEN GEM', color: '#22c55e' },
-                                      { name: 'THE TINKERER', color: '#22c55e' },
-                                      // COMMON - Stone #78716c
-                                      { name: 'THE GRINDER', color: '#78716c' },
-                                      { name: 'THE HOBBYIST', color: '#78716c' },
-                                      { name: 'THE EXPLORER', color: '#78716c' },
-                                      { name: 'THE APPRENTICE', color: '#78716c' }
-                                    ].map(arch => {
-                                      const isSelected = checklistForm.archetypes.includes(arch.name);
-                                      return (
-                                        <button
-                                          key={arch.name}
-                                          onClick={() => {
-                                            const archs = isSelected
-                                              ? checklistForm.archetypes.filter(a => a !== arch.name)
-                                              : [...checklistForm.archetypes, arch.name];
-                                            setChecklistForm({ ...checklistForm, archetypes: archs });
-                                          }}
-                                          style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '12px',
-                                            fontSize: '9px',
-                                            fontWeight: 600,
-                                            border: `1px solid ${arch.color}`,
-                                            background: isSelected ? arch.color : 'white',
-                                            color: isSelected ? 'white' : arch.color,
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s ease'
-                                          }}
-                                        >
-                                          {arch.name.replace('THE ', '')}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                {/* Tiers - 5 tiers from deepseek.ts */}
-                                <div>
-                                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                                    Tier Filter
-                                  </label>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                    {[
-                                      { name: 'LEGENDARY', badge: '🌟🌟🌟', color: '#f59e0b' },
-                                      { name: 'ULTRA RARE', badge: '🌟🌟', color: '#a855f7' },
-                                      { name: 'RARE', badge: '⭐', color: '#3b82f6' },
-                                      { name: 'UNCOMMON', badge: '◆', color: '#22c55e' },
-                                      { name: 'COMMON', badge: '●', color: '#78716c' }
-                                    ].map(tier => {
-                                      const isSelected = checklistForm.tiers.includes(tier.name);
-                                      return (
-                                        <button
-                                          key={tier.name}
-                                          onClick={() => {
-                                            const tierArchetypes: Record<string, string[]> = {
-                                              'LEGENDARY': ['THE 10X ENGINEER', 'THE PROFESSOR'],
-                                              'ULTRA RARE': ['THE ARCHITECT'],
-                                              'RARE': ['THE SPECIALIST', 'THE SYSTEMS THINKER', 'THE MAINTAINER'],
-                                              'UNCOMMON': ['THE BUILDER', 'THE CONTRIBUTOR', 'THE CRAFTSPERSON', 'THE HIDDEN GEM', 'THE TINKERER'],
-                                              'COMMON': ['THE GRINDER', 'THE HOBBYIST', 'THE EXPLORER', 'THE APPRENTICE']
-                                            };
-
-                                            const associatedArchetypes = tierArchetypes[tier.name] || [];
-                                            let newTiers;
-                                            let newArchetypes;
-
-                                            if (isSelected) {
-                                              // Deselecting: Remove tier and its archetypes from selection
-                                              newTiers = checklistForm.tiers.filter(t => t !== tier.name);
-                                              newArchetypes = checklistForm.archetypes.filter(a => !associatedArchetypes.includes(a));
-                                            } else {
-                                              // Selecting: Add tier and its archetypes
-                                              newTiers = [...checklistForm.tiers, tier.name];
-                                              // Add associated archetypes without duplicates
-                                              const combined = new Set([...checklistForm.archetypes, ...associatedArchetypes]);
-                                              newArchetypes = Array.from(combined);
-                                            }
-
-                                            setChecklistForm({ ...checklistForm, tiers: newTiers, archetypes: newArchetypes });
-                                          }}
-                                          style={{
-                                            padding: '4px 10px',
-                                            borderRadius: '12px',
-                                            fontSize: '10px',
-                                            fontWeight: 600,
-                                            border: `1px solid ${tier.color}`,
-                                            background: isSelected ? tier.color : 'white',
-                                            color: isSelected ? 'white' : tier.color,
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s ease'
-                                          }}
-                                        >
-                                          {tier.badge} {tier.name}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                {/* Search Button */}
-                                <button
-                                  onClick={async () => {
-                                    if (checklistForm.loading) return;
-
-                                    setChecklistForm(prev => ({ ...prev, loading: true }));
-                                    console.log('Search with:', checklistForm);
-
-                                    const searchId = Date.now();
-                                    const newSearch = {
-                                      id: searchId,
-                                      title: checklistForm.jobTitle || 'Untitled Search',
-                                      status: 'running',
-                                      timestamp: Date.now(),
-                                      results: []
-                                    };
-
-                                    setActiveSearches(prev => [newSearch, ...prev]);
-                                    setChecklistTab('active');
-
-                                    try {
-                                      const tokenData = await chrome.storage.local.get('vibe_token');
-                                      const token = tokenData.vibe_token;
-
-                                      const res = await fetch(`${BACKEND_URL}/api/chekklist/search`, {
-                                        method: 'POST',
-                                        headers: {
-                                          'Content-Type': 'application/json',
-                                          'Authorization': token ? `Bearer ${token}` : ''
-                                        },
-                                        body: JSON.stringify(checklistForm)
-                                      });
-                                      const data = await res.json();
-
-                                      if (data.success) {
-                                        setActiveSearches(prev => prev.map(s =>
-                                          s.id === searchId
-                                            ? { ...s, status: 'completed', results: data.candidates || [] }
-                                            : s
-                                        ));
-
-                                        // Update storage with latest searches
-                                        setActiveSearches(current => {
-                                          chrome.storage.local.set({ active_searches: current });
-                                          return current;
-                                        });
-                                      } else {
-                                        setActiveSearches(prev => prev.map(s =>
-                                          s.id === searchId
-                                            ? { ...s, status: 'completed', results: [], error: data.error }
-                                            : s
-                                        ));
-                                      }
-                                    } catch (e) {
-                                      console.error(e);
-                                      setActiveSearches(prev => prev.map(s =>
-                                        s.id === searchId
-                                          ? { ...s, status: 'completed', results: [], error: 'Search failed' }
-                                          : s
-                                      ));
-                                    } finally {
-                                      setChecklistForm(prev => ({ ...prev, loading: false }));
-                                    }
-                                  }}
-                                  disabled={checklistForm.loading}
-                                  style={{
-                                    width: '100%',
-                                    padding: '12px',
-                                    borderRadius: '8px',
-                                    border: 'none',
-                                    background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
-                                    color: 'white',
-                                    fontSize: '12px',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease'
-                                  }}
-                                >
-                                  {checklistForm.loading ? 'SEARCHING...' : 'FIND DEVS'}
-                                </button>
-                              </>
-                            ) : (
-                              activeSearches.length > 0 ? (
-                                <div style={{ padding: '10px' }}>
-                                  {activeSearches.map(s => (
-                                    <div key={s.id} style={{
-                                      padding: '12px',
-                                      background: 'white',
-                                      marginBottom: '8px',
-                                      borderRadius: '12px',
-                                      border: '1px solid var(--border)',
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                      overflow: 'hidden'
-                                    }}>
-                                      <div
-                                        onClick={() => setExpandedSearchId(expandedSearchId === s.id ? null : s.id)}
-                                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                                      >
-                                        <div>
-                                          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)' }}>{s.title}</div>
-                                          {s.status === 'completed' ? (
-                                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                                              Found {s.results?.length || 0} candidates
-                                            </div>
-                                          ) : (
-                                            <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></div>
-                                              Running...
-                                            </div>
-                                          )}
-                                        </div>
-                                        {s.status === 'completed' && (
-                                          <ChevronDown size={14} color="var(--text-dim)" style={{ transform: expandedSearchId === s.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                                        )}
-                                      </div>
-
-                                      {/* Results List */}
-                                      {expandedSearchId === s.id && s.results && (
-                                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                          {s.results.map((c: any, i: number) => (
-                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
-                                              <img src={c.avatar} alt={c.handle} style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
-                                              <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>{c.name}</div>
-                                                  {c.matchScore !== undefined && (
-                                                    <div style={{
-                                                      fontSize: '9px',
-                                                      fontWeight: 700,
-                                                      color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
-                                                      background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
-                                                      padding: '1px 4px',
-                                                      borderRadius: '4px'
-                                                    }}>
-                                                      {c.matchScore}%
-                                                    </div>
-                                                  )}
-                                                </div>
-                                                <div style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                  @{c.handle}
-                                                  {c.archetype && (
-                                                    <span style={{ fontSize: '9px', background: '#e5e7eb', padding: '0 4px', borderRadius: '4px', color: '#374151', fontWeight: 500 }}>
-                                                      {c.archetype.replace('THE ', '')}
-                                                    </span>
-                                                  )}
-                                                </div>
-                                                {c.matchReason && (
-                                                  <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px', lineHeight: '1.2', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={c.matchReason}>
-                                                    {c.matchReason}
-                                                  </div>
-                                                )}
-                                              </div>
-                                              <a
-                                                href={`https://github.com/${c.handle}`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                style={{
-                                                  padding: '4px 8px',
-                                                  borderRadius: '6px',
-                                                  background: 'white',
-                                                  border: '1px solid var(--border)',
-                                                  fontSize: '10px',
-                                                  fontWeight: 600,
-                                                  color: 'var(--text-main)',
-                                                  textDecoration: 'none'
-                                                }}
-                                              >
-                                                View
-                                              </a>
-                                            </div>
-                                          ))}
-                                          {s.results.length === 0 && (
-                                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', padding: '10px' }}>No candidates found matching criteria.</div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '11px' }}>
-                                  <div style={{ fontSize: '24px', marginBottom: '12px' }}>🔍</div>
-                                  <p style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>No active searches</p>
-                                  <p style={{ opacity: 0.7, lineHeight: 1.4 }}>
-                                    Configure your first search to find<br />developers matching your criteria.
-                                  </p>
-                                </div>
-                              )
+                            {batch.failedCount > 0 && (
+                              <div style={{
+                                fontSize: '10px',
+                                padding: '4px 8px',
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                color: '#ef4444',
+                                borderRadius: '4px',
+                                fontWeight: 600
+                              }}>
+                                ✗ {batch.failedCount} failed
+                              </div>
                             )}
                           </div>
-                        </div>
-                      </div>
-
-                      {/* BULKCHEKK Card */}
-                      <div style={{
-                        position: 'relative',
-                        marginBottom: '12px',
-                        borderRadius: '16px',
-                        overflow: 'visible',
-                        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: showBulkChekkForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
-                        background: 'linear-gradient(135deg, #020617 0%, #172554 100%)',
-                        border: showBulkChekkForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
-                      }}>
-                        {/* Blob container with overflow hidden */}
-                        <div style={{
-                          position: 'absolute',
-                          inset: 0,
-                          borderRadius: '16px',
-                          overflow: 'hidden',
-                          pointerEvents: 'none'
-                        }}>
-                          <div style={{
-                            position: 'absolute',
-                            right: '-30px',
-                            top: '-30px',
-                            width: '160px',
-                            height: '160px',
-                            background: 'rgba(255, 255, 255, 0.06)',
-                            borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
-                            zIndex: 0
-                          }} />
-                        </div>
-
-                        {/* Content Layer */}
-                        <div style={{ position: 'relative', zIndex: 1 }}>
-                          {/* Header / Toggle */}
-                          <div
-                            onClick={() => {
-                              if (user?.tier !== 'PRO') {
-                                setProFeaturePaywallOpen('BulkChekk');
-                                return;
-                              }
-                              setShowBulkChekkForm(!showBulkChekkForm);
-                            }}
-                            style={{
-                              padding: '16px 20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              cursor: 'pointer',
-                              gap: '14px',
-                              position: 'relative'
-                            }}
-                          >
-                            {/* Icon Box */}
-                            <div style={{
-                              width: '42px',
-                              height: '42px',
-                              borderRadius: '12px',
-                              background: 'rgba(255, 255, 255, 0.08)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              backdropFilter: 'blur(4px)',
-                              border: '1px solid rgba(255, 255, 255, 0.1)',
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                            }}>
-                              <FileSpreadsheet size={24} color="white" strokeWidth={2.5} />
-                            </div>
-
-                            {/* Text Info */}
-                            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                <span style={{
-                                  fontSize: '13px',
-                                  fontWeight: 800,
-                                  color: 'white',
-                                  letterSpacing: '0.05em',
-                                  textTransform: 'uppercase'
+                          {/* Show results preview */}
+                          {batch.results && batch.results.length > 0 && (
+                            <div style={{ marginTop: '10px', fontSize: '10px' }}>
+                              {batch.results.filter((r: any) => r.success).slice(0, 3).map((r: any, idx: number) => (
+                                <div key={idx} style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  padding: '4px 0',
+                                  borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none'
                                 }}>
-                                  BULKCHEKK
-                                </span>
-                                <span style={{
-                                  fontSize: '8px',
-                                  fontWeight: 900,
-                                  color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
-                                  background: user?.tier === 'PRO'
-                                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                                    : 'rgba(255, 255, 255, 0.15)',
-                                  padding: '2px 6px',
-                                  borderRadius: '3px',
-                                  letterSpacing: '0.02em',
-                                  lineHeight: 1
-                                }}>
-                                  PRO
-                                </span>
-                              </div>
-                              <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, display: 'block' }}>
-                                Analyze devs via CSV
-                              </span>
-
-                              {/* Mini Icons Row */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="bulkchekk-tooltip-wrapper">
-                                  <Info
-                                    size={13}
-                                    color="rgba(255, 255, 255, 0.5)"
-                                    style={{ cursor: 'help', opacity: 0.7 }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                  <div className="bulkchekk-tooltip" style={{
-                                    position: 'absolute',
-                                    bottom: '100%',
-                                    left: '0',
-                                    marginBottom: '8px',
-                                    background: 'white',
-                                    color: '#1a1a1a',
-                                    padding: '10px 12px',
-                                    borderRadius: '8px',
-                                    fontSize: '11px',
-                                    fontWeight: 500,
-                                    width: '200px',
-                                    textAlign: 'left',
-                                    lineHeight: 1.4,
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                    opacity: 0,
-                                    visibility: 'hidden',
-                                    transition: 'all 0.2s ease',
-                                    pointerEvents: 'none',
-                                    zIndex: 1000
+                                  <span style={{ color: 'rgba(255,255,255,0.8)' }}>{r.handle}</span>
+                                  <span style={{
+                                    color: '#f59e0b',
+                                    fontWeight: 600,
+                                    fontSize: '9px'
                                   }}>
-                                    Upload a CSV with Github usernames to analyze multiple profiles at once
-                                  </div>
+                                    {r.report?.archetype || 'Analyzed'}
+                                  </span>
                                 </div>
-                                {/* Status Dot */}
-                                <div style={{
-                                  width: '10px',
-                                  height: '10px',
-                                  borderRadius: '50%',
-                                  background: showBulkChekkForm ? '#f59e0b' : 'transparent',
-                                  border: `1.5px solid ${showBulkChekkForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)'}`,
-                                  transition: 'all 0.2s ease',
-                                  boxShadow: showBulkChekkForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none'
-                                }} />
-                              </div>
-                            </div>
-
-                            {/* Arrow */}
-                            <ChevronRight
-                              size={18}
-                              color="rgba(255, 255, 255, 0.5)"
-                              style={{
-                                flexShrink: 0,
-                                transform: showBulkChekkForm ? 'rotate(90deg)' : 'rotate(0deg)',
-                                transition: 'transform 0.2s ease'
-                              }}
-                            />
-                          </div>
-                          {/* Form Content (Correctly Animated) */}
-                          <div style={{
-                            maxHeight: showBulkChekkForm ? '500px' : '0',
-                            opacity: showBulkChekkForm ? 1 : 0,
-                            overflow: 'hidden',
-                            transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            borderTop: showBulkChekkForm ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
-                          }}>
-                            <div style={{ padding: '20px' }}>
-                              {/* Tabs Header */}
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.08)', padding: '2px', borderRadius: '8px' }}>
-                                  <button
-                                    onClick={() => setBulkChekkTab('import')}
-                                    style={{
-                                      padding: '4px 12px',
-                                      fontSize: '10px',
-                                      fontWeight: 700,
-                                      borderRadius: '6px',
-                                      border: 'none',
-                                      background: bulkChekkTab === 'import' ? 'rgba(255,255,255,0.15)' : 'transparent',
-                                      color: 'white',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s ease',
-                                      letterSpacing: '0.02em'
-                                    }}
-                                  >
-                                    IMPORT
-                                  </button>
-                                  <button
-                                    onClick={() => setBulkChekkTab('history')}
-                                    style={{
-                                      padding: '4px 12px',
-                                      fontSize: '10px',
-                                      fontWeight: 700,
-                                      borderRadius: '6px',
-                                      border: 'none',
-                                      background: bulkChekkTab === 'history' ? 'rgba(255,255,255,0.15)' : 'transparent',
-                                      color: 'white',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s ease',
-                                      letterSpacing: '0.02em'
-                                    }}
-                                  >
-                                    HISTORY
-                                  </button>
-                                </div>
-                              </div>
-
-                              {bulkChekkTab === 'import' ? (
-                                <>
-                                  {/* File upload area */}
-                                  <input
-                                    type="file"
-                                    accept=".csv"
-                                    style={{ display: 'none' }}
-                                    id="bulk-file-input"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0]
-                                      if (file) setBulkFile(file)
-                                    }}
-                                  />
-                                  <label
-                                    htmlFor="bulk-file-input"
-                                    style={{
-                                      display: 'block',
-                                      border: bulkFile ? '2px solid #4f46e5' : '2px dashed #e2e8f0',
-                                      borderRadius: '12px',
-                                      padding: '30px',
-                                      textAlign: 'center',
-                                      background: bulkFile ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc',
-                                      cursor: bulkProcessing ? 'not-allowed' : 'pointer',
-                                      marginBottom: '16px',
-                                      transition: 'all 0.2s ease'
-                                    }}
-                                  >
-                                    {bulkFile ? (
-                                      <>
-                                        <FileSpreadsheet size={32} color="#4f46e5" style={{ marginBottom: '10px' }} />
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#4f46e5' }}>
-                                          {bulkFile.name}
-                                        </div>
-                                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                          Click to change file
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <FileSpreadsheet size={32} color="#cbd5e1" style={{ marginBottom: '10px' }} />
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
-                                          Click to upload CSV or JSON
-                                        </div>
-                                        <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
-                                          Max 100 profiles per batch
-                                        </div>
-                                      </>
-                                    )}
-                                  </label>
-
-                                  {/* Progress indicator */}
-                                  {bulkProcessing && (
-                                    <div style={{
-                                      background: 'rgba(79, 70, 229, 0.1)',
-                                      borderRadius: '8px',
-                                      padding: '16px',
-                                      marginBottom: '16px'
-                                    }}>
-                                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#4f46e5', marginBottom: '8px' }}>
-                                        {bulkProgress.status}
-                                      </div>
-                                      {bulkProgress.total > 0 && (
-                                        <>
-                                          <div style={{
-                                            height: '6px',
-                                            background: '#e2e8f0',
-                                            borderRadius: '3px',
-                                            overflow: 'hidden',
-                                            marginBottom: '6px'
-                                          }}>
-                                            <div style={{
-                                              height: '100%',
-                                              background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
-                                              width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
-                                              transition: 'width 0.3s ease'
-                                            }} />
-                                          </div>
-                                          <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>
-                                            {bulkProgress.current} of {bulkProgress.total} profiles
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Real-time results preview */}
-                                  {bulkResults.length > 0 && (
-                                    <div style={{
-                                      maxHeight: '120px',
-                                      overflowY: 'auto',
-                                      marginBottom: '16px',
-                                      background: '#f8fafc',
-                                      borderRadius: '8px',
-                                      padding: '8px'
-                                    }}>
-                                      {bulkResults.slice(-5).map((r, i) => (
-                                        <div key={i} style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '8px',
-                                          padding: '6px 8px',
-                                          fontSize: '10px',
-                                          color: r.success ? '#059669' : '#dc2626'
-                                        }}>
-                                          <span style={{
-                                            width: '8px',
-                                            height: '8px',
-                                            borderRadius: '50%',
-                                            background: r.success ? '#059669' : '#dc2626'
-                                          }} />
-                                          <span style={{ fontWeight: 600 }}>{r.handle}</span>
-                                          <span style={{ opacity: 0.7 }}>
-                                            {r.success ? (r.report?.archetype || 'Analyzed') : r.error}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  <button
-                                    onClick={processBulkAnalysis}
-                                    disabled={!bulkFile || bulkProcessing}
-                                    style={{
-                                      width: '100%',
-                                      padding: '12px',
-                                      borderRadius: '8px',
-                                      border: 'none',
-                                      background: (!bulkFile || bulkProcessing)
-                                        ? '#94a3b8'
-                                        : 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
-                                      color: 'white',
-                                      fontSize: '12px',
-                                      fontWeight: 700,
-                                      cursor: (!bulkFile || bulkProcessing) ? 'not-allowed' : 'pointer',
-                                      opacity: (!bulkFile || bulkProcessing) ? 0.6 : 1,
-                                      transition: 'all 0.2s ease'
-                                    }}
-                                  >
-                                    {bulkProcessing ? 'PROCESSING...' : 'START BULK ANALYSIS'}
-                                  </button>
-                                </>
-                              ) : (
-                                /* History Tab */
-                                <div style={{ minHeight: '150px' }}>
-                                  {bulkHistory.length === 0 ? (
-                                    <div style={{
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      height: '150px',
-                                      color: 'rgba(255,255,255,0.5)',
-                                      gap: '12px'
-                                    }}>
-                                      <Clock size={24} style={{ opacity: 0.5 }} />
-                                      <span style={{ fontSize: '11px' }}>No past imports found</span>
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto' }}>
-                                      {bulkHistory.map((batch, i) => (
-                                        <div
-                                          key={batch.id || i}
-                                          style={{
-                                            padding: '12px',
-                                            background: 'rgba(255,255,255,0.08)',
-                                            borderRadius: '10px',
-                                            border: '1px solid rgba(255,255,255,0.1)'
-                                          }}
-                                        >
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                            <span style={{ color: 'white', fontSize: '12px', fontWeight: 600 }}>
-                                              {batch.filename || `Batch ${i + 1}`}
-                                            </span>
-                                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>
-                                              {new Date(batch.timestamp).toLocaleDateString()}
-                                            </span>
-                                          </div>
-                                          <div style={{ display: 'flex', gap: '12px' }}>
-                                            <div style={{
-                                              fontSize: '10px',
-                                              padding: '4px 8px',
-                                              background: 'rgba(16, 185, 129, 0.2)',
-                                              color: '#10b981',
-                                              borderRadius: '4px',
-                                              fontWeight: 600
-                                            }}>
-                                              ✓ {batch.successCount || 0} success
-                                            </div>
-                                            {batch.failedCount > 0 && (
-                                              <div style={{
-                                                fontSize: '10px',
-                                                padding: '4px 8px',
-                                                background: 'rgba(239, 68, 68, 0.2)',
-                                                color: '#ef4444',
-                                                borderRadius: '4px',
-                                                fontWeight: 600
-                                              }}>
-                                                ✗ {batch.failedCount} failed
-                                              </div>
-                                            )}
-                                          </div>
-                                          {/* Show results preview */}
-                                          {batch.results && batch.results.length > 0 && (
-                                            <div style={{ marginTop: '10px', fontSize: '10px' }}>
-                                              {batch.results.filter((r: any) => r.success).slice(0, 3).map((r: any, idx: number) => (
-                                                <div key={idx} style={{
-                                                  display: 'flex',
-                                                  justifyContent: 'space-between',
-                                                  padding: '4px 0',
-                                                  borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none'
-                                                }}>
-                                                  <span style={{ color: 'rgba(255,255,255,0.8)' }}>{r.handle}</span>
-                                                  <span style={{
-                                                    color: '#f59e0b',
-                                                    fontWeight: 600,
-                                                    fontSize: '9px'
-                                                  }}>
-                                                    {r.report?.archetype || 'Analyzed'}
-                                                  </span>
-                                                </div>
-                                              ))}
-                                              {batch.results.filter((r: any) => r.success).length > 3 && (
-                                                <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                                  +{batch.results.filter((r: any) => r.success).length - 3} more profiles
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                              ))}
+                              {batch.results.filter((r: any) => r.success).length > 3 && (
+                                <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                  +{batch.results.filter((r: any) => r.success).length - 3} more profiles
                                 </div>
                               )}
                             </div>
-                          </div>
+                          )}
                         </div>
-                      </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
     </>
   );
@@ -2886,12 +2886,12 @@ function App() {
                   </>
                 )}
 
-            {user?.tier === 'PRO' && (
-              <div style={{ marginTop: '20px' }}>
-                {proFeaturesContent}
-              </div>
-            )}
-    
+                {user?.tier === 'PRO' && (
+                  <div style={{ marginTop: '20px' }}>
+                    {proFeaturesContent}
+                  </div>
+                )}
+
               </div>
             )}
 
@@ -3384,8 +3384,8 @@ function App() {
 
                       </div>
 
-                      {/* AUTOCHEKK - Premium Feature Card */}
-{proFeaturesContent}
+                      {/* Attributes hidden for PRO users as they are on search page */}
+                      {user?.tier !== 'PRO' && proFeaturesContent}
 
                       {/* Authentication Perks */}
                       <div style={{
