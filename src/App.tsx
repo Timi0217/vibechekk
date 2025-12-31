@@ -1964,20 +1964,20 @@ function App() {
                               }}>
                                 AUTOCHEKK
                               </span>
-                              {user.tier !== 'PRO' && (
-                                <span style={{
-                                  fontSize: '8px',
-                                  fontWeight: 900,
-                                  color: '#1a1a1a',
-                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                  padding: '2px 6px',
-                                  borderRadius: '3px',
-                                  letterSpacing: '0.02em',
-                                  lineHeight: 1
-                                }}>
-                                  PRO
-                                </span>
-                              )}
+                              <span style={{
+                                fontSize: '8px',
+                                fontWeight: 900,
+                                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+                                background: user?.tier === 'PRO'
+                                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                                  : 'rgba(255, 255, 255, 0.15)',
+                                padding: '2px 6px',
+                                borderRadius: '3px',
+                                letterSpacing: '0.02em',
+                                lineHeight: 1
+                              }}>
+                                PRO
+                              </span>
                             </div>
                             <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, whiteSpace: 'nowrap' }}>
                               Chekk devs as you browse
@@ -2316,8 +2316,10 @@ function App() {
                               <span style={{
                                 fontSize: '8px',
                                 fontWeight: 900,
-                                color: '#1a1a1a',
-                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+                                background: user?.tier === 'PRO'
+                                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                                  : 'rgba(255, 255, 255, 0.15)',
                                 padding: '2px 6px',
                                 borderRadius: '3px',
                                 letterSpacing: '0.02em',
@@ -3010,8 +3012,10 @@ function App() {
                                 <span style={{
                                   fontSize: '8px',
                                   fontWeight: 900,
-                                  color: '#1a1a1a',
-                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                  color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+                                  background: user?.tier === 'PRO'
+                                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                                    : 'rgba(255, 255, 255, 0.15)',
                                   padding: '2px 6px',
                                   borderRadius: '3px',
                                   letterSpacing: '0.02em',
