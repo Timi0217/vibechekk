@@ -261,8 +261,15 @@ function App() {
   }, [])
 
   useEffect(() => {
-    chrome.storage.local.set({ auto_chekk_enabled: autoChekk })
-  }, [autoChekk])
+    // Only allow AutoChekk for PRO users
+    const shouldBeEnabled = autoChekk && user?.tier === 'PRO';
+    chrome.storage.local.set({ auto_chekk_enabled: shouldBeEnabled });
+
+    // If user is not PRO but autoChekk is true, turn it off
+    if (autoChekk && user?.tier !== 'PRO') {
+      setAutoChekk(false);
+    }
+  }, [autoChekk, user?.tier])
 
   const handleOpenReport = (report: any) => {
     setSelectedReport(report)
@@ -1992,7 +1999,14 @@ function App() {
                             </div>
                           </div>
                           <div
-                            onClick={(e) => { e.stopPropagation(); setAutoChekk(!autoChekk); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (user?.tier !== 'PRO') {
+                                setLimitPaywallOpen(true);
+                                return;
+                              }
+                              setAutoChekk(!autoChekk);
+                            }}
                             style={{
                               width: '52px',
                               height: '30px',
@@ -2220,7 +2234,13 @@ function App() {
                         </div>
 
                         <div
-                          onClick={() => setShowChecklistForm(!showChecklistForm)}
+                          onClick={() => {
+                            if (user?.tier !== 'PRO') {
+                              setLimitPaywallOpen(true);
+                              return;
+                            }
+                            setShowChecklistForm(!showChecklistForm);
+                          }}
                           style={{
                             width: '100%',
                             cursor: 'pointer',
@@ -2908,7 +2928,13 @@ function App() {
                         <div style={{ position: 'relative', zIndex: 1 }}>
                           {/* Header / Toggle */}
                           <div
-                            onClick={() => setShowBulkChekkForm(!showBulkChekkForm)}
+                            onClick={() => {
+                              if (user?.tier !== 'PRO') {
+                                setLimitPaywallOpen(true);
+                                return;
+                              }
+                              setShowBulkChekkForm(!showBulkChekkForm);
+                            }}
                             style={{
                               padding: '16px 20px',
                               display: 'flex',
