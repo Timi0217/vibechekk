@@ -543,9 +543,8 @@ app.get('/api/auth/github/callback', async (req, res) => {
         const user = await prisma.user.upsert({
             where: { email },
             update: {
-                githubLogin: githubUser.login,
-                // Only update picture if they don't have one
-                picture: { set: undefined } // Don't overwrite existing picture
+                githubLogin: githubUser.login
+                // Don't update picture - keep their existing one
             },
             create: {
                 email,

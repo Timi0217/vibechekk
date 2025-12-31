@@ -4456,11 +4456,13 @@ function App() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap'
                 }}>
-                  {referralInfo?.referralLink?.replace('https://', '') || `vibechekk.dev/r/${user?.id?.slice(0, 8) || 'invite'}`}
+                  {referralInfo?.referralLink?.replace('https://', '') || (user?.id ? `vibechekk.dev/r/${user.id.slice(0, 8)}` : 'Loading...')}
                 </div>
                 <button
                   onClick={() => {
-                    const link = referralInfo?.referralLink || `https://vibechekk.dev/r/${user?.id?.slice(0, 8) || 'invite'}`;
+                    const code = referralInfo?.referralCode || user?.id?.slice(0, 8);
+                    if (!code) return;
+                    const link = `https://vibechekk.dev/r/${code}`;
                     navigator.clipboard.writeText(link);
                     setCopiedId('modal-referral');
                     setTimeout(() => setCopiedId(null), 2000);
