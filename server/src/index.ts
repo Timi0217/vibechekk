@@ -21,7 +21,7 @@ const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
 // Initialize Stripe
-const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-12-18.acacia' }) : null;
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 // --- AUTH UTILS ---
 // ... (rest of imports/utils remains same)
@@ -671,22 +671,12 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Already a Pro subscriber' });
         }
 
-        // Create Checkout Session
+        // Create Checkout Session with pre-created Price
         const session = await stripe.checkout.sessions.create({
             mode: 'subscription',
             payment_method_types: ['card'],
             line_items: [{
-                price_data: {
-                    currency: 'usd',
-                    product_data: {
-                        name: 'Vibechekk Pro',
-                        description: 'Unlimited analyses, AutoChekk, Chekklist, BulkChekk, and more',
-                    },
-                    unit_amount: 2900, // $29.00
-                    recurring: {
-                        interval: 'month',
-                    },
-                },
+                price: 'price_1SkDqDLd8BonO0ZWPrwvJDL1', // Vibechekk Pro - $29/month
                 quantity: 1,
             }],
             customer_email: user.email,
