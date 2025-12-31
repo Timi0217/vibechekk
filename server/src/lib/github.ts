@@ -644,24 +644,36 @@ export const searchCandidates = async (token: string, criteria: any) => {
   const octokit = new Octokit({ auth: token });
   const { languages, experience, jobTitle } = criteria;
 
-  // Construct Query
-  // "language:Python language:TypeScript location:San Francisco pushed:>2024-09-01"
-  const langQuery = (languages || []).map((l: string) => `language:${l}`).join(' ');
-  const threeMonthsAgo = new Date();
+  // Calculate date filter for recent activity
   const twoMonthsAgo = new Date();
-  twoMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 2); // Slightly tighter for better quality
+  twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
   const dateStr = twoMonthsAgo.toISOString().split('T')[0];
 
-  // Base query: Active recently
-  let q = `type:user pushed:>${dateStr}`;
+  // Build language filter - at least one language required for meaningful results
+  const langList = languages && languages.length > 0 ? languages : ['JavaScript', 'TypeScript', 'Python'];
+  const langQuery = langList.map((l: string) => `language:${l}`).join(' ');
 
-  // Add job title/keywords to query if provided
+  // Base query: Active users with language expertise
+  // GitHub user search is limited - we search by:
+  // - type:user (only users, not orgs)
+  // - pushed:>DATE (recently active)
+  // - language:X (works with repos they own)
+  let q = `type:user pushed:>${dateStr} ${langQuery}`;
+
+  // If job title contains keywords, try to find them in bio
+  // Note: GitHub search for users is very limited - "in:bio" doesn't work well
+  // The best we can do is search for language + activity, then let DeepSeek rank by JD
   if (jobTitle) {
-    q += ` ${jobTitle}`;
-  }
+    // Extract meaningful keywords from job title (skip common words)
+    const keywords = jobTitle
+      .toLowerCase()
+      .replace(/senior|junior|lead|staff|principal|engineer|developer|intern/gi, '')
+      .trim();
 
-  if (langQuery) {
-    q += ` ${langQuery}`;
+    if (keywords.length > 2) {
+      // Add keyword to search (GitHub will try to match in name/bio/readme)
+      q += ` ${keywords}`;
+    }
   }
 
   console.log(`[GitHub Search] Query: ${q}`);

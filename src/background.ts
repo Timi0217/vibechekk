@@ -12,14 +12,14 @@ const processedEmails = new Set<string>();
 // Helper to check duplicates against persistent history
 async function isDuplicate(type: string, value: string): Promise<boolean> {
     const res = await chrome.storage.local.get(['dedup_cache']);
-    const cache = res.dedup_cache || [];
+    const cache: any[] = (res.dedup_cache as any[]) || [];
     return cache.some((c: any) => c.type === type && c.value === value);
 }
 
 // Helper to add to persistent history
 async function addToDedupCache(type: string, value: string) {
     const res = await chrome.storage.local.get(['dedup_cache']);
-    const cache = res.dedup_cache || [];
+    const cache: any[] = (res.dedup_cache as any[]) || [];
     if (!cache.some((c: any) => c.type === type && c.value === value)) {
         cache.push({ type, value, timestamp: Date.now() });
         // Keep logs manageable but large enough for history
@@ -109,7 +109,7 @@ async function logActivity(type: 'discovery' | 'resolution' | 'analysis', messag
         const logItem = { id: crypto.randomUUID(), type, message, data, timestamp };
 
         const res = await chrome.storage.local.get(['autochekk_logs']);
-        const logs = res.autochekk_logs || [];
+        const logs: any[] = (res.autochekk_logs as any[]) || [];
 
         // Simple 50-item cap, deduplication handled by callers
         const newLogs = [logItem, ...logs].slice(0, 50);
@@ -138,17 +138,23 @@ async function handleEmailDiscovery(emails: string[], tabId?: number) {
         await addToDedupCache('discovery', email);
 
         try {
-            // Search GitHub for this email
-            const res = await fetch(`https://api.github.com/search/users?q=${encodeURIComponent(email + ' in:email')}`);
-            if (res.status === 403 || res.status === 429) {
-                console.warn('[Autochekk] Rate limited by GitHub API');
-                logActivity('resolution', `Rate Limited (GitHub API)`, { email, error: 'API limit reached' });
-                break; // Stop for now
+            // Search GitHub for this email via backend (uses authenticated API)
+            const res = await fetch(`${BACKEND_URL}/api/lookup/email`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+
+            if (!res.ok) {
+                console.warn('[Autochekk] Email lookup failed:', res.status);
+                logActivity('resolution', `Lookup failed for ${email}`, { email, error: `HTTP ${res.status}` });
+                continue;
             }
+
             const data = await res.json();
 
-            if (data.items && data.items.length > 0) {
-                const user = data.items[0];
+            if (data.success && data.username) {
+                const user = { login: data.username, avatar_url: '' };
                 const githubUrl = `https://github.com/${user.login}`;
                 console.log(`[Autochekk] Resolved ${email} -> ${githubUrl}`);
 

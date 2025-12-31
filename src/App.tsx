@@ -372,7 +372,7 @@ function App() {
 
   // ===== BULKCHEKK FUNCTIONS =====
 
-  // Parse CSV/JSON file and extract GitHub handles/emails
+  // Parse CSV file and extract GitHub handles/emails
   const parseUploadedFile = async (file: File): Promise<{ handles: string[], emails: string[] }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -381,36 +381,25 @@ function App() {
           const text = e.target?.result as string
           let handles: string[] = []
 
-          if (file.name.endsWith('.json')) {
-            // Parse JSON - expect array of strings or objects with username/handle/url/email field
-            const json = JSON.parse(text)
-            if (Array.isArray(json)) {
-              handles = json.map((item: any) => {
-                if (typeof item === 'string') return item
-                return item.username || item.handle || item.github || item.url || item.email || ''
-              }).filter(Boolean)
-            }
-          } else {
-            // Parse CSV - look for github handles, urls, emails, usernames
-            const lines = text.split(/\r?\n/).filter(line => line.trim())
-            const header = lines[0]?.toLowerCase() || ''
+          // Parse CSV - look for github handles, urls, emails, usernames
+          const lines = text.split(/\r?\n/).filter(line => line.trim())
+          const header = lines[0]?.toLowerCase() || ''
 
-            // Detect column indices
-            const cols = header.split(',').map(c => c.trim())
-            const usernameCol = cols.findIndex(c =>
-              c.includes('username') || c.includes('handle') || c.includes('github') ||
-              c.includes('user') || c.includes('email') || c.includes('url')
-            )
+          // Detect column indices
+          const cols = header.split(',').map(c => c.trim())
+          const usernameCol = cols.findIndex(c =>
+            c.includes('username') || c.includes('handle') || c.includes('github') ||
+            c.includes('user') || c.includes('email') || c.includes('url')
+          )
 
-            // If we found a header, skip it; otherwise process all lines
-            const startIdx = usernameCol >= 0 ? 1 : 0
-            const colIdx = usernameCol >= 0 ? usernameCol : 0
+          // If we found a header, skip it; otherwise process all lines
+          const startIdx = usernameCol >= 0 ? 1 : 0
+          const colIdx = usernameCol >= 0 ? usernameCol : 0
 
-            for (let i = startIdx; i < lines.length; i++) {
-              const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
-              if (values[colIdx]) {
-                handles.push(values[colIdx])
-              }
+          for (let i = startIdx; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
+            if (values[colIdx]) {
+              handles.push(values[colIdx])
             }
           }
 
