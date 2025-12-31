@@ -3698,40 +3698,6 @@ function App() {
                         </div>
                       )}
 
-                      {/* Danger Zone - Clear Data */}
-                      <div style={{ marginTop: '24px', marginBottom: '16px' }}>
-                        <h4 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                          Danger Zone
-                        </h4>
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Are you sure you want to clear all local data (history, caches, login)? This cannot be undone.')) {
-                              chrome.storage.local.clear(() => {
-                                window.location.reload();
-                              });
-                            }
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            borderRadius: '10px',
-                            background: 'rgba(239, 68, 68, 0.05)',
-                            color: '#ef4444',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            border: '1px solid rgba(239, 68, 68, 0.15)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px'
-                          }}
-                        >
-                          <Trash size={14} />
-                          Clear Local Cache
-                        </button>
-                      </div>
-
                       {/* Sign Out Button */}
                       <button
                         onClick={logout}
@@ -3768,6 +3734,42 @@ function App() {
                         <LogOut size={16} strokeWidth={2.2} />
                         SIGN OUT
                       </button>
+
+                      {/* Danger Zone - Clear Data */}
+                      <div style={{ marginTop: '24px', marginBottom: '16px' }}>
+                        <h4 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                          Danger Zone
+                        </h4>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Are you sure you want to clear all local data (history, caches, login)? This cannot be undone.')) {
+                              chrome.storage.local.clear(() => {
+                                window.location.reload();
+                              });
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: 'rgba(239, 68, 68, 0.05)',
+                            color: '#ef4444',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            border: '1px solid rgba(239, 68, 68, 0.15)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
+                          }}
+                        >
+                          <Trash size={14} />
+                          Clear Local Cache
+                        </button>
+                      </div>
+
+
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
