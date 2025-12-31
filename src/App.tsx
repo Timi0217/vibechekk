@@ -202,1701 +202,8 @@ function App() {
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
   const activeTabRef = useRef(activeTab)
 
-  useEffect(() => {
-    activeTabRef.current = activeTab
-  }, [activeTab])
-
-  // Persist AutoChekk state & logs
-  useEffect(() => {
-    chrome.storage.local.get(['auto_chekk_enabled', 'autochekk_logs', 'active_searches'], (res) => {
-      if (res.auto_chekk_enabled !== undefined) {
-        setAutoChekk(!!res.auto_chekk_enabled)
-      }
-      if (res.autochekk_logs) {
-        setAutochekkLogs(res.autochekk_logs as any[])
-      }
-      if (res.active_searches) {
-        setActiveSearches(res.active_searches as any[])
-      }
-      if (res.bulk_history) {
-        setBulkHistory(res.bulk_history as any[])
-      }
-    })
-
-    const listener = (changes: any) => {
-      if (changes.autochekk_logs) {
-        const logs = changes.autochekk_logs.newValue || [];
-        setAutochekkLogs(logs);
-
-        // Get handles that have completed (success or failure) - these have analysis entries WITHOUT analyzing flag
-        const completedHandles = new Set(
-          logs
-            .filter((l: any) => l.type === 'analysis' && !l.data?.analyzing)
-            .map((l: any) => l.data?.githubHandle?.toLowerCase())
-        );
-
-        // Track analyzing entries for History skeleton cards, excluding completed ones
-        const analyzing = logs
-          .filter((l: any) => l.type === 'analysis' && l.data?.analyzing)
-          .filter((l: any) => !completedHandles.has(l.data?.githubHandle?.toLowerCase()))
-          .filter((l: any) => {
-            // Filter out stale analyses (> 3 minutes old) to prevent stuck loading states
-            const age = Date.now() - (l.timestamp || 0);
-            return age < 3 * 60 * 1000;
-          })
-          .map((l: any) => ({
-            handle: l.data?.githubHandle,
-            name: l.data?.name,
-            avatar: '',
-            timestamp: l.timestamp
-          }));
-        setPendingAnalyses(analyzing);
-      }
-    };
-
-    chrome.storage.onChanged.addListener(listener);
-
-    return () => {
-      chrome.storage.onChanged.removeListener(listener);
-    };
-  }, [])
-
-  useEffect(() => {
-    // Only allow AutoChekk for PRO users
-    // Wait until we've finished loading auth to enforce this
-    if (authLoading) return;
-
-    const isPro = user?.tier === 'PRO';
-    const shouldBeEnabled = autoChekk && isPro;
-    chrome.storage.local.set({ auto_chekk_enabled: shouldBeEnabled });
-
-    // If user is not PRO but autoChekk is true, turn it off
-    if (autoChekk && !isPro) {
-      setAutoChekk(false);
-    }
-  }, [autoChekk, user?.tier, authLoading])
-
-  const handleOpenReport = (report: any) => {
-    setSelectedReport(report)
-    setShowFullSummary(false)
-    setShowDetailedSummary(false)
-    setShowTechnicalSignal(false)
-    setShowDetailedTechnical(false)
-    setExpandedSkills([])
-    setExpandedMerits([])
-  }
-
-  useEffect(() => {
-    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data', 'auth_token', 'bulk_history'], (res) => {
-      setTokens({
-        github: (res.github_token as string) || '',
-        deepseek: (res.deepseek_key as string) || '',
-        vibeToken: (res.vibe_token as string) || ''
-      })
-      // Load bulk history from storage
-      if (res.bulk_history && Array.isArray(res.bulk_history)) {
-        setBulkHistory(res.bulk_history)
-      }
-      const userData = res.user_data as User | undefined;
-      if (userData) {
-        setUser(userData)
-      } else {
-        setUser(null)
-      }
-      // Check if GitHub has been linked (auth_token is set by GitHub OAuth flow)
-      if (res.auth_token) {
-        setGithubLinked(true)
-      }
-      // Get GitHub username/name from user_data - try multiple sources
-      if (userData?.githubLogin) {
-        setGithubUsername(userData.githubLogin) // Prioritize handle
-      } else if (userData?.name) {
-        setGithubUsername(userData.name.split(' ')[0])
-      } else if (userData?.email?.endsWith('@github.no-email')) {
-        // Extract username from generated email like "username@github.no-email"
-        setGithubUsername(userData.email.replace('@github.no-email', ''))
-      } else if (res.auth_token && userData?.name) {
-        // Fallback to name if GitHub auth exists but no githubLogin field
-        setGithubUsername(userData.name)
-      }
-      setAuthLoading(false)
-    })
-
-    // Listen for storage changes (e.g., when GitHub auth completes in another tab)
-    const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
-      // If auth token changes (login/re-login), verify user data
-      if (changes.auth_token && changes.auth_token.newValue) {
-        setGithubLinked(true)
-        // Also fetch user data to ensure username is set (in case user_data didn't change)
-        chrome.storage.local.get(['user_data'], (res) => {
-          const userData = res.user_data as User | undefined;
-          if (userData?.githubLogin) {
-            setGithubUsername(userData.githubLogin)
-          } else if (userData?.name) {
-            setGithubUsername(userData.name)
-          }
-        })
-      }
-
-      if (changes.user_data && changes.user_data.newValue) {
-        const userData = changes.user_data.newValue as User | undefined;
-        setUser(userData || null)
-        // Update GitHub username when user_data changes
-        if (userData?.githubLogin) {
-          setGithubUsername(userData.githubLogin)
-        }
-      }
-    }
-    chrome.storage.onChanged.addListener(storageListener)
-
-    if (activeTab === 'history') fetchHistory()
-    if (activeTab === 'analytics') fetchAnalytics()
-
-    return () => {
-      chrome.storage.onChanged.removeListener(storageListener)
-    }
-  }, [activeTab, tierFilter])
-
-  const fetchHistory = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/history`)
-      const data = await res.json()
-      if (data.success) setHistory(data.data)
-    } catch (e) {
-      console.warn('Backend not reachable')
-    }
-  }
-
-  const fetchAnalytics = async () => {
-    try {
-      const url = tierFilter
-        ? `${BACKEND_URL}/api/analytics?tier=${encodeURIComponent(tierFilter)}`
-        : `${BACKEND_URL}/api/analytics`
-      const res = await fetch(url)
-      const data = await res.json()
-      if (data.success) setAnalytics(data.data)
-    } catch (e) {
-      console.warn('Analytics failed')
-    } finally {
-      setAnalyticsLoading(false)
-    }
-  }
-
-  // ===== BULKCHEKK FUNCTIONS =====
-
-  // Parse CSV file and extract GitHub handles/emails
-  const parseUploadedFile = async (file: File): Promise<{ handles: string[], emails: string[] }> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const text = e.target?.result as string
-          let handles: string[] = []
-
-          // Parse CSV - look for github handles, urls, emails, usernames
-          const lines = text.split(/\r?\n/).filter(line => line.trim())
-          const header = lines[0]?.toLowerCase() || ''
-
-          // Detect column indices
-          const cols = header.split(',').map(c => c.trim())
-          const usernameCol = cols.findIndex(c =>
-            c.includes('username') || c.includes('handle') || c.includes('github') ||
-            c.includes('user') || c.includes('email') || c.includes('url')
-          )
-
-          // If we found a header, skip it; otherwise process all lines
-          const startIdx = usernameCol >= 0 ? 1 : 0
-          const colIdx = usernameCol >= 0 ? usernameCol : 0
-
-          for (let i = startIdx; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
-            if (values[colIdx]) {
-              handles.push(values[colIdx])
-            }
-          }
-
-          // Separate emails from regular handles
-          const emails: string[] = []
-          const directHandles: string[] = []
-
-          for (const item of handles) {
-            if (isEmail(item)) {
-              emails.push(item.trim())
-            } else {
-              const handle = extractGithubHandle(item)
-              if (handle) directHandles.push(handle)
-            }
-          }
-
-          // Remove duplicates
-          const uniqueHandles = [...new Set(directHandles)]
-          const uniqueEmails = [...new Set(emails)]
-
-          // Return combined (handles first, then emails to be resolved)
-          resolve({ handles: uniqueHandles, emails: uniqueEmails })
-        } catch (err) {
-          reject(err)
-        }
-      }
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsText(file)
-    })
-  }
-
-  // Extract GitHub handle from various formats (URL, @username, plain username)
-  // Returns null for emails - those need backend lookup
-  const extractGithubHandle = (input: string): string | null => {
-    if (!input) return null
-    input = input.trim()
-
-    // GitHub URL: https://github.com/username or github.com/username
-    const urlMatch = input.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9][-a-zA-Z0-9]*)(?:\/|$)/i)
-    if (urlMatch) return urlMatch[1]
-
-    // @username format
-    if (input.startsWith('@')) return input.slice(1)
-
-    // Plain username (validate it looks like a valid GitHub username - NOT an email)
-    if (!input.includes('@') && /^[a-zA-Z0-9][-a-zA-Z0-9]*$/.test(input) && input.length <= 39) {
-      return input
-    }
-
-    return null
-  }
-
-  // Check if input looks like an email
-  const isEmail = (input: string): boolean => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.trim())
-  }
-
-  // Lookup GitHub username from email via backend API
-  const lookupEmailToHandle = async (email: string): Promise<string | null> => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/lookup/email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      })
-      const data = await response.json()
-      return data.success ? data.username : null
-    } catch {
-      return null
-    }
-  }
-
-  // Process bulk analysis
-  const processBulkAnalysis = async () => {
-    if (!bulkFile) return
-
-    setBulkProcessing(true)
-    setBulkResults([])
-    setBulkProgress({ current: 0, total: 0, status: 'Parsing file...' })
-
-    try {
-      const parsed = await parseUploadedFile(bulkFile)
-
-      // Phase 1: Resolve emails to GitHub handles via backend API
-      setBulkProgress({ current: 0, total: parsed.emails.length, status: `Looking up ${parsed.emails.length} email(s)...` })
-
-      const emailResolvedHandles: string[] = []
-      for (const email of parsed.emails) {
-        const handle = await lookupEmailToHandle(email)
-        if (handle) {
-          emailResolvedHandles.push(handle)
-        }
-      }
-
-      // Combine all handles
-      const allHandles = [...parsed.handles, ...emailResolvedHandles].slice(0, 100)
-
-      if (allHandles.length === 0) {
-        setBulkProgress({ current: 0, total: 0, status: 'No valid GitHub profiles found in file' })
-        setBulkProcessing(false)
-        return
-      }
-
-      setBulkProgress({ current: 0, total: allHandles.length, status: `Found ${allHandles.length} profiles to analyze` })
-
-      const results: any[] = []
-      const batchId = Date.now().toString()
-
-      for (let i = 0; i < allHandles.length; i++) {
-        const handle = allHandles[i]
-        setBulkProgress({
-          current: i + 1,
-          total: allHandles.length,
-          status: `Analyzing ${handle} (${i + 1}/${allHandles.length})`
-        })
-
-        try {
-          const response = await fetch(`${BACKEND_URL}/api/analyze`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': tokens.vibeToken ? `Bearer ${tokens.vibeToken}` : ''
-            },
-            body: JSON.stringify({
-              githubUrl: `https://github.com/${handle}`,
-              userId: user?.id || 'guest'
-            })
-          })
-
-          const data = await response.json()
-
-          if (data.success && data.data) {
-            results.push({
-              handle,
-              success: true,
-              report: data.data,
-              timestamp: Date.now()
-            })
-          } else {
-            results.push({
-              handle,
-              success: false,
-              error: data.error || 'Analysis failed',
-              timestamp: Date.now()
-            })
-          }
-        } catch (err: any) {
-          results.push({
-            handle,
-            success: false,
-            error: err.message || 'Network error',
-            timestamp: Date.now()
-          })
-        }
-
-        // Update results in real-time
-        setBulkResults([...results])
-
-        // Rate limiting - wait 1.5 seconds between requests
-        if (i < allHandles.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1500))
-        }
-      }
-
-      // Save batch to history
-      const successCount = results.filter(r => r.success).length
-      const batchRecord = {
-        id: batchId,
-        filename: bulkFile.name,
-        totalProfiles: allHandles.length,
-        successCount,
-        failedCount: allHandles.length - successCount,
-        results,
-        timestamp: Date.now()
-      }
-
-      const updatedHistory = [batchRecord, ...bulkHistory]
-      setBulkHistory(updatedHistory)
-
-      // Save to storage
-      chrome.storage.local.set({ bulk_history: updatedHistory })
-
-      setBulkProgress({
-        current: allHandles.length,
-        total: allHandles.length,
-        status: `Complete! ${successCount}/${allHandles.length} profiles analyzed successfully`
-      })
-
-      // Switch to history tab to show results
-      setTimeout(() => {
-        setBulkChekkTab('history')
-      }, 2000)
-
-    } catch (err: any) {
-      setBulkProgress({ current: 0, total: 0, status: `Error: ${err.message}` })
-    } finally {
-      setBulkProcessing(false)
-      setBulkFile(null)
-    }
-  }
-
-  // Auto-refresh history when a new analysis completes (detected via logs)
-  useEffect(() => {
-    if (activeTab === 'history' && autochekkLogs.length > 0) {
-      const latest = autochekkLogs[0];
-      // If the latest log is a completed analysis (not analyzing), refresh the list
-      if (latest.type === 'analysis' && !latest.data?.analyzing) {
-        fetchHistory();
-      }
-    }
-  }, [autochekkLogs, activeTab])
-
-  const [pendingHandles, setPendingHandles] = useState<string[]>([])
-
-  const handleManualSearch = async () => {
-    if (!manualUrl) return
-
-    // Limit concurrent for guests
-    if (!user && pendingHandles.length >= 1) {
-      setShowConcurrentModal(true)
-      return
-    }
-
-    // 1. Normalize
-    let normalized = manualUrl.trim().replace(/^@/, '');
-    let ownerHandle = normalized;
-    if (normalized.includes('github.com/')) {
-      const match = normalized.match(/github\.com\/([^/]+)/i);
-      if (match) ownerHandle = match[1];
-    }
-    ownerHandle = ownerHandle.replace(/^@/, '').split('/')[0];
-
-    // 2. CHECK HISTORY (Prevent Duplicates) - DISABLED FOR QA/TESTING
-    // The user wants to see the analysis run after flushing the DB.
-    // Client-side caching prevents this. Letting it hit the backend ensures fresh data.
-    /*
-    const existingReport = history.find(h => {
-      const hHandle = h.candidate?.githubHandle || h.githubHandle;
-      return hHandle?.toLowerCase() === ownerHandle.toLowerCase();
-    });
-
-    if (existingReport) {
-      handleOpenReport(existingReport);
-      setManualUrl('');
-      setActiveTab('history');
-      return;
-    }
-    */
-
-    // 3. Prevent duplicate active processing
-    if (pendingHandles.includes(ownerHandle)) {
-      alert(`Analysis for ${ownerHandle} is already in progress.`);
-      return;
-    }
-
-    const finalUrl = normalized.includes('github.com')
-      ? (normalized.startsWith('http') ? normalized : `https://${normalized}`)
-      : `https://github.com/${normalized}`;
-
-    // 4. Queue the request & Start Simulation
-    setPendingHandles(prev => [ownerHandle, ...prev]);
-    setManualUrl('');
-    setLoadingStep(1); // Restart visual feedback for this new item
-
-    // Simulate progress steps (Purely visual for the "Run" button)
-    // We clear these timeouts when this specific request finishes, but effectively
-    // the UI will just show the step for the *latest* one, which is fine.
-    setTimeout(() => setLoadingStep(2), 1500);
-    setTimeout(() => setLoadingStep(3), 3500);
-    setTimeout(() => setLoadingStep(4), 6000);
-    setTimeout(() => setLoadingStep(5), 9000);
-    setTimeout(() => setLoadingStep(6), 12500);
-    setTimeout(() => setLoadingStep(7), 16000);
-
-    chrome.runtime.sendMessage({
-      type: 'START_VIBE_CHECK',
-      url: finalUrl
-    }, (response) => {
-      // 5. Cleanup on completion
-      setPendingHandles(prev => prev.filter(h => h !== ownerHandle));
-
-      if (response && response.success) {
-        const finalReport = {
-          ...response.data,
-          candidate: {
-            ...response.data.candidate,
-            githubHandle: response.data.candidate?.githubHandle === 'Guest' || !response.data.candidate?.githubHandle
-              ? ownerHandle
-              : response.data.candidate.githubHandle
-          }
-        };
-        setHistory((prev: any[]) => [finalReport, ...prev])
-        // 6. Auto-open if still on search page
-        if (activeTabRef.current === 'analyze') {
-          handleOpenReport(finalReport)
-        }
-      } else {
-        const err = response?.error || 'Unknown error';
-        if (err.includes('Limit reached') || err.includes('Upgrade to Pro')) {
-          setLimitPaywallOpen(true);
-        } else {
-          alert(`Failed to analyze ${ownerHandle}: ${err}`)
-        }
-      }
-    })
-  }
-
-
-  const handleGoogleLogin = async () => {
-    setIsLoggingIn(true)
-    try {
-      // Get real Google OAuth token using Chrome Identity API
-      const auth = await chrome.identity.getAuthToken({ interactive: true })
-
-      if (!auth || !auth.token) {
-        throw new Error('Failed to get authentication token')
-      }
-
-      const token = auth.token
-
-      // Fetch user profile from Google
-      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      if (!profileRes.ok) {
-        throw new Error('Failed to fetch Google profile')
-      }
-
-      const profile = await profileRes.json()
-
-      // Send to backend for user creation/login
-      const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          email: profile.email,
-          name: profile.name,
-          picture: profile.picture
-        })
-      })
-
-      if (!res.ok) {
-        throw new Error(`Server responded with ${res.status}`)
-      }
-
-      const data = await res.json()
-      if (data.success) {
-        chrome.storage.local.set({ vibe_token: data.token, user_data: data.user }, () => {
-          setTokens({ ...tokens, vibeToken: data.token })
-          setUser(data.user)
-          setIsLoggingIn(false)
-        })
-      } else {
-        alert(data.error || 'Google login failed')
-        setIsLoggingIn(false)
-      }
-    } catch (e: any) {
-      console.error('Auth error:', e)
-      alert(`Authentication failed: ${e.message || 'Unknown error'}`)
-      setIsLoggingIn(false)
-    }
-  }
-
-
-
-
-  const logout = () => {
-    chrome.storage.local.remove(['vibe_token', 'user_data'], () => {
-      setTokens({ ...tokens, vibeToken: '' })
-      setUser(null)
-    })
-  }
-
-  // Handle Stripe checkout for Pro upgrade
-  const handleUpgradeToPro = async () => {
-    if (!tokens.vibeToken) {
-      alert('Please sign in first to upgrade to Pro')
-      return
-    }
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/stripe/create-checkout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.vibeToken}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (data.success && data.url) {
-        // Open Stripe Checkout in new tab
-        window.open(data.url, '_blank')
-      } else {
-        alert(data.error || 'Failed to start checkout')
-      }
-    } catch (err: any) {
-      console.error('Checkout error:', err)
-      alert('Failed to connect to payment service')
-    }
-  }
-
-  return (
-    <div className="popup-container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <VibeLogo size={20} color="var(--brand-blue)" strokeWidth={2.5} />
-          <h1 className="logo" style={{ textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>VIBECHEKK</h1>
-        </div>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
-          <BadgeCheck size={14} color={user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)')} strokeWidth={1.5} />
-          <span style={{ fontSize: '10px', fontWeight: 800, color: user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)'), letterSpacing: '0.5px' }}>
-            {user?.tier === 'PRO' ? 'PRO' : (user ? 'AUTHENTICATED' : 'GUEST')} TIER
-          </span>
-        </div>
-      </header>
-
-      <div className="tabs-nav">
-        <div className="tab-slider" style={{
-          transform: `translateX(${activeTab === 'analyze' ? '0' :
-            activeTab === 'history' ? '100%' :
-              activeTab === 'analytics' ? '200%' : '300%'})`
-        }} />
-        <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
-          <Search size={14} strokeWidth={2} />
-        </button>
-        <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
-          <div style={{ position: 'relative' }}>
-            <Clock size={14} strokeWidth={2} />
-            {pendingHandles.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                top: '-6px',
-                right: '-8px',
-                width: '14px',
-                height: '14px',
-                background: 'var(--accent)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid white'
-              }}>
-                <Loader2 size={8} color="white" className="spin" />
-              </div>
-            )}
-          </div>
-        </button>
-        <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
-          <TrendingUp size={14} strokeWidth={2} />
-        </button>
-        <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setSelectedReport(null); }}>
-          <Settings size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      <main>
-        {authLoading ? (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '300px',
-            flexDirection: 'column',
-            gap: '12px'
-          }}>
-            <Loader2 size={24} className="spin" color="var(--accent)" />
-            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
-          </div>
-        ) : selectedReport ? (
-          (selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) ? (
-            // Insufficient data state (GHOST profile)
-            <div className="detail-view">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
-                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
-                  padding: '10px',
-                  marginLeft: '-8px',
-                  background: 'var(--bg-gray)',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}>
-                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
-                </button>
-                <div>
-                  <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{selectedReport.handle || 'Guest Profile'}</h2>
-                </div>
-              </div>
-              <div style={{ textAlign: 'center', padding: '64px 32px' }}>
-                <div style={{
-                  width: '80px',
-                  height: '80px',
-                  background: 'var(--bg-gray)',
-                  borderRadius: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 24px auto',
-                  border: '1px solid var(--border)'
-                }}>
-                  <Ghost size={40} color="var(--text-dim)" strokeWidth={1.5} />
-                </div>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '12px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>GHOST PROFILE</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto', fontWeight: 500 }}>
-                  This profile has limited public repositories or code to analyze. They likely work in private repos or enterprise environments.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="detail-view">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '8px' }}>
-                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
-                  padding: '10px',
-                  marginLeft: '-8px',
-                  background: 'var(--bg-gray)',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}>
-                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
-                </button>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-                  {(() => {
-                    const handle = selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : '';
-                    return (
-                      <>
-                        {handle ? (
-                          <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '12px', overflow: 'hidden' }}>
-                            <img
-                              src={`https://github.com/${handle}.png?size=48`}
-                              alt={handle}
-                              className="history-avatar"
-                              style={{ width: '48px', height: '48px', display: 'block' }}
-                            />
-                          </a>
-                        ) : (
-                          <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
-                            <User size={24} color="var(--text-dim)" />
-                          </div>
-                        )}
-                        <div className="history-meta" style={{ gap: '2px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <a
-                              href={`https://github.com/${handle}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="profile-github-link"
-                              style={{ textDecoration: 'none' }}
-                            >
-                              <h2 className="history-name clickable" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>
-                                {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || handle || 'Guest Profile'}
-                              </h2>
-                            </a>
-                            {selectedReport.rarity_badge && (
-                              <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity || getRarityFromLabel(selectedReport.label)} size={14} />
-                            <div className="archetype-tooltip-wrapper">
-                              <div className={`archetype-badge ${getRarityClass(selectedReport.rarity || getRarityFromLabel(selectedReport.label))}`}>
-                                {stripThe(selectedReport.label) || 'Profile'}
-                              </div>
-                              <div className="archetype-tooltip">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                                  <div>
-                                    <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
-                                    {(selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.').replace('Classified as THE ', 'Classified as ')}
-                                  </div>
-                                  <div
-                                    style={{ cursor: 'pointer', padding: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const rawText = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.';
-                                      const cleanText = rawText.replace('Classified as THE ', 'Classified as ');
-                                      navigator.clipboard.writeText(cleanText);
-                                      const btn = e.currentTarget;
-                                      btn.style.background = 'rgba(34, 197, 94, 0.4)'; // Green flash
-                                      setTimeout(() => {
-                                        btn.style.background = 'rgba(255,255,255,0.1)';
-                                      }, 500);
-                                    }}
-                                    title="Copy description"
-                                  >
-                                    <Copy size={12} color="white" />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            {selectedReport.rarity_percentile && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
-                                • {selectedReport.rarity_percentile.toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
-                            {selectedReport.seniority && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.2px', opacity: 0.8 }}>
-                                {selectedReport.seniority.toUpperCase()}
-                              </span>
-                            )}
-                            {selectedReport.star_count !== undefined && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
-                                <Star size={10} fill="currentColor" /> {selectedReport.star_count} STARS
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="detail-section">
-                <button
-                  onClick={() => {
-                    setShowFullSummary(!showFullSummary);
-                    if (!showFullSummary) setShowDetailedSummary(false);
-                  }}
-                  className="section-header-btn"
-                >
-                  <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
-                  {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
-                </button>
-
-                {showFullSummary && (
-                  <div className="trajectory-box expanded">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                      <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
-                        {showDetailedSummary
-                          ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                          : (selectedReport.trajectorySummary || selectedReport.trajectory)
-                        }
-                      </p>
-                      <button
-                        className="copy-icon-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const text = showDetailedSummary
-                            ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                            : selectedReport.trajectorySummary;
-                          navigator.clipboard.writeText(text);
-                          setCopiedId('summary');
-                          setTimeout(() => setCopiedId(null), 2000);
-                        }}
-                      >
-                        {copiedId === 'summary' ? (
-                          <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
-                        ) : (
-                          <Copy size={14} strokeWidth={2} />
-                        )}
-                      </button>
-                    </div>
-
-                    {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
-                      <button
-                        className="view-more-btn"
-                        onClick={() => setShowDetailedSummary(!showDetailedSummary)}
-                        style={{ marginTop: '12px' }}
-                      >
-                        {showDetailedSummary ? 'view less' : 'view more'}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {selectedReport.metadata?.technical_signal && (
-                <div className="detail-section">
-                  <button
-                    onClick={() => {
-                      setShowTechnicalSignal(!showTechnicalSignal);
-                      if (!showTechnicalSignal) setShowDetailedTechnical(false);
-                    }}
-                    className="section-header-btn"
-                  >
-                    <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
-                    {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
-                  </button>
-
-                  {showTechnicalSignal && (
-                    <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                        <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
-                          {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                            ? selectedReport.metadata.technical_signal_detailed
-                            : selectedReport.metadata.technical_signal
-                          }
-                        </p>
-                        <button
-                          className="copy-icon-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                              ? selectedReport.metadata.technical_signal_detailed
-                              : selectedReport.metadata.technical_signal;
-                            navigator.clipboard.writeText(text);
-                            setCopiedId('signal');
-                            setTimeout(() => setCopiedId(null), 2000);
-                          }}
-                        >
-                          {copiedId === 'signal' ? (
-                            <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
-                          ) : (
-                            <Copy size={14} strokeWidth={2} />
-                          )}
-                        </button>
-                      </div>
-
-                      {selectedReport.metadata.technical_signal_detailed && (
-                        <button
-                          className="view-more-btn"
-                          onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
-                          style={{ marginTop: '12px' }}
-                        >
-                          {showDetailedTechnical ? 'view less' : 'view more'}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-              }
-
-              {
-                selectedReport.metadata?.verified_skills?.length > 0 && (
-                  <div className="detail-section">
-                    <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
-                    <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>SKILLS VERIFIED FROM CODE</h3>
-                    <div className="merit-grid scrollable">
-                      {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
-                        const isExpanded = expandedSkills.includes(i);
-                        const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
-
-                        const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
-                        const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
-                        const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
-
-                        return (
-                          <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                            <div className="merit-header">
-                              <div style={{ display: 'flex', alignItems: 'center' }}>
-                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                                <span className="merit-title">{name}</span>
-                              </div>
-                              {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
-                            </div>
-                            {isExpanded && (
-                              <div className="merit-detail">
-                                {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
-                                {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )
-              }
-
-
-              {selectedReport.meritPoints?.length > 0 && !(selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) && (
-                <div className="detail-section">
-                  <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
-                  <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
-                  <div className="merit-grid scrollable">
-                    {selectedReport.meritPoints.map((point: any, i: number) => {
-                      const isExpanded = expandedMerits.includes(i);
-                      const isNegative = point.type === 'negative';
-                      const toggle = () => {
-                        setExpandedMerits((prev: number[]) =>
-                          prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
-                        );
-                      };
-                      return (
-                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                          <div className="merit-header">
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              {isNegative ? (
-                                <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
-                              ) : (
-                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                              )}
-                              <span className="merit-title">{point.title || point}</span>
-                            </div>
-                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
-                          </div>
-                          {isExpanded && (
-                            <div className="merit-detail">
-                              <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
-
-                              {point.business_impact && (
-                                <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
-                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
-                                  <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
-                                </div>
-                              )}
-
-                              {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
-                                <div>
-                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
-                                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <button
-                    className="download-card-btn"
-                    onClick={() => {
-                      if (!user) {
-                        setSelectedReport(null);
-                        setActiveTab('settings');
-                      } else {
-                        // TODO: Implement actual PDF download
-                        console.log('Downloading report card...');
-                      }
-                    }}
-                  >
-                    <FileDown size={16} />
-                    DOWNLOAD REPORT CARD
-                  </button>
-                </div>
-              )}
-            </div>
-          )
-        ) : (
-          <>
-            {activeTab === 'analyze' && (
-              <div className="search-box">
-                <h2 className="section-title" style={{ textAlign: 'center', textTransform: 'uppercase' }}>CHEKK DEV SKILLS</h2>
-                <div style={{ textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '-4px' }}>
-                  Analyze code quality & originality from GitHub
-                </div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    className="input-field"
-                    placeholder="github.com/username or @handle"
-                    value={manualUrl}
-                    onChange={e => setManualUrl(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && manualUrl && handleManualSearch()}
-                    style={{ paddingRight: '40px' }}
-                  />
-                  <button
-                    onClick={handleManualSearch}
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      padding: '4px',
-                      cursor: 'pointer',
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: 'var(--text-dim)'
-                    }}
-                    title="New Analysis"
-                  >
-                    <Plus size={16} strokeWidth={2.5} />
-                  </button>
-                </div>
-                <button className="primary-btn" onClick={handleManualSearch} disabled={!manualUrl} style={{ minHeight: '44px' }}>
-                  {manualUrl ? 'RUN' : (pendingHandles.length > 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-                      <Clock size={16} className="spin" />
-                      <span>
-                        {pendingHandles.length === 1 ? (
-                          loadingStep === 1 ? 'FETCHING PROFILE...' :
-                            loadingStep === 2 ? 'LOCATING TOP REPOS...' :
-                              loadingStep === 3 ? 'ANALYZING CODE STRUCTURE...' :
-                                loadingStep === 4 ? 'CHECKING ORIGINALITY...' :
-                                  loadingStep === 5 ? 'EXTRACTING EVIDENCE...' :
-                                    loadingStep === 6 ? 'GENERATING IMPACT ANALYSIS...' :
-                                      'FINALIZING REPORT...'
-                        ) : `PROCESSING ${pendingHandles.length} PROFILES...`}
-                      </span>
-                    </div>
-                  ) : 'RUN')}
-                </button>
-                {/* Only show usage limits and upgrade prompts for non-PRO users */}
-                {user?.tier !== 'PRO' && (
-                  <>
-                    <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>
-                      3 FREE CHEKKS LEFT THIS WEEK
-                    </div>
-                    <div className="referral-card" style={{
-                      marginTop: '24px',
-                      padding: '20px',
-                      borderRadius: '16px',
-                      background: 'linear-gradient(135deg, #451a03 0%, #2a1005 100%)',
-                      color: 'white',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(69, 26, 3, 0.25)',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}>
-                      {/* Decorative circles like the purple card */}
-                      <div style={{
-                        position: 'absolute',
-                        top: '-40px',
-                        right: '-40px',
-                        width: '120px',
-                        height: '120px',
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.1)'
-                      }} />
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '-20px',
-                        left: '-20px',
-                        width: '60px',
-                        height: '60px',
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.05)'
-                      }} />
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-                        <Zap size={15} fill="white" style={{ position: 'relative', top: '-0.5px' }} />
-                        <span style={{ fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Get Unlimited Chekks for Free</span>
-                      </div>
-                      <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9, position: 'relative' }}>
-                        Refer 3 friends and get unlimited chekks for one week free if they each run at least one chekk.
-                      </p>
-                      <button className="primary-btn" style={{
-                        marginTop: '8px',
-                        background: 'white',
-                        color: 'var(--accent)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '0 16px',
-                        height: '34px',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        justifyContent: 'center',
-                        position: 'relative'
-                      }}
-                        onClick={() => {
-                          setActiveTab('settings');
-                          if (user) {
-                            setShowInviteModal(true);
-                          }
-                        }}
-                      >
-                        INVITE FRIENDS
-                      </button>
-                    </div>
-
-                    <button className="primary-btn" style={{
-                      marginTop: '24px',
-                      background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-                      color: 'white',
-                      border: 'none',
-                      fontSize: '13px',
-                      height: '52px',
-                      fontWeight: 800,
-                      letterSpacing: '1px',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                      borderRadius: '16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '100%'
-                    }}
-                      onClick={handleUpgradeToPro}
-                    >
-                      UPGRADE FOR UNLIMITED CHEKKS
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'history' && (
-              <div className="history-list">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {archetypeFilter ? pluralizeArchetype(archetypeFilter) : 'History'}
-                  </h2>
-                  {archetypeFilter && (
-                    <button
-                      onClick={() => setArchetypeFilter(null)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--accent)',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        textTransform: 'uppercase'
-                      }}
-                    >
-                      Clear Filter
-                    </button>
-                  )}
-                </div>
-                {(() => {
-                  const filteredHistory = archetypeFilter
-                    ? history.filter((item: any) => item.label?.toUpperCase() === archetypeFilter.toUpperCase())
-                    : history;
-
-                  // Get handles that already have results in history
-                  const completedHandles = new Set(history.map((item: any) =>
-                    (item.candidate?.githubHandle || item.githubHandle || '').toLowerCase()
-                  ));
-
-                  // Combine BOTH manual (pendingHandles) and autochekk (pendingAnalyses) into one list
-                  const allPending = [
-                    ...pendingHandles.map(h => ({ handle: h, avatar: '', timestamp: Date.now() })),
-                    ...pendingAnalyses
-                  ];
-
-                  // Filter out skeleton cards for handles that already have results
-                  const activePending = allPending.filter(p =>
-                    !completedHandles.has(p.handle?.toLowerCase())
-                  );
-
-                  // Skeleton cards for pending analyses (only those not in history yet)
-                  const skeletonCards = activePending.map((pending, i) => (
-                    <div key={`pending-${pending.handle}-${i}`} className="history-item" style={{ opacity: 0.8, animation: 'pulse 1.5s infinite' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
-                        {pending.handle ? (
-                          <img
-                            src={`https://github.com/${pending.handle}.png?size=40`}
-                            alt={pending.handle}
-                            className="history-avatar"
-                            style={{ opacity: 0.7 }}
-                          />
-                        ) : (
-                          <div className="history-avatar-placeholder">
-                            <Loader2 size={20} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
-                          </div>
-                        )}
-                        <div className="history-meta">
-                          <span className="history-name">{pending.name || pending.handle || 'Analyzing...'}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Loader2 size={12} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
-                            <div style={{
-                              background: 'linear-gradient(90deg, var(--border) 25%, var(--bg-gray) 50%, var(--border) 75%)',
-                              backgroundSize: '200% 100%',
-                              animation: 'shimmer 1.5s infinite',
-                              borderRadius: '6px',
-                              padding: '4px 10px',
-                              fontSize: '10px',
-                              color: 'var(--text-dim)'
-                            }}>
-                              ANALYZING...
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <ChevronRight size={14} color="var(--text-dim)" />
-                    </div>
-                  ));
-
-                  if (filteredHistory.length === 0 && pendingAnalyses.length === 0) {
-                    return <p className="footer-info">{archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No reports found.'}</p>;
-                  }
-
-                  const historyCards = filteredHistory.map((item: any, i: number) => {
-                    const handle = item.candidate?.githubHandle || item.githubHandle || '';
-                    return (
-                      <div key={i} className={`history-item ${getRarityClass(item.rarity)}`} onClick={() => handleOpenReport(item)}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
-                          {handle ? (
-                            <img
-                              src={`https://github.com/${handle}.png?size=40`}
-                              alt={handle}
-                              className="history-avatar"
-                            />
-                          ) : (
-                            <div className="history-avatar-placeholder">
-                              <User size={20} color="var(--text-dim)" />
-                            </div>
-                          )}
-                          <div className="history-meta">
-                            <span className="history-name">
-                              {(item.metadata?.userStats?.name ? item.metadata.userStats.name : handle) || 'Guest Profile'}
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <ArchetypeIcon label={item.label || 'Profile'} rarity={item.rarity || getRarityFromLabel(item.label)} size={12} />
-                              <div style={{
-                                padding: '4px 10px',
-                                borderRadius: '6px',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                letterSpacing: '0.5px',
-                                textTransform: 'uppercase',
-                                color: getRarityColor(item.rarity, item.label),
-                                background: `${getRarityColor(item.rarity, item.label)}15`,
-                                border: `1px solid ${getRarityColor(item.rarity, item.label)}30`
-                              }}>
-                                {stripThe(item.label) || 'Profile'}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="history-action-icon">
-                          <ChevronRight size={16} color="var(--text-dim)" strokeWidth={2.5} />
-                        </div>
-                      </div>
-                    );
-                  });
-
-                  return <>{skeletonCards}{historyCards}</>;
-                })()}
-              </div>
-            )}
-
-            {activeTab === 'analytics' && (
-              <div className="analytics-view">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <div>
-                    <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Pipeline Analytics
-                    </h2>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '6px' }}>
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#059669' }}>ACTIVE</span>
-                  </div>
-                </div>
-
-                {analyticsLoading ? (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '200px',
-                    flexDirection: 'column',
-                    gap: '12px'
-                  }}>
-                    <Loader2 size={24} className="spin" color="var(--accent)" />
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
-                  </div>
-                ) : analytics ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div className="stat-card hero" style={{ padding: '20px', background: 'white' }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                        <div className="stat-value" style={{ fontSize: '38px' }}>
-                          {tierFilter ? analytics.filteredTotal : analytics.totalChecks}
-                        </div>
-                        <TrendingUp size={16} color="var(--accent)" strokeWidth={3} style={{ marginBottom: '4px' }} />
-                      </div>
-                      <div className="stat-label" style={{ opacity: 0.7 }}>
-                        {tierFilter ? `${tierFilter} PROFILES` : 'GITHUB PROFILES PROCESSED'}
-                      </div>
-                    </div>
-
-                    <div className="filter-section">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>FILTER BY TIER</h3>
-                        {tierFilter && (
-                          <button
-                            onClick={() => setTierFilter(null)}
-                            style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: 'var(--accent)', fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            CLEAR
-                          </button>
-                        )}
-                      </div>
-                      <div className="tier-filter-container">
-                        {[
-                          { name: 'LEGENDARY', color: '#d97706' },
-                          { name: 'ULTRA RARE', color: '#7c3aed' },
-                          { name: 'RARE', color: '#0891b2' },
-                          { name: 'UNCOMMON', color: '#059669' },
-                          { name: 'COMMON', color: '#6b7280' }
-                        ].map(tier => {
-                          const isActive = tierFilter === tier.name;
-                          const count = analytics.tierBreakdown?.[tier.name] || 0;
-                          return (
-                            <button
-                              key={tier.name}
-                              className={`tier-filter-btn ${isActive ? 'active' : ''}`}
-                              onClick={() => setTierFilter(isActive ? null : tier.name)}
-                              style={isActive ? {
-                                color: 'white',
-                                background: tier.color,
-                                borderColor: tier.color
-                              } : undefined}
-                            >
-                              {tier.name}
-                              <span className="count">{count}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="detail-section">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>
-                          {tierFilter ? `${tierFilter} DISTRIBUTION` : 'PROFILE DISTRIBUTION'}
-                        </h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '9px', color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.05em' }}>BY ARCHETYPE</span>
-                          {!user && <Lock size={10} color="var(--text-dim)" strokeWidth={3} />}
-                        </div>
-                      </div>
-
-                      <div className={`locked-container ${!user ? 'locked' : ''}`}>
-                        <div className="history-list" style={{ gap: '10px', pointerEvents: !user ? 'none' : 'auto' }}>
-                          {Object.entries(analytics.distribution).length > 0 ? (
-                            Object.entries(analytics.distribution)
-                              .sort(([, a]: any, [, b]: any) => b - a)
-                              .map(([arch, count]: any) => {
-                                const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
-                                const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
-                                return (
-                                  <div
-                                    key={arch}
-                                    className="stat-card compact"
-                                    style={{ background: 'white' }}
-                                  >
-                                    <div className="stat-info">
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <div className="archetype-icon-small">
-                                          <ArchetypeIcon label={arch} size={14} />
-                                        </div>
-                                        <span className="stat-arch-name">{pluralizeArchetype(arch)}</span>
-                                      </div>
-                                      <div style={{ textAlign: 'right' }}>
-                                        <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
-                                        <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
-                                      </div>
-                                    </div>
-                                    <div className="percentage-bar-bg" style={{ height: '4px' }}>
-                                      <div
-                                        className="percentage-bar-fill"
-                                        style={{
-                                          width: `${percentage}%`,
-                                          background: percentage > 1 ? 'var(--accent)' : 'var(--border)',
-                                          borderRadius: '2px'
-                                        }}
-                                      ></div>
-                                    </div>
-                                  </div>
-                                );
-                              })
-                          ) : (
-                            <div style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '48px 24px',
-                              textAlign: 'center',
-                              gap: '16px'
-                            }}>
-                              <div style={{
-                                width: '64px',
-                                height: '64px',
-                                borderRadius: '20px',
-                                background: 'linear-gradient(135deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.06) 100%)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                border: '1px dashed var(--border)'
-                              }}>
-                                <Search size={28} color="var(--text-dim)" strokeWidth={1.5} style={{ opacity: 0.5 }} />
-                              </div>
-                              <div>
-                                <p style={{
-                                  fontSize: '13px',
-                                  fontWeight: 700,
-                                  color: 'var(--text-main)',
-                                  margin: '0 0 6px 0',
-                                  letterSpacing: '-0.01em'
-                                }}>
-                                  No {tierFilter || 'profiles'} discovered yet
-                                </p>
-                                <p style={{
-                                  fontSize: '11px',
-                                  color: 'var(--text-dim)',
-                                  margin: 0,
-                                  fontWeight: 500,
-                                  lineHeight: 1.5
-                                }}>
-                                  Run analyses to populate your pipeline
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {!user && !authLoading && (
-                          <div className="paywall-overlay">
-                            <div className="paywall-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                              <div style={{ marginBottom: '16px' }}>
-                                <span style={{ fontSize: '10px', fontWeight: 700, opacity: 0.5, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                                  Unlock Full Pipeline Intelligence
-                                </span>
-                              </div>
-                              <button className="paywall-btn" onClick={() => setActiveTab('settings')}>
-                                <Lock size={14} strokeWidth={3} />
-                                <span>Sign in to Unlock</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="stat-card empty">
-                    <p className="footer-info">Connect your ATS to view real-time data trends.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'settings' && (
-              <div className="settings-scroll-container">
-                <div className="settings-group">
-                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHENTICATION REQUIRED'}</h2>
-                  {user ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      {/* Account Card */}
-                      <div style={{
-                        background: 'white',
-                        borderRadius: '16px',
-                        padding: '16px',
-                        border: '1px solid rgba(0,0,0,0.05)',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-                        position: 'relative',
-                        overflow: 'hidden'
-                      }}>
-                        {/* Decorative background element */}
-                        <div style={{
-                          position: 'absolute',
-                          top: '-10%',
-                          right: '-5%',
-                          width: '120px',
-                          height: '120px',
-                          background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(196, 114, 30, 0.05) 100%)',
-                          borderRadius: '50%',
-                          filter: 'blur(20px)',
-                          zIndex: 0
-                        }} />
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', position: 'relative', zIndex: 1 }}>
-                          {user.picture ? (
-                            <div style={{ position: 'relative' }}>
-                              <img
-                                src={user.picture}
-                                alt={user.name}
-                                style={{
-                                  width: '64px',
-                                  height: '64px',
-                                  borderRadius: '22px',
-                                  objectFit: 'cover',
-                                  border: '2px solid white',
-                                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
-                                }}
-                              />
-                              <div style={{
-                                position: 'absolute',
-                                bottom: '2px',
-                                right: '2px',
-                                width: '14px',
-                                height: '14px',
-                                background: '#10b981',
-                                border: '2.5px solid white',
-                                borderRadius: '50%',
-                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
-                              }} />
-                            </div>
-                          ) : (
-                            <div style={{ position: 'relative' }}>
-                              <div style={{
-                                width: '64px',
-                                height: '64px',
-                                borderRadius: '22px',
-                                background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)',
-                                color: 'white',
-                                fontSize: '26px',
-                                fontWeight: 800,
-                                position: 'relative',
-                                overflow: 'hidden'
-                              }}>
-                                {/* Inner glow/mesh effect */}
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '-20%',
-                                  left: '-20%',
-                                  width: '140%',
-                                  height: '140%',
-                                  background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 70%)',
-                                  zIndex: 1
-                                }} />
-                                <span style={{ position: 'relative', zIndex: 2 }}>
-                                  {user.name ? user.name.charAt(0).toUpperCase() : <User size={28} />}
-                                </span>
-                              </div>
-                              <div style={{
-                                position: 'absolute',
-                                bottom: '2px',
-                                right: '2px',
-                                width: '14px',
-                                height: '14px',
-                                background: '#10b981',
-                                border: '2.5px solid white',
-                                borderRadius: '50%',
-                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
-                              }} />
-                            </div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                              <h3 style={{
-                                fontSize: '18px',
-                                fontWeight: 800,
-                                margin: 0,
-                                color: '#1a1a1a',
-                                letterSpacing: '-0.02em',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}>
-                                {user.name ? user.name.split(' ')[0] : 'User'}
-                              </h3>
-                            </div>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              marginTop: '4px',
-                              width: 'fit-content',
-                              padding: '3px 8px',
-                              background: user.tier === 'PRO'
-                                ? 'rgba(245, 158, 11, 0.1)'
-                                : 'rgba(124, 58, 237, 0.08)',
-                              borderRadius: '6px',
-                              border: user.tier === 'PRO'
-                                ? '1px solid rgba(245, 158, 11, 0.2)'
-                                : '1px solid rgba(124, 58, 237, 0.1)'
-                            }}>
-                              <BadgeCheck
-                                size={10}
-                                color={user.tier === 'PRO' ? '#f59e0b' : '#7c3aed'}
-                                strokeWidth={2.5}
-                              />
-                              <span style={{
-                                fontSize: '9px',
-                                fontWeight: 800,
-                                color: user.tier === 'PRO' ? '#f59e0b' : '#7c3aed',
-                                letterSpacing: '0.04em'
-                              }}>
-                                AUTHENTICATED
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-
-                      </div>
-
-                      {/* AUTOCHEKK - Premium Feature Card */}
+  const proFeaturesContent = (
+    <>
                       <div
                         style={{
                           width: '100%',
@@ -3371,6 +1678,1714 @@ function App() {
                           </div>
                         </div>
                       </div>
+
+    </>
+  );
+
+
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
+  // Persist AutoChekk state & logs
+  useEffect(() => {
+    chrome.storage.local.get(['auto_chekk_enabled', 'autochekk_logs', 'active_searches'], (res) => {
+      if (res.auto_chekk_enabled !== undefined) {
+        setAutoChekk(!!res.auto_chekk_enabled)
+      }
+      if (res.autochekk_logs) {
+        setAutochekkLogs(res.autochekk_logs as any[])
+      }
+      if (res.active_searches) {
+        setActiveSearches(res.active_searches as any[])
+      }
+      if (res.bulk_history) {
+        setBulkHistory(res.bulk_history as any[])
+      }
+    })
+
+    const listener = (changes: any) => {
+      if (changes.autochekk_logs) {
+        const logs = changes.autochekk_logs.newValue || [];
+        setAutochekkLogs(logs);
+
+        // Get handles that have completed (success or failure) - these have analysis entries WITHOUT analyzing flag
+        const completedHandles = new Set(
+          logs
+            .filter((l: any) => l.type === 'analysis' && !l.data?.analyzing)
+            .map((l: any) => l.data?.githubHandle?.toLowerCase())
+        );
+
+        // Track analyzing entries for History skeleton cards, excluding completed ones
+        const analyzing = logs
+          .filter((l: any) => l.type === 'analysis' && l.data?.analyzing)
+          .filter((l: any) => !completedHandles.has(l.data?.githubHandle?.toLowerCase()))
+          .filter((l: any) => {
+            // Filter out stale analyses (> 3 minutes old) to prevent stuck loading states
+            const age = Date.now() - (l.timestamp || 0);
+            return age < 3 * 60 * 1000;
+          })
+          .map((l: any) => ({
+            handle: l.data?.githubHandle,
+            name: l.data?.name,
+            avatar: '',
+            timestamp: l.timestamp
+          }));
+        setPendingAnalyses(analyzing);
+      }
+    };
+
+    chrome.storage.onChanged.addListener(listener);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(listener);
+    };
+  }, [])
+
+  useEffect(() => {
+    // Only allow AutoChekk for PRO users
+    // Wait until we've finished loading auth to enforce this
+    if (authLoading) return;
+
+    const isPro = user?.tier === 'PRO';
+    const shouldBeEnabled = autoChekk && isPro;
+    chrome.storage.local.set({ auto_chekk_enabled: shouldBeEnabled });
+
+    // If user is not PRO but autoChekk is true, turn it off
+    if (autoChekk && !isPro) {
+      setAutoChekk(false);
+    }
+  }, [autoChekk, user?.tier, authLoading])
+
+  const handleOpenReport = (report: any) => {
+    setSelectedReport(report)
+    setShowFullSummary(false)
+    setShowDetailedSummary(false)
+    setShowTechnicalSignal(false)
+    setShowDetailedTechnical(false)
+    setExpandedSkills([])
+    setExpandedMerits([])
+  }
+
+  useEffect(() => {
+    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data', 'auth_token', 'bulk_history'], (res) => {
+      setTokens({
+        github: (res.github_token as string) || '',
+        deepseek: (res.deepseek_key as string) || '',
+        vibeToken: (res.vibe_token as string) || ''
+      })
+      // Load bulk history from storage
+      if (res.bulk_history && Array.isArray(res.bulk_history)) {
+        setBulkHistory(res.bulk_history)
+      }
+      const userData = res.user_data as User | undefined;
+      if (userData) {
+        setUser(userData)
+      } else {
+        setUser(null)
+      }
+      // Check if GitHub has been linked (auth_token is set by GitHub OAuth flow)
+      if (res.auth_token) {
+        setGithubLinked(true)
+      }
+      // Get GitHub username/name from user_data - try multiple sources
+      if (userData?.githubLogin) {
+        setGithubUsername(userData.githubLogin) // Prioritize handle
+      } else if (userData?.name) {
+        setGithubUsername(userData.name.split(' ')[0])
+      } else if (userData?.email?.endsWith('@github.no-email')) {
+        // Extract username from generated email like "username@github.no-email"
+        setGithubUsername(userData.email.replace('@github.no-email', ''))
+      } else if (res.auth_token && userData?.name) {
+        // Fallback to name if GitHub auth exists but no githubLogin field
+        setGithubUsername(userData.name)
+      }
+      setAuthLoading(false)
+    })
+
+    // Listen for storage changes (e.g., when GitHub auth completes in another tab)
+    const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      // If auth token changes (login/re-login), verify user data
+      if (changes.auth_token && changes.auth_token.newValue) {
+        setGithubLinked(true)
+        // Also fetch user data to ensure username is set (in case user_data didn't change)
+        chrome.storage.local.get(['user_data'], (res) => {
+          const userData = res.user_data as User | undefined;
+          if (userData?.githubLogin) {
+            setGithubUsername(userData.githubLogin)
+          } else if (userData?.name) {
+            setGithubUsername(userData.name)
+          }
+        })
+      }
+
+      if (changes.user_data && changes.user_data.newValue) {
+        const userData = changes.user_data.newValue as User | undefined;
+        setUser(userData || null)
+        // Update GitHub username when user_data changes
+        if (userData?.githubLogin) {
+          setGithubUsername(userData.githubLogin)
+        }
+      }
+    }
+    chrome.storage.onChanged.addListener(storageListener)
+
+    if (activeTab === 'history') fetchHistory()
+    if (activeTab === 'analytics') fetchAnalytics()
+
+    return () => {
+      chrome.storage.onChanged.removeListener(storageListener)
+    }
+  }, [activeTab, tierFilter])
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/history`)
+      const data = await res.json()
+      if (data.success) setHistory(data.data)
+    } catch (e) {
+      console.warn('Backend not reachable')
+    }
+  }
+
+  const fetchAnalytics = async () => {
+    try {
+      const url = tierFilter
+        ? `${BACKEND_URL}/api/analytics?tier=${encodeURIComponent(tierFilter)}`
+        : `${BACKEND_URL}/api/analytics`
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.success) setAnalytics(data.data)
+    } catch (e) {
+      console.warn('Analytics failed')
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }
+
+  // ===== BULKCHEKK FUNCTIONS =====
+
+  // Parse CSV file and extract GitHub handles/emails
+  const parseUploadedFile = async (file: File): Promise<{ handles: string[], emails: string[] }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string
+          let handles: string[] = []
+
+          // Parse CSV - look for github handles, urls, emails, usernames
+          const lines = text.split(/\r?\n/).filter(line => line.trim())
+          const header = lines[0]?.toLowerCase() || ''
+
+          // Detect column indices
+          const cols = header.split(',').map(c => c.trim())
+          const usernameCol = cols.findIndex(c =>
+            c.includes('username') || c.includes('handle') || c.includes('github') ||
+            c.includes('user') || c.includes('email') || c.includes('url')
+          )
+
+          // If we found a header, skip it; otherwise process all lines
+          const startIdx = usernameCol >= 0 ? 1 : 0
+          const colIdx = usernameCol >= 0 ? usernameCol : 0
+
+          for (let i = startIdx; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
+            if (values[colIdx]) {
+              handles.push(values[colIdx])
+            }
+          }
+
+          // Separate emails from regular handles
+          const emails: string[] = []
+          const directHandles: string[] = []
+
+          for (const item of handles) {
+            if (isEmail(item)) {
+              emails.push(item.trim())
+            } else {
+              const handle = extractGithubHandle(item)
+              if (handle) directHandles.push(handle)
+            }
+          }
+
+          // Remove duplicates
+          const uniqueHandles = [...new Set(directHandles)]
+          const uniqueEmails = [...new Set(emails)]
+
+          // Return combined (handles first, then emails to be resolved)
+          resolve({ handles: uniqueHandles, emails: uniqueEmails })
+        } catch (err) {
+          reject(err)
+        }
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsText(file)
+    })
+  }
+
+  // Extract GitHub handle from various formats (URL, @username, plain username)
+  // Returns null for emails - those need backend lookup
+  const extractGithubHandle = (input: string): string | null => {
+    if (!input) return null
+    input = input.trim()
+
+    // GitHub URL: https://github.com/username or github.com/username
+    const urlMatch = input.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9][-a-zA-Z0-9]*)(?:\/|$)/i)
+    if (urlMatch) return urlMatch[1]
+
+    // @username format
+    if (input.startsWith('@')) return input.slice(1)
+
+    // Plain username (validate it looks like a valid GitHub username - NOT an email)
+    if (!input.includes('@') && /^[a-zA-Z0-9][-a-zA-Z0-9]*$/.test(input) && input.length <= 39) {
+      return input
+    }
+
+    return null
+  }
+
+  // Check if input looks like an email
+  const isEmail = (input: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.trim())
+  }
+
+  // Lookup GitHub username from email via backend API
+  const lookupEmailToHandle = async (email: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/lookup/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      const data = await response.json()
+      return data.success ? data.username : null
+    } catch {
+      return null
+    }
+  }
+
+  // Process bulk analysis
+  const processBulkAnalysis = async () => {
+    if (!bulkFile) return
+
+    setBulkProcessing(true)
+    setBulkResults([])
+    setBulkProgress({ current: 0, total: 0, status: 'Parsing file...' })
+
+    try {
+      const parsed = await parseUploadedFile(bulkFile)
+
+      // Phase 1: Resolve emails to GitHub handles via backend API
+      setBulkProgress({ current: 0, total: parsed.emails.length, status: `Looking up ${parsed.emails.length} email(s)...` })
+
+      const emailResolvedHandles: string[] = []
+      for (const email of parsed.emails) {
+        const handle = await lookupEmailToHandle(email)
+        if (handle) {
+          emailResolvedHandles.push(handle)
+        }
+      }
+
+      // Combine all handles
+      const allHandles = [...parsed.handles, ...emailResolvedHandles].slice(0, 100)
+
+      if (allHandles.length === 0) {
+        setBulkProgress({ current: 0, total: 0, status: 'No valid GitHub profiles found in file' })
+        setBulkProcessing(false)
+        return
+      }
+
+      setBulkProgress({ current: 0, total: allHandles.length, status: `Found ${allHandles.length} profiles to analyze` })
+
+      const results: any[] = []
+      const batchId = Date.now().toString()
+
+      for (let i = 0; i < allHandles.length; i++) {
+        const handle = allHandles[i]
+        setBulkProgress({
+          current: i + 1,
+          total: allHandles.length,
+          status: `Analyzing ${handle} (${i + 1}/${allHandles.length})`
+        })
+
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/analyze`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': tokens.vibeToken ? `Bearer ${tokens.vibeToken}` : ''
+            },
+            body: JSON.stringify({
+              githubUrl: `https://github.com/${handle}`,
+              userId: user?.id || 'guest'
+            })
+          })
+
+          const data = await response.json()
+
+          if (data.success && data.data) {
+            results.push({
+              handle,
+              success: true,
+              report: data.data,
+              timestamp: Date.now()
+            })
+          } else {
+            results.push({
+              handle,
+              success: false,
+              error: data.error || 'Analysis failed',
+              timestamp: Date.now()
+            })
+          }
+        } catch (err: any) {
+          results.push({
+            handle,
+            success: false,
+            error: err.message || 'Network error',
+            timestamp: Date.now()
+          })
+        }
+
+        // Update results in real-time
+        setBulkResults([...results])
+
+        // Rate limiting - wait 1.5 seconds between requests
+        if (i < allHandles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500))
+        }
+      }
+
+      // Save batch to history
+      const successCount = results.filter(r => r.success).length
+      const batchRecord = {
+        id: batchId,
+        filename: bulkFile.name,
+        totalProfiles: allHandles.length,
+        successCount,
+        failedCount: allHandles.length - successCount,
+        results,
+        timestamp: Date.now()
+      }
+
+      const updatedHistory = [batchRecord, ...bulkHistory]
+      setBulkHistory(updatedHistory)
+
+      // Save to storage
+      chrome.storage.local.set({ bulk_history: updatedHistory })
+
+      setBulkProgress({
+        current: allHandles.length,
+        total: allHandles.length,
+        status: `Complete! ${successCount}/${allHandles.length} profiles analyzed successfully`
+      })
+
+      // Switch to history tab to show results
+      setTimeout(() => {
+        setBulkChekkTab('history')
+      }, 2000)
+
+    } catch (err: any) {
+      setBulkProgress({ current: 0, total: 0, status: `Error: ${err.message}` })
+    } finally {
+      setBulkProcessing(false)
+      setBulkFile(null)
+    }
+  }
+
+  // Auto-refresh history when a new analysis completes (detected via logs)
+  useEffect(() => {
+    if (activeTab === 'history' && autochekkLogs.length > 0) {
+      const latest = autochekkLogs[0];
+      // If the latest log is a completed analysis (not analyzing), refresh the list
+      if (latest.type === 'analysis' && !latest.data?.analyzing) {
+        fetchHistory();
+      }
+    }
+  }, [autochekkLogs, activeTab])
+
+  const [pendingHandles, setPendingHandles] = useState<string[]>([])
+
+  const handleManualSearch = async () => {
+    if (!manualUrl) return
+
+    // Limit concurrent for guests
+    if (!user && pendingHandles.length >= 1) {
+      setShowConcurrentModal(true)
+      return
+    }
+
+    // 1. Normalize
+    let normalized = manualUrl.trim().replace(/^@/, '');
+    let ownerHandle = normalized;
+    if (normalized.includes('github.com/')) {
+      const match = normalized.match(/github\.com\/([^/]+)/i);
+      if (match) ownerHandle = match[1];
+    }
+    ownerHandle = ownerHandle.replace(/^@/, '').split('/')[0];
+
+    // 2. CHECK HISTORY (Prevent Duplicates) - DISABLED FOR QA/TESTING
+    // The user wants to see the analysis run after flushing the DB.
+    // Client-side caching prevents this. Letting it hit the backend ensures fresh data.
+    /*
+    const existingReport = history.find(h => {
+      const hHandle = h.candidate?.githubHandle || h.githubHandle;
+      return hHandle?.toLowerCase() === ownerHandle.toLowerCase();
+    });
+
+    if (existingReport) {
+      handleOpenReport(existingReport);
+      setManualUrl('');
+      setActiveTab('history');
+      return;
+    }
+    */
+
+    // 3. Prevent duplicate active processing
+    if (pendingHandles.includes(ownerHandle)) {
+      alert(`Analysis for ${ownerHandle} is already in progress.`);
+      return;
+    }
+
+    const finalUrl = normalized.includes('github.com')
+      ? (normalized.startsWith('http') ? normalized : `https://${normalized}`)
+      : `https://github.com/${normalized}`;
+
+    // 4. Queue the request & Start Simulation
+    setPendingHandles(prev => [ownerHandle, ...prev]);
+    setManualUrl('');
+    setLoadingStep(1); // Restart visual feedback for this new item
+
+    // Simulate progress steps (Purely visual for the "Run" button)
+    // We clear these timeouts when this specific request finishes, but effectively
+    // the UI will just show the step for the *latest* one, which is fine.
+    setTimeout(() => setLoadingStep(2), 1500);
+    setTimeout(() => setLoadingStep(3), 3500);
+    setTimeout(() => setLoadingStep(4), 6000);
+    setTimeout(() => setLoadingStep(5), 9000);
+    setTimeout(() => setLoadingStep(6), 12500);
+    setTimeout(() => setLoadingStep(7), 16000);
+
+    chrome.runtime.sendMessage({
+      type: 'START_VIBE_CHECK',
+      url: finalUrl
+    }, (response) => {
+      // 5. Cleanup on completion
+      setPendingHandles(prev => prev.filter(h => h !== ownerHandle));
+
+      if (response && response.success) {
+        const finalReport = {
+          ...response.data,
+          candidate: {
+            ...response.data.candidate,
+            githubHandle: response.data.candidate?.githubHandle === 'Guest' || !response.data.candidate?.githubHandle
+              ? ownerHandle
+              : response.data.candidate.githubHandle
+          }
+        };
+        setHistory((prev: any[]) => [finalReport, ...prev])
+        // 6. Auto-open if still on search page
+        if (activeTabRef.current === 'analyze') {
+          handleOpenReport(finalReport)
+        }
+      } else {
+        const err = response?.error || 'Unknown error';
+        if (err.includes('Limit reached') || err.includes('Upgrade to Pro')) {
+          setLimitPaywallOpen(true);
+        } else {
+          alert(`Failed to analyze ${ownerHandle}: ${err}`)
+        }
+      }
+    })
+  }
+
+
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true)
+    try {
+      // Get real Google OAuth token using Chrome Identity API
+      const auth = await chrome.identity.getAuthToken({ interactive: true })
+
+      if (!auth || !auth.token) {
+        throw new Error('Failed to get authentication token')
+      }
+
+      const token = auth.token
+
+      // Fetch user profile from Google
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      if (!profileRes.ok) {
+        throw new Error('Failed to fetch Google profile')
+      }
+
+      const profile = await profileRes.json()
+
+      // Send to backend for user creation/login
+      const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          email: profile.email,
+          name: profile.name,
+          picture: profile.picture
+        })
+      })
+
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}`)
+      }
+
+      const data = await res.json()
+      if (data.success) {
+        chrome.storage.local.set({ vibe_token: data.token, user_data: data.user }, () => {
+          setTokens({ ...tokens, vibeToken: data.token })
+          setUser(data.user)
+          setIsLoggingIn(false)
+        })
+      } else {
+        alert(data.error || 'Google login failed')
+        setIsLoggingIn(false)
+      }
+    } catch (e: any) {
+      console.error('Auth error:', e)
+      alert(`Authentication failed: ${e.message || 'Unknown error'}`)
+      setIsLoggingIn(false)
+    }
+  }
+
+
+
+
+  const logout = () => {
+    chrome.storage.local.remove(['vibe_token', 'user_data'], () => {
+      setTokens({ ...tokens, vibeToken: '' })
+      setUser(null)
+    })
+  }
+
+  // Handle Stripe checkout for Pro upgrade
+  const handleUpgradeToPro = async () => {
+    if (!tokens.vibeToken) {
+      alert('Please sign in first to upgrade to Pro')
+      return
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/stripe/create-checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.url) {
+        // Open Stripe Checkout in new tab
+        window.open(data.url, '_blank')
+      } else {
+        alert(data.error || 'Failed to start checkout')
+      }
+    } catch (err: any) {
+      console.error('Checkout error:', err)
+      alert('Failed to connect to payment service')
+    }
+  }
+
+  return (
+    <div className="popup-container">
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <VibeLogo size={20} color="var(--brand-blue)" strokeWidth={2.5} />
+          <h1 className="logo" style={{ textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>VIBECHEKK</h1>
+        </div>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
+          <BadgeCheck size={14} color={user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)')} strokeWidth={1.5} />
+          <span style={{ fontSize: '10px', fontWeight: 800, color: user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)'), letterSpacing: '0.5px' }}>
+            {user?.tier === 'PRO' ? 'PRO' : (user ? 'AUTHENTICATED' : 'GUEST')} TIER
+          </span>
+        </div>
+      </header>
+
+      <div className="tabs-nav">
+        <div className="tab-slider" style={{
+          transform: `translateX(${activeTab === 'analyze' ? '0' :
+            activeTab === 'history' ? '100%' :
+              activeTab === 'analytics' ? '200%' : '300%'})`
+        }} />
+        <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
+          <Search size={14} strokeWidth={2} />
+        </button>
+        <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
+          <div style={{ position: 'relative' }}>
+            <Clock size={14} strokeWidth={2} />
+            {pendingHandles.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '-6px',
+                right: '-8px',
+                width: '14px',
+                height: '14px',
+                background: 'var(--accent)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid white'
+              }}>
+                <Loader2 size={8} color="white" className="spin" />
+              </div>
+            )}
+          </div>
+        </button>
+        <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
+          <TrendingUp size={14} strokeWidth={2} />
+        </button>
+        <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setSelectedReport(null); }}>
+          <Settings size={14} strokeWidth={2} />
+        </button>
+      </div>
+
+      <main>
+        {authLoading ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '300px',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <Loader2 size={24} className="spin" color="var(--accent)" />
+            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
+          </div>
+        ) : selectedReport ? (
+          (selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) ? (
+            // Insufficient data state (GHOST profile)
+            <div className="detail-view">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
+                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
+                  padding: '10px',
+                  marginLeft: '-8px',
+                  background: 'var(--bg-gray)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}>
+                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
+                </button>
+                <div>
+                  <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{selectedReport.handle || 'Guest Profile'}</h2>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '64px 32px' }}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  background: 'var(--bg-gray)',
+                  borderRadius: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 24px auto',
+                  border: '1px solid var(--border)'
+                }}>
+                  <Ghost size={40} color="var(--text-dim)" strokeWidth={1.5} />
+                </div>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '12px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>GHOST PROFILE</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto', fontWeight: 500 }}>
+                  This profile has limited public repositories or code to analyze. They likely work in private repos or enterprise environments.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="detail-view">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '8px' }}>
+                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
+                  padding: '10px',
+                  marginLeft: '-8px',
+                  background: 'var(--bg-gray)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}>
+                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
+                  {(() => {
+                    const handle = selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : '';
+                    return (
+                      <>
+                        {handle ? (
+                          <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '12px', overflow: 'hidden' }}>
+                            <img
+                              src={`https://github.com/${handle}.png?size=48`}
+                              alt={handle}
+                              className="history-avatar"
+                              style={{ width: '48px', height: '48px', display: 'block' }}
+                            />
+                          </a>
+                        ) : (
+                          <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
+                            <User size={24} color="var(--text-dim)" />
+                          </div>
+                        )}
+                        <div className="history-meta" style={{ gap: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <a
+                              href={`https://github.com/${handle}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="profile-github-link"
+                              style={{ textDecoration: 'none' }}
+                            >
+                              <h2 className="history-name clickable" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>
+                                {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || handle || 'Guest Profile'}
+                              </h2>
+                            </a>
+                            {selectedReport.rarity_badge && (
+                              <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity || getRarityFromLabel(selectedReport.label)} size={14} />
+                            <div className="archetype-tooltip-wrapper">
+                              <div className={`archetype-badge ${getRarityClass(selectedReport.rarity || getRarityFromLabel(selectedReport.label))}`}>
+                                {stripThe(selectedReport.label) || 'Profile'}
+                              </div>
+                              <div className="archetype-tooltip">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                  <div>
+                                    <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
+                                    {(selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.').replace('Classified as THE ', 'Classified as ')}
+                                  </div>
+                                  <div
+                                    style={{ cursor: 'pointer', padding: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const rawText = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.';
+                                      const cleanText = rawText.replace('Classified as THE ', 'Classified as ');
+                                      navigator.clipboard.writeText(cleanText);
+                                      const btn = e.currentTarget;
+                                      btn.style.background = 'rgba(34, 197, 94, 0.4)'; // Green flash
+                                      setTimeout(() => {
+                                        btn.style.background = 'rgba(255,255,255,0.1)';
+                                      }, 500);
+                                    }}
+                                    title="Copy description"
+                                  >
+                                    <Copy size={12} color="white" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            {selectedReport.rarity_percentile && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
+                                • {selectedReport.rarity_percentile.toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                            {selectedReport.seniority && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.2px', opacity: 0.8 }}>
+                                {selectedReport.seniority.toUpperCase()}
+                              </span>
+                            )}
+                            {selectedReport.star_count !== undefined && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
+                                <Star size={10} fill="currentColor" /> {selectedReport.star_count} STARS
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="detail-section">
+                <button
+                  onClick={() => {
+                    setShowFullSummary(!showFullSummary);
+                    if (!showFullSummary) setShowDetailedSummary(false);
+                  }}
+                  className="section-header-btn"
+                >
+                  <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
+                  {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+                </button>
+
+                {showFullSummary && (
+                  <div className="trajectory-box expanded">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                      <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
+                        {showDetailedSummary
+                          ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                          : (selectedReport.trajectorySummary || selectedReport.trajectory)
+                        }
+                      </p>
+                      <button
+                        className="copy-icon-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const text = showDetailedSummary
+                            ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                            : selectedReport.trajectorySummary;
+                          navigator.clipboard.writeText(text);
+                          setCopiedId('summary');
+                          setTimeout(() => setCopiedId(null), 2000);
+                        }}
+                      >
+                        {copiedId === 'summary' ? (
+                          <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
+                        ) : (
+                          <Copy size={14} strokeWidth={2} />
+                        )}
+                      </button>
+                    </div>
+
+                    {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
+                      <button
+                        className="view-more-btn"
+                        onClick={() => setShowDetailedSummary(!showDetailedSummary)}
+                        style={{ marginTop: '12px' }}
+                      >
+                        {showDetailedSummary ? 'view less' : 'view more'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {selectedReport.metadata?.technical_signal && (
+                <div className="detail-section">
+                  <button
+                    onClick={() => {
+                      setShowTechnicalSignal(!showTechnicalSignal);
+                      if (!showTechnicalSignal) setShowDetailedTechnical(false);
+                    }}
+                    className="section-header-btn"
+                  >
+                    <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
+                    {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+                  </button>
+
+                  {showTechnicalSignal && (
+                    <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
+                          {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                            ? selectedReport.metadata.technical_signal_detailed
+                            : selectedReport.metadata.technical_signal
+                          }
+                        </p>
+                        <button
+                          className="copy-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                              ? selectedReport.metadata.technical_signal_detailed
+                              : selectedReport.metadata.technical_signal;
+                            navigator.clipboard.writeText(text);
+                            setCopiedId('signal');
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                        >
+                          {copiedId === 'signal' ? (
+                            <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
+                          ) : (
+                            <Copy size={14} strokeWidth={2} />
+                          )}
+                        </button>
+                      </div>
+
+                      {selectedReport.metadata.technical_signal_detailed && (
+                        <button
+                          className="view-more-btn"
+                          onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
+                          style={{ marginTop: '12px' }}
+                        >
+                          {showDetailedTechnical ? 'view less' : 'view more'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+              }
+
+              {
+                selectedReport.metadata?.verified_skills?.length > 0 && (
+                  <div className="detail-section">
+                    <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
+                    <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>SKILLS VERIFIED FROM CODE</h3>
+                    <div className="merit-grid scrollable">
+                      {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
+                        const isExpanded = expandedSkills.includes(i);
+                        const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
+
+                        const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
+                        const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
+                        const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
+
+                        return (
+                          <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                            <div className="merit-header">
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                                <span className="merit-title">{name}</span>
+                              </div>
+                              {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                            </div>
+                            {isExpanded && (
+                              <div className="merit-detail">
+                                {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
+                                {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
+              }
+
+
+              {selectedReport.meritPoints?.length > 0 && !(selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) && (
+                <div className="detail-section">
+                  <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
+                  <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
+                  <div className="merit-grid scrollable">
+                    {selectedReport.meritPoints.map((point: any, i: number) => {
+                      const isExpanded = expandedMerits.includes(i);
+                      const isNegative = point.type === 'negative';
+                      const toggle = () => {
+                        setExpandedMerits((prev: number[]) =>
+                          prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
+                        );
+                      };
+                      return (
+                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                          <div className="merit-header">
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              {isNegative ? (
+                                <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
+                              ) : (
+                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                              )}
+                              <span className="merit-title">{point.title || point}</span>
+                            </div>
+                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                          </div>
+                          {isExpanded && (
+                            <div className="merit-detail">
+                              <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
+
+                              {point.business_impact && (
+                                <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
+                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
+                                  <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
+                                </div>
+                              )}
+
+                              {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
+                                <div>
+                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
+                                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <button
+                    className="download-card-btn"
+                    onClick={() => {
+                      if (!user) {
+                        setSelectedReport(null);
+                        setActiveTab('settings');
+                      } else {
+                        // TODO: Implement actual PDF download
+                        console.log('Downloading report card...');
+                      }
+                    }}
+                  >
+                    <FileDown size={16} />
+                    DOWNLOAD REPORT CARD
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        ) : (
+          <>
+            {activeTab === 'analyze' && (
+              <div className="search-box">
+                <h2 className="section-title" style={{ textAlign: 'center', textTransform: 'uppercase' }}>CHEKK DEV SKILLS</h2>
+                <div style={{ textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '-4px' }}>
+                  Analyze code quality & originality from GitHub
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="input-field"
+                    placeholder="github.com/username or @handle"
+                    value={manualUrl}
+                    onChange={e => setManualUrl(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && manualUrl && handleManualSearch()}
+                    style={{ paddingRight: '40px' }}
+                  />
+                  <button
+                    onClick={handleManualSearch}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      padding: '4px',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: 'var(--text-dim)'
+                    }}
+                    title="New Analysis"
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                  </button>
+                </div>
+                <button className="primary-btn" onClick={handleManualSearch} disabled={!manualUrl} style={{ minHeight: '44px' }}>
+                  {manualUrl ? 'RUN' : (pendingHandles.length > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                      <Clock size={16} className="spin" />
+                      <span>
+                        {pendingHandles.length === 1 ? (
+                          loadingStep === 1 ? 'FETCHING PROFILE...' :
+                            loadingStep === 2 ? 'LOCATING TOP REPOS...' :
+                              loadingStep === 3 ? 'ANALYZING CODE STRUCTURE...' :
+                                loadingStep === 4 ? 'CHECKING ORIGINALITY...' :
+                                  loadingStep === 5 ? 'EXTRACTING EVIDENCE...' :
+                                    loadingStep === 6 ? 'GENERATING IMPACT ANALYSIS...' :
+                                      'FINALIZING REPORT...'
+                        ) : `PROCESSING ${pendingHandles.length} PROFILES...`}
+                      </span>
+                    </div>
+                  ) : 'RUN')}
+                </button>
+                {/* Only show usage limits and upgrade prompts for non-PRO users */}
+                {user?.tier !== 'PRO' && (
+                  <>
+                    <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>
+                      3 FREE CHEKKS LEFT THIS WEEK
+                    </div>
+                    <div className="referral-card" style={{
+                      marginTop: '24px',
+                      padding: '20px',
+                      borderRadius: '16px',
+                      background: 'linear-gradient(135deg, #451a03 0%, #2a1005 100%)',
+                      color: 'white',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(69, 26, 3, 0.25)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      {/* Decorative circles like the purple card */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '-40px',
+                        right: '-40px',
+                        width: '120px',
+                        height: '120px',
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.1)'
+                      }} />
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '-20px',
+                        left: '-20px',
+                        width: '60px',
+                        height: '60px',
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.05)'
+                      }} />
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+                        <Zap size={15} fill="white" style={{ position: 'relative', top: '-0.5px' }} />
+                        <span style={{ fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Get Unlimited Chekks for Free</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9, position: 'relative' }}>
+                        Refer 3 friends and get unlimited chekks for one week free if they each run at least one chekk.
+                      </p>
+                      <button className="primary-btn" style={{
+                        marginTop: '8px',
+                        background: 'white',
+                        color: 'var(--accent)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '0 16px',
+                        height: '34px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        justifyContent: 'center',
+                        position: 'relative'
+                      }}
+                        onClick={() => {
+                          setActiveTab('settings');
+                          if (user) {
+                            setShowInviteModal(true);
+                          }
+                        }}
+                      >
+                        INVITE FRIENDS
+                      </button>
+                    </div>
+
+                    <button className="primary-btn" style={{
+                      marginTop: '24px',
+                      background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
+                      color: 'white',
+                      border: 'none',
+                      fontSize: '13px',
+                      height: '52px',
+                      fontWeight: 800,
+                      letterSpacing: '1px',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%'
+                    }}
+                      onClick={handleUpgradeToPro}
+                    >
+                      UPGRADE FOR UNLIMITED CHEKKS
+                    </button>
+                  </>
+                )}
+
+            {user?.tier === 'PRO' && (
+              <div style={{ marginTop: '20px' }}>
+                {proFeaturesContent}
+              </div>
+            )}
+    
+              </div>
+            )}
+
+            {activeTab === 'history' && (
+              <div className="history-list">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {archetypeFilter ? pluralizeArchetype(archetypeFilter) : 'History'}
+                  </h2>
+                  {archetypeFilter && (
+                    <button
+                      onClick={() => setArchetypeFilter(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--accent)',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      Clear Filter
+                    </button>
+                  )}
+                </div>
+                {(() => {
+                  const filteredHistory = archetypeFilter
+                    ? history.filter((item: any) => item.label?.toUpperCase() === archetypeFilter.toUpperCase())
+                    : history;
+
+                  // Get handles that already have results in history
+                  const completedHandles = new Set(history.map((item: any) =>
+                    (item.candidate?.githubHandle || item.githubHandle || '').toLowerCase()
+                  ));
+
+                  // Combine BOTH manual (pendingHandles) and autochekk (pendingAnalyses) into one list
+                  const allPending = [
+                    ...pendingHandles.map(h => ({ handle: h, avatar: '', timestamp: Date.now() })),
+                    ...pendingAnalyses
+                  ];
+
+                  // Filter out skeleton cards for handles that already have results
+                  const activePending = allPending.filter(p =>
+                    !completedHandles.has(p.handle?.toLowerCase())
+                  );
+
+                  // Skeleton cards for pending analyses (only those not in history yet)
+                  const skeletonCards = activePending.map((pending, i) => (
+                    <div key={`pending-${pending.handle}-${i}`} className="history-item" style={{ opacity: 0.8, animation: 'pulse 1.5s infinite' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                        {pending.handle ? (
+                          <img
+                            src={`https://github.com/${pending.handle}.png?size=40`}
+                            alt={pending.handle}
+                            className="history-avatar"
+                            style={{ opacity: 0.7 }}
+                          />
+                        ) : (
+                          <div className="history-avatar-placeholder">
+                            <Loader2 size={20} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                          </div>
+                        )}
+                        <div className="history-meta">
+                          <span className="history-name">{pending.name || pending.handle || 'Analyzing...'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Loader2 size={12} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                            <div style={{
+                              background: 'linear-gradient(90deg, var(--border) 25%, var(--bg-gray) 50%, var(--border) 75%)',
+                              backgroundSize: '200% 100%',
+                              animation: 'shimmer 1.5s infinite',
+                              borderRadius: '6px',
+                              padding: '4px 10px',
+                              fontSize: '10px',
+                              color: 'var(--text-dim)'
+                            }}>
+                              ANALYZING...
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight size={14} color="var(--text-dim)" />
+                    </div>
+                  ));
+
+                  if (filteredHistory.length === 0 && pendingAnalyses.length === 0) {
+                    return <p className="footer-info">{archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No reports found.'}</p>;
+                  }
+
+                  const historyCards = filteredHistory.map((item: any, i: number) => {
+                    const handle = item.candidate?.githubHandle || item.githubHandle || '';
+                    return (
+                      <div key={i} className={`history-item ${getRarityClass(item.rarity)}`} onClick={() => handleOpenReport(item)}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                          {handle ? (
+                            <img
+                              src={`https://github.com/${handle}.png?size=40`}
+                              alt={handle}
+                              className="history-avatar"
+                            />
+                          ) : (
+                            <div className="history-avatar-placeholder">
+                              <User size={20} color="var(--text-dim)" />
+                            </div>
+                          )}
+                          <div className="history-meta">
+                            <span className="history-name">
+                              {(item.metadata?.userStats?.name ? item.metadata.userStats.name : handle) || 'Guest Profile'}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <ArchetypeIcon label={item.label || 'Profile'} rarity={item.rarity || getRarityFromLabel(item.label)} size={12} />
+                              <div style={{
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                letterSpacing: '0.5px',
+                                textTransform: 'uppercase',
+                                color: getRarityColor(item.rarity, item.label),
+                                background: `${getRarityColor(item.rarity, item.label)}15`,
+                                border: `1px solid ${getRarityColor(item.rarity, item.label)}30`
+                              }}>
+                                {stripThe(item.label) || 'Profile'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="history-action-icon">
+                          <ChevronRight size={16} color="var(--text-dim)" strokeWidth={2.5} />
+                        </div>
+                      </div>
+                    );
+                  });
+
+                  return <>{skeletonCards}{historyCards}</>;
+                })()}
+              </div>
+            )}
+
+            {activeTab === 'analytics' && (
+              <div className="analytics-view">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Pipeline Analytics
+                    </h2>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '6px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#059669' }}>ACTIVE</span>
+                  </div>
+                </div>
+
+                {analyticsLoading ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '200px',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <Loader2 size={24} className="spin" color="var(--accent)" />
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
+                  </div>
+                ) : analytics ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div className="stat-card hero" style={{ padding: '20px', background: 'white' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                        <div className="stat-value" style={{ fontSize: '38px' }}>
+                          {tierFilter ? analytics.filteredTotal : analytics.totalChecks}
+                        </div>
+                        <TrendingUp size={16} color="var(--accent)" strokeWidth={3} style={{ marginBottom: '4px' }} />
+                      </div>
+                      <div className="stat-label" style={{ opacity: 0.7 }}>
+                        {tierFilter ? `${tierFilter} PROFILES` : 'GITHUB PROFILES PROCESSED'}
+                      </div>
+                    </div>
+
+                    <div className="filter-section">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>FILTER BY TIER</h3>
+                        {tierFilter && (
+                          <button
+                            onClick={() => setTierFilter(null)}
+                            style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: 'var(--accent)', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            CLEAR
+                          </button>
+                        )}
+                      </div>
+                      <div className="tier-filter-container">
+                        {[
+                          { name: 'LEGENDARY', color: '#d97706' },
+                          { name: 'ULTRA RARE', color: '#7c3aed' },
+                          { name: 'RARE', color: '#0891b2' },
+                          { name: 'UNCOMMON', color: '#059669' },
+                          { name: 'COMMON', color: '#6b7280' }
+                        ].map(tier => {
+                          const isActive = tierFilter === tier.name;
+                          const count = analytics.tierBreakdown?.[tier.name] || 0;
+                          return (
+                            <button
+                              key={tier.name}
+                              className={`tier-filter-btn ${isActive ? 'active' : ''}`}
+                              onClick={() => setTierFilter(isActive ? null : tier.name)}
+                              style={isActive ? {
+                                color: 'white',
+                                background: tier.color,
+                                borderColor: tier.color
+                              } : undefined}
+                            >
+                              {tier.name}
+                              <span className="count">{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="detail-section">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>
+                          {tierFilter ? `${tierFilter} DISTRIBUTION` : 'PROFILE DISTRIBUTION'}
+                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '9px', color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.05em' }}>BY ARCHETYPE</span>
+                          {!user && <Lock size={10} color="var(--text-dim)" strokeWidth={3} />}
+                        </div>
+                      </div>
+
+                      <div className={`locked-container ${!user ? 'locked' : ''}`}>
+                        <div className="history-list" style={{ gap: '10px', pointerEvents: !user ? 'none' : 'auto' }}>
+                          {Object.entries(analytics.distribution).length > 0 ? (
+                            Object.entries(analytics.distribution)
+                              .sort(([, a]: any, [, b]: any) => b - a)
+                              .map(([arch, count]: any) => {
+                                const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
+                                const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
+                                return (
+                                  <div
+                                    key={arch}
+                                    className="stat-card compact"
+                                    style={{ background: 'white' }}
+                                  >
+                                    <div className="stat-info">
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <div className="archetype-icon-small">
+                                          <ArchetypeIcon label={arch} size={14} />
+                                        </div>
+                                        <span className="stat-arch-name">{pluralizeArchetype(arch)}</span>
+                                      </div>
+                                      <div style={{ textAlign: 'right' }}>
+                                        <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
+                                        <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
+                                      </div>
+                                    </div>
+                                    <div className="percentage-bar-bg" style={{ height: '4px' }}>
+                                      <div
+                                        className="percentage-bar-fill"
+                                        style={{
+                                          width: `${percentage}%`,
+                                          background: percentage > 1 ? 'var(--accent)' : 'var(--border)',
+                                          borderRadius: '2px'
+                                        }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                          ) : (
+                            <div style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '48px 24px',
+                              textAlign: 'center',
+                              gap: '16px'
+                            }}>
+                              <div style={{
+                                width: '64px',
+                                height: '64px',
+                                borderRadius: '20px',
+                                background: 'linear-gradient(135deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.06) 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1px dashed var(--border)'
+                              }}>
+                                <Search size={28} color="var(--text-dim)" strokeWidth={1.5} style={{ opacity: 0.5 }} />
+                              </div>
+                              <div>
+                                <p style={{
+                                  fontSize: '13px',
+                                  fontWeight: 700,
+                                  color: 'var(--text-main)',
+                                  margin: '0 0 6px 0',
+                                  letterSpacing: '-0.01em'
+                                }}>
+                                  No {tierFilter || 'profiles'} discovered yet
+                                </p>
+                                <p style={{
+                                  fontSize: '11px',
+                                  color: 'var(--text-dim)',
+                                  margin: 0,
+                                  fontWeight: 500,
+                                  lineHeight: 1.5
+                                }}>
+                                  Run analyses to populate your pipeline
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {!user && !authLoading && (
+                          <div className="paywall-overlay">
+                            <div className="paywall-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                              <div style={{ marginBottom: '16px' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 700, opacity: 0.5, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                                  Unlock Full Pipeline Intelligence
+                                </span>
+                              </div>
+                              <button className="paywall-btn" onClick={() => setActiveTab('settings')}>
+                                <Lock size={14} strokeWidth={3} />
+                                <span>Sign in to Unlock</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="stat-card empty">
+                    <p className="footer-info">Connect your ATS to view real-time data trends.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'settings' && (
+              <div className="settings-scroll-container">
+                <div className="settings-group">
+                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHENTICATION REQUIRED'}</h2>
+                  {user ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {/* Account Card */}
+                      <div style={{
+                        background: 'white',
+                        borderRadius: '16px',
+                        padding: '16px',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}>
+                        {/* Decorative background element */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '-10%',
+                          right: '-5%',
+                          width: '120px',
+                          height: '120px',
+                          background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(196, 114, 30, 0.05) 100%)',
+                          borderRadius: '50%',
+                          filter: 'blur(20px)',
+                          zIndex: 0
+                        }} />
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', position: 'relative', zIndex: 1 }}>
+                          {user.picture ? (
+                            <div style={{ position: 'relative' }}>
+                              <img
+                                src={user.picture}
+                                alt={user.name}
+                                style={{
+                                  width: '64px',
+                                  height: '64px',
+                                  borderRadius: '22px',
+                                  objectFit: 'cover',
+                                  border: '2px solid white',
+                                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                                }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: '2px',
+                                right: '2px',
+                                width: '14px',
+                                height: '14px',
+                                background: '#10b981',
+                                border: '2.5px solid white',
+                                borderRadius: '50%',
+                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                              }} />
+                            </div>
+                          ) : (
+                            <div style={{ position: 'relative' }}>
+                              <div style={{
+                                width: '64px',
+                                height: '64px',
+                                borderRadius: '22px',
+                                background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)',
+                                color: 'white',
+                                fontSize: '26px',
+                                fontWeight: 800,
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}>
+                                {/* Inner glow/mesh effect */}
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '-20%',
+                                  left: '-20%',
+                                  width: '140%',
+                                  height: '140%',
+                                  background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 70%)',
+                                  zIndex: 1
+                                }} />
+                                <span style={{ position: 'relative', zIndex: 2 }}>
+                                  {user.name ? user.name.charAt(0).toUpperCase() : <User size={28} />}
+                                </span>
+                              </div>
+                              <div style={{
+                                position: 'absolute',
+                                bottom: '2px',
+                                right: '2px',
+                                width: '14px',
+                                height: '14px',
+                                background: '#10b981',
+                                border: '2.5px solid white',
+                                borderRadius: '50%',
+                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                              }} />
+                            </div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                              <h3 style={{
+                                fontSize: '18px',
+                                fontWeight: 800,
+                                margin: 0,
+                                color: '#1a1a1a',
+                                letterSpacing: '-0.02em',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>
+                                {user.name ? user.name.split(' ')[0] : 'User'}
+                              </h3>
+                            </div>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              marginTop: '4px',
+                              width: 'fit-content',
+                              padding: '3px 8px',
+                              background: user.tier === 'PRO'
+                                ? 'rgba(245, 158, 11, 0.1)'
+                                : 'rgba(124, 58, 237, 0.08)',
+                              borderRadius: '6px',
+                              border: user.tier === 'PRO'
+                                ? '1px solid rgba(245, 158, 11, 0.2)'
+                                : '1px solid rgba(124, 58, 237, 0.1)'
+                            }}>
+                              <BadgeCheck
+                                size={10}
+                                color={user.tier === 'PRO' ? '#f59e0b' : '#7c3aed'}
+                                strokeWidth={2.5}
+                              />
+                              <span style={{
+                                fontSize: '9px',
+                                fontWeight: 800,
+                                color: user.tier === 'PRO' ? '#f59e0b' : '#7c3aed',
+                                letterSpacing: '0.04em'
+                              }}>
+                                AUTHENTICATED
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+
+                      </div>
+
+                      {/* AUTOCHEKK - Premium Feature Card */}
+{proFeaturesContent}
 
                       {/* Authentication Perks */}
                       <div style={{
