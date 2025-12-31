@@ -262,14 +262,18 @@ function App() {
 
   useEffect(() => {
     // Only allow AutoChekk for PRO users
-    const shouldBeEnabled = autoChekk && user?.tier === 'PRO';
+    // Wait until we've finished loading auth to enforce this
+    if (authLoading) return;
+
+    const isPro = user?.tier === 'PRO';
+    const shouldBeEnabled = autoChekk && isPro;
     chrome.storage.local.set({ auto_chekk_enabled: shouldBeEnabled });
 
     // If user is not PRO but autoChekk is true, turn it off
-    if (autoChekk && user?.tier !== 'PRO') {
+    if (autoChekk && !isPro) {
       setAutoChekk(false);
     }
-  }, [autoChekk, user?.tier])
+  }, [autoChekk, user?.tier, authLoading])
 
   const handleOpenReport = (report: any) => {
     setSelectedReport(report)
