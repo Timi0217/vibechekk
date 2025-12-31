@@ -1395,7 +1395,7 @@ function App() {
                   justifyContent: 'center',
                   width: '100%'
                 }}
-                  onClick={() => setActiveTab('settings')}
+                  onClick={handleUpgradeToPro}
                 >
                   UPGRADE FOR UNLIMITED CHEKKS
                 </button>
@@ -4076,7 +4076,7 @@ function App() {
                 You've hit your free analysis limit. <br />Upgrade to <strong>Pro</strong> for unlimited access.
               </p>
 
-              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setLimitPaywallOpen(false); setActiveTab('settings'); }}>
+              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setLimitPaywallOpen(false); handleUpgradeToPro(); }}>
                 <Zap size={16} fill="white" />
                 Upgrade Now
               </button>
