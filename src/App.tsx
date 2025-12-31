@@ -825,9 +825,9 @@ function App() {
           <h1 className="logo" style={{ textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>VIBECHEKK</h1>
         </div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
-          <BadgeCheck size={14} color={user ? 'var(--accent)' : 'var(--text-dim)'} strokeWidth={1.5} />
-          <span style={{ fontSize: '10px', fontWeight: 800, color: user ? 'var(--accent)' : 'var(--text-dim)', letterSpacing: '0.5px' }}>
-            {user ? 'AUTHENTICATED' : 'GUEST'} TIER
+          <BadgeCheck size={14} color={user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)')} strokeWidth={1.5} />
+          <span style={{ fontSize: '10px', fontWeight: 800, color: user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)'), letterSpacing: '0.5px' }}>
+            {user?.tier === 'PRO' ? 'PRO' : (user ? 'AUTHENTICATED' : 'GUEST')} TIER
           </span>
         </div>
       </header>
@@ -1878,15 +1878,23 @@ function App() {
                               marginTop: '4px',
                               width: 'fit-content',
                               padding: '3px 8px',
-                              background: 'rgba(124, 58, 237, 0.08)',
+                              background: user.tier === 'PRO'
+                                ? 'rgba(245, 158, 11, 0.1)'
+                                : 'rgba(124, 58, 237, 0.08)',
                               borderRadius: '6px',
-                              border: '1px solid rgba(124, 58, 237, 0.1)'
+                              border: user.tier === 'PRO'
+                                ? '1px solid rgba(245, 158, 11, 0.2)'
+                                : '1px solid rgba(124, 58, 237, 0.1)'
                             }}>
-                              <BadgeCheck size={10} color="#7c3aed" strokeWidth={2.5} />
+                              <BadgeCheck
+                                size={10}
+                                color={user.tier === 'PRO' ? '#f59e0b' : '#7c3aed'}
+                                strokeWidth={2.5}
+                              />
                               <span style={{
                                 fontSize: '9px',
                                 fontWeight: 800,
-                                color: '#7c3aed',
+                                color: user.tier === 'PRO' ? '#f59e0b' : '#7c3aed',
                                 letterSpacing: '0.04em'
                               }}>
                                 AUTHENTICATED
