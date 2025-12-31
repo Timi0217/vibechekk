@@ -3603,6 +3603,44 @@ function App() {
                             </button>
                           </div>
                         </div>
+
+                        {/* Sign Out Item */}
+                        <div
+                          onClick={logout}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: 'rgba(239, 68, 68, 0.08)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            marginTop: '10px',
+                            border: '1px solid rgba(239, 68, 68, 0.1)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              background: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                            }}>
+                              <LogOut size={16} color="#ef4444" strokeWidth={2.5} />
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: '#ef4444', display: 'block' }}>
+                                Sign Out
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
                       </div>
 
                       {/* Upgrade to Pro Card */}
@@ -3698,42 +3736,7 @@ function App() {
                         </div>
                       )}
 
-                      {/* Sign Out Button */}
-                      <button
-                        onClick={logout}
-                        style={{
-                          width: '100%',
-                          padding: '14px',
-                          borderRadius: '12px',
-                          background: 'linear-gradient(180deg, #c2410c 0%, #9a3412 100%)',
-                          color: 'white',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          letterSpacing: '0.05em',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '10px',
-                          marginTop: '24px',
-                        }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.filter = 'brightness(1.1)';
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 12px 24px -4px rgba(154, 52, 18, 0.4)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.filter = 'none';
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)';
-                        }}
-                      >
-                        <LogOut size={16} strokeWidth={2.2} />
-                        SIGN OUT
-                      </button>
+
 
                       {/* Danger Zone - Clear Data */}
                       <div style={{ marginTop: '24px', marginBottom: '16px' }}>
