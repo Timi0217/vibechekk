@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Globe } from "@/components/ui/globe";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";

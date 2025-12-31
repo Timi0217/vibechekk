@@ -2889,6 +2889,7 @@ function App() {
                                 <div>
                                   <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
                                   <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    ```
                                     {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
                                   </ul>
                                 </div>
@@ -2896,67 +2897,230 @@ function App() {
                             </div>
                           )}
                         </div>
-                      )
+                      );
                     })}
                   </div>
-                  <button
-                    className="download-card-btn"
-                    onClick={async () => {
-                      if (!user) {
-                        setSelectedReport(null);
-                        setActiveTab('settings');
-                      } else {
-                        // Capture report card
-                        const element = document.querySelector('.detail-view') as HTMLElement;
-                        if (!element) return;
-
-                        const btn = document.querySelector('.download-card-btn') as HTMLElement;
-                        const backBtn = document.querySelector('.back-btn') as HTMLElement;
-
-                        // Default text indicating processing
-                        const originalText = btn.innerText;
-                        btn.innerText = 'GENERATING...';
-
-                        try {
-                          // Hide buttons for clean capture
-                          if (btn) btn.style.opacity = '0';
-                          if (backBtn) backBtn.style.opacity = '0';
-
-                          const canvas = await html2canvas(element, {
-                            backgroundColor: '#fafaf9', // Match app bg
-                            scale: 2, // Retina quality
-                            logging: false,
-                            useCORS: true // For GitHub avatars
-                          });
-
-                          const link = document.createElement('a');
-                          link.download = `vibe-check-${selectedReport.candidate?.githubHandle || 'report'}.png`;
-                          link.href = canvas.toDataURL('image/png');
-                          link.click();
-                        } catch (err) {
-                          console.error('Download failed:', err);
-                          alert('Could not generate image. Please try again.');
-                        } finally {
-                          // Restore buttons
-                          if (btn) {
-                            btn.style.opacity = '1';
-                            btn.innerHTML = `
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-down"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
-                              DOWNLOAD REPORT CARD
-                            `;
-                          }
-                          if (backBtn) backBtn.style.opacity = '1';
-                        }
-                      }
-                    }}
-                  >
-                    <FileDown size={16} />
-                    DOWNLOAD REPORT CARD
-                  </button>
                 </div>
               )}
+
+              {/* Hidden Vibe Card Template for PDF Generation */}
+              <div id="vibe-card-template" style={{
+                position: 'fixed',
+                left: '-9999px',
+                top: 0,
+                width: '400px', // Standard card ratio width
+                height: '600px', // Standard card ratio height
+                background: '#fefcf8', // bg-stone-50
+                padding: '20px',
+                boxSizing: 'border-box',
+                fontFamily: "'Inter', sans-serif",
+                color: '#1c1917',
+                border: '12px solid #fbbf24', // Gold border
+                borderRadius: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                boxShadow: 'inset 0 0 40px rgba(251, 191, 36, 0.2)'
+              }}>
+                {/* Header: Name + HP */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: '2px solid #e7e5e4' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#b45309', textTransform: 'uppercase' }}>
+                      {(() => {
+                        const badge = selectedReport.rarity_badge?.toLowerCase();
+                        if (badge?.includes('titan') || badge?.includes('1%')) return 'LEGENDARY';
+                        if (badge?.includes('gem') || badge?.includes('star')) return 'MYTHIC';
+                        return selectedReport.candidate?.archetype || 'DEVELOPER';
+                      })()}
+                    </span>
+                    <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0, lineHeight: 1 }}>
+                      {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
+                    </h2>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '28px', fontWeight: 800, color: '#ef4444' }}>
+                      {(() => {
+                        const qScore = selectedReport.metadata?.quality_score;
+                        if (qScore && qScore > 0) return Math.min(99, Math.ceil(qScore * 10));
+                        // Fallback calculations
+                        const stars = selectedReport.star_count || 0;
+                        const repos = selectedReport.metadata?.userStats?.totalRepos || 0;
+                        const base = 40;
+                        const bonus = (stars * 2) + Math.min(40, repos);
+                        return Math.min(99, base + bonus);
+                      })()}
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444' }}>HP</span>
+                  </div>
+                </div>
+
+                {/* Main Image - Profile Icon Style */}
+                <div style={{
+                  width: '100%',
+                  height: '240px',
+                  borderRadius: '12px',
+                  border: '4px solid #d6d3d1',
+                  boxShadow: 'inset 0 0 20px rgba(0,0,0,0.05)',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  background: 'radial-gradient(circle at center, #ffffff 0%, #e7e5e4 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {/* Decorative Background Pattern */}
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    opacity: 0.3,
+                    backgroundImage: 'radial-gradient(#a8a29e 1px, transparent 1px)',
+                    backgroundSize: '20px 20px'
+                  }} />
+
+                  {/* Centered Avatar Circle */}
+                  <div style={{
+                    width: '160px',
+                    height: '160px',
+                    borderRadius: '50%',
+                    border: '6px solid white',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    zIndex: 2,
+                    background: 'white'
+                  }}>
+                    <img
+                      src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
+                      crossOrigin="anonymous"
+                      alt="Avatar"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement.style.background = 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)';
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Stats Bar */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f5f5f4', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e7e5e4' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#78716c', fontWeight: 600 }}>REPOS</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800 }}>{selectedReport.metadata?.userStats?.totalRepos || '0'}</div>
+                  </div>
+                  <div style={{ width: '1px', background: '#d6d3d1' }}></div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#78716c', fontWeight: 600 }}>CONTRIBS</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800 }}>{selectedReport.metadata?.userStats?.contributions || '0'}</div>
+                  </div>
+                  <div style={{ width: '1px', background: '#d6d3d1' }}></div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#78716c', fontWeight: 600 }}>YEARS</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800 }}>{((new Date().getFullYear()) - (new Date(selectedReport.metadata?.userStats?.joinedDate || Date.now()).getFullYear())) || 1}</div>
+                  </div>
+                </div>
+
+                {/* Attacks / Skills */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Skills Mapping from Verified Skills */}
+                  {(selectedReport.metadata?.verified_skills || []).slice(0, 2).map((skill: any, i: number) => {
+                    const name = typeof skill === 'string' ? skill.split('|')[0] : (skill.name || skill.title || 'Skill');
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: i === 0 ? '#ef4444' : '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white', fontWeight: 800 }}>
+                          {i === 0 ? 'A' : 'B'}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 800, fontSize: '14px' }}>{name}</div>
+                          <div style={{ fontSize: '10px', color: '#57534e' }}>Verified Code Proficiency</div>
+                        </div>
+                        <div style={{ fontWeight: 800, fontSize: '16px' }}>
+                          {(Math.random() * 40 + 40).toFixed(0)}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Fallback if no skills verified */}
+                  {(!selectedReport.metadata?.verified_skills || selectedReport.metadata.verified_skills.length === 0) && (
+                    <div style={{ textAlign: 'center', fontSize: '12px', color: '#a8a29e', fontStyle: 'italic', marginTop: '12px' }}>
+                      Analyzing combat data...
+                    </div>
+                  )}
+
+                  {/* Special Ability (From Merit Points) */}
+                  {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
+                    <div style={{ marginTop: 'auto', padding: '8px', background: '#ecfccb', borderRadius: '8px', border: '1px solid #bef264' }}>
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#4d7c0f', textTransform: 'uppercase' }}>SPECIAL ABILITY</div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#3f6212' }}>{selectedReport.meritPoints[0].title || 'Code Insight'}</div>
+                      <div style={{ fontSize: '10px', color: '#4d7c0f', lineHeight: 1.2, maxHeight: '32px', overflow: 'hidden' }}>{selectedReport.meritPoints[0].detail || selectedReport.meritPoints[0]}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer / Rarity Badge */}
+                <div style={{ textAlign: 'right', fontSize: '10px', color: '#a8a29e', fontWeight: 600, fontStyle: 'italic' }}>
+                  VIBECHEKK • {selectedReport.rarity_badge || 'Standard Edition'} • {new Date().getFullYear()}
+                </div>
+              </div>
+
+              <button
+                className="download-card-btn"
+                onClick={async () => {
+                  if (!user) {
+                    setSelectedReport(null);
+                    setActiveTab('settings');
+                  } else {
+                    // Use the hidden template
+                    const element = document.getElementById('vibe-card-template');
+                    if (!element) return;
+
+                    const btn = document.querySelector('.download-card-btn') as HTMLElement;
+                    const originalText = btn.innerHTML;
+                    btn.innerText = 'GENERATING PDF...';
+
+                    try {
+                      // Allow hidden element to be rendered
+                      // html2canvas can capture off-screen if we don't use display:none
+                      const canvas = await html2canvas(element, {
+                        scale: 2, // High quality
+                        useCORS: true,
+                        backgroundColor: null
+                      });
+
+                      // Create PDF
+                      const { jsPDF } = await import('jspdf');
+                      const pdf = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: [63.5, 88.9] // Standard Trading Card size (2.5 x 3.5 inches) approx scaling
+                      });
+
+                      // Convert canvas to image data
+                      const imgData = canvas.toDataURL('image/png');
+
+                      // Add image to PDF (fill page)
+                      pdf.addImage(imgData, 'PNG', 0, 0, 63.5, 88.9); // mm
+
+                      // Save
+                      pdf.save(`VibeCard-${selectedReport.candidate?.githubHandle || 'Dev'}.pdf`);
+
+                    } catch (err) {
+                      console.error('PDF Init failed:', err);
+                      alert('Failed to generate card. Please try again.');
+                    } finally {
+                      btn.innerHTML = originalText;
+                    }
+                  }
+                }}
+              >
+                <FileDown size={16} />
+                DOWNLOAD REPORT CARD
+              </button>
             </div>
           )
+
+
         ) : (
           <>
             {activeTab === 'analyze' && (
@@ -3110,14 +3274,18 @@ function App() {
                     >
                       UPGRADE FOR UNLIMITED CHEKKS
                     </button>
-                  </>
-                )}
 
-                {user?.tier === 'PRO' && (
-                  <div style={{ marginTop: '20px' }}>
-                    {proFeaturesContent}
-                  </div>
-                )}
+                  </>
+                )
+                }
+
+                {
+                  user?.tier === 'PRO' && (
+                    <div style={{ marginTop: '20px' }}>
+                      {proFeaturesContent}
+                    </div>
+                  )
+                }
 
               </div>
             )}

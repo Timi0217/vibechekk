@@ -752,6 +752,24 @@ app.get('/api/history', async (req, res) => {
     }
 });
 
+// Check if a handle exists in history (for deduplication)
+app.get('/api/history/check/:handle', async (req, res) => {
+    const { handle } = req.params;
+    try {
+        const candidate = await prisma.candidate.findFirst({
+            where: {
+                githubHandle: { equals: handle, mode: 'insensitive' }
+            },
+            include: { reports: { take: 1 } }
+        });
+
+        const exists = candidate && candidate.reports.length > 0;
+        res.json({ success: true, exists, handle });
+    } catch (error) {
+        res.status(500).json({ success: false, error: 'Check failed' });
+    }
+});
+
 app.get('/api/analytics', async (req, res) => {
     try {
         const tierFilter = req.query.tier as string | undefined;
