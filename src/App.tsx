@@ -4079,7 +4079,7 @@ function App() {
 
               <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>Pro Feature</h3>
               <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                This feature is exclusive to <strong>Pro</strong> subscribers. Upgrade to unlock <strong>{proFeaturePaywallOpen}</strong> and more.
+                This feature is exclusive to <strong>Pro</strong> subscribers. Upgrade to unlock <strong>{proFeaturePaywallOpen}</strong> and more features.
               </p>
 
               <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setProFeaturePaywallOpen(null); setActiveTab('settings'); }}>
