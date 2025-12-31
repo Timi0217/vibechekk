@@ -133,10 +133,13 @@ app.post('/api/auth/google', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Email is required' });
     }
 
+    // Check if user exists to preserve their tier
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+
     const user = await prisma.user.upsert({
         where: { email },
         update: {
-            tier: 'AUTHENTICATED',
+            // Don't change tier on login - preserve existing tier (especially PRO)
             name: name || undefined,
             picture: picture || undefined
         },
