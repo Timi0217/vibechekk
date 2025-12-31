@@ -1855,21 +1855,6 @@ function App() {
                               }}>
                                 {user.name ? user.name.split(' ')[0] : 'User'}
                               </h3>
-                              {user.tier === 'PRO' && (
-                                <span style={{
-                                  padding: '2px 6px',
-                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                  color: '#1a1a1a',
-                                  borderRadius: '4px',
-                                  fontSize: '9px',
-                                  fontWeight: 900,
-                                  letterSpacing: '0.05em',
-                                  boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
-                                  border: '1px solid rgba(217, 119, 6, 0.5)'
-                                }}>
-                                  PRO
-                                </span>
-                              )}
                             </div>
                             <div style={{
                               display: 'flex',
