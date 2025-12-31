@@ -2306,8 +2306,8 @@ function App() {
           <h1 className="logo" style={{ textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>VIBECHEKK</h1>
         </div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
-          <BadgeCheck size={14} color={user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)')} strokeWidth={1.5} />
-          <span style={{ fontSize: '10px', fontWeight: 800, color: user?.tier === 'PRO' ? '#f59e0b' : (user ? 'var(--accent)' : 'var(--text-dim)'), letterSpacing: '0.5px' }}>
+          <BadgeCheck size={14} color={user?.tier === 'PRO' ? '#b45309' : (user ? 'var(--accent)' : 'var(--text-dim)')} strokeWidth={1.5} />
+          <span style={{ fontSize: '10px', fontWeight: 800, color: user?.tier === 'PRO' ? '#b45309' : (user ? 'var(--accent)' : 'var(--text-dim)'), letterSpacing: '0.5px' }}>
             {user?.tier === 'PRO' ? 'PRO' : (user ? 'AUTHENTICATED' : 'GUEST')} TIER
           </span>
         </div>
@@ -3366,13 +3366,13 @@ function App() {
                             }}>
                               <BadgeCheck
                                 size={10}
-                                color={user.tier === 'PRO' ? '#f59e0b' : '#7c3aed'}
+                                color={user.tier === 'PRO' ? '#b45309' : '#7c3aed'}
                                 strokeWidth={2.5}
                               />
                               <span style={{
                                 fontSize: '9px',
                                 fontWeight: 800,
-                                color: user.tier === 'PRO' ? '#f59e0b' : '#7c3aed',
+                                color: user.tier === 'PRO' ? '#b45309' : '#7c3aed',
                                 letterSpacing: '0.04em'
                               }}>
                                 AUTHENTICATED
