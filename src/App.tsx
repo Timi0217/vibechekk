@@ -202,6 +202,623 @@ function App() {
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
   const activeTabRef = useRef(activeTab)
 
+
+
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
+  // Persist AutoChekk state & logs
+  useEffect(() => {
+    chrome.storage.local.get(['auto_chekk_enabled', 'autochekk_logs', 'active_searches'], (res) => {
+      if (res.auto_chekk_enabled !== undefined) {
+        setAutoChekk(!!res.auto_chekk_enabled)
+      }
+      if (res.autochekk_logs) {
+        setAutochekkLogs(res.autochekk_logs as any[])
+      }
+      if (res.active_searches) {
+        setActiveSearches(res.active_searches as any[])
+      }
+      if (res.bulk_history) {
+        setBulkHistory(res.bulk_history as any[])
+      }
+    })
+
+    const listener = (changes: any) => {
+      if (changes.autochekk_logs) {
+        const logs = changes.autochekk_logs.newValue || [];
+        setAutochekkLogs(logs);
+
+        // Get handles that have completed (success or failure) - these have analysis entries WITHOUT analyzing flag
+        const completedHandles = new Set(
+          logs
+            .filter((l: any) => l.type === 'analysis' && !l.data?.analyzing)
+            .map((l: any) => l.data?.githubHandle?.toLowerCase())
+        );
+
+        // Track analyzing entries for History skeleton cards, excluding completed ones
+        const analyzing = logs
+          .filter((l: any) => l.type === 'analysis' && l.data?.analyzing)
+          .filter((l: any) => !completedHandles.has(l.data?.githubHandle?.toLowerCase()))
+          .filter((l: any) => {
+            // Filter out stale analyses (> 3 minutes old) to prevent stuck loading states
+            const age = Date.now() - (l.timestamp || 0);
+            return age < 3 * 60 * 1000;
+          })
+          .map((l: any) => ({
+            handle: l.data?.githubHandle,
+            name: l.data?.name,
+            avatar: '',
+            timestamp: l.timestamp
+          }));
+        setPendingAnalyses(analyzing);
+      }
+    };
+
+    chrome.storage.onChanged.addListener(listener);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(listener);
+    };
+  }, [])
+
+  useEffect(() => {
+    // Only allow AutoChekk for PRO users
+    // Wait until we've finished loading auth to enforce this
+    if (authLoading) return;
+
+    const isPro = user?.tier === 'PRO';
+    const shouldBeEnabled = autoChekk && isPro;
+    chrome.storage.local.set({ auto_chekk_enabled: shouldBeEnabled });
+
+    // If user is not PRO but autoChekk is true, turn it off
+    if (autoChekk && !isPro) {
+      setAutoChekk(false);
+    }
+  }, [autoChekk, user?.tier, authLoading])
+
+  const handleOpenReport = (report: any) => {
+    setSelectedReport(report)
+    setShowFullSummary(false)
+    setShowDetailedSummary(false)
+    setShowTechnicalSignal(false)
+    setShowDetailedTechnical(false)
+    setExpandedSkills([])
+    setExpandedMerits([])
+  }
+
+  useEffect(() => {
+    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data', 'auth_token', 'bulk_history'], (res) => {
+      setTokens({
+        github: (res.github_token as string) || '',
+        deepseek: (res.deepseek_key as string) || '',
+        vibeToken: (res.vibe_token as string) || ''
+      })
+      // Load bulk history from storage
+      if (res.bulk_history && Array.isArray(res.bulk_history)) {
+        setBulkHistory(res.bulk_history)
+      }
+      const userData = res.user_data as User | undefined;
+      if (userData) {
+        setUser(userData)
+      } else {
+        setUser(null)
+      }
+      // Check if GitHub has been linked (auth_token is set by GitHub OAuth flow)
+      if (res.auth_token) {
+        setGithubLinked(true)
+      }
+      // Get GitHub username/name from user_data - try multiple sources
+      if (userData?.githubLogin) {
+        setGithubUsername(userData.githubLogin) // Prioritize handle
+      } else if (userData?.name) {
+        setGithubUsername(userData.name.split(' ')[0])
+      } else if (userData?.email?.endsWith('@github.no-email')) {
+        // Extract username from generated email like "username@github.no-email"
+        setGithubUsername(userData.email.replace('@github.no-email', ''))
+      } else if (res.auth_token && userData?.name) {
+        // Fallback to name if GitHub auth exists but no githubLogin field
+        setGithubUsername(userData.name)
+      }
+      setAuthLoading(false)
+    })
+
+    // Listen for storage changes (e.g., when GitHub auth completes in another tab)
+    const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      // If auth token changes (login/re-login), verify user data
+      if (changes.auth_token && changes.auth_token.newValue) {
+        setGithubLinked(true)
+        // Also fetch user data to ensure username is set (in case user_data didn't change)
+        chrome.storage.local.get(['user_data'], (res) => {
+          const userData = res.user_data as User | undefined;
+          if (userData?.githubLogin) {
+            setGithubUsername(userData.githubLogin)
+          } else if (userData?.name) {
+            setGithubUsername(userData.name)
+          }
+        })
+      }
+
+      if (changes.user_data && changes.user_data.newValue) {
+        const userData = changes.user_data.newValue as User | undefined;
+        setUser(userData || null)
+        // Update GitHub username when user_data changes
+        if (userData?.githubLogin) {
+          setGithubUsername(userData.githubLogin)
+        }
+      }
+    }
+    chrome.storage.onChanged.addListener(storageListener)
+
+    if (activeTab === 'history') fetchHistory()
+    if (activeTab === 'analytics') fetchAnalytics()
+
+    return () => {
+      chrome.storage.onChanged.removeListener(storageListener)
+    }
+  }, [activeTab, tierFilter])
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/history`)
+      const data = await res.json()
+      if (data.success) setHistory(data.data)
+    } catch (e) {
+      console.warn('Backend not reachable')
+    }
+  }
+
+  const fetchAnalytics = async () => {
+    try {
+      const url = tierFilter
+        ? `${BACKEND_URL}/api/analytics?tier=${encodeURIComponent(tierFilter)}`
+        : `${BACKEND_URL}/api/analytics`
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.success) setAnalytics(data.data)
+    } catch (e) {
+      console.warn('Analytics failed')
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }
+
+  // ===== BULKCHEKK FUNCTIONS =====
+
+  // Parse CSV file and extract GitHub handles/emails
+  const parseUploadedFile = async (file: File): Promise<{ handles: string[], emails: string[] }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string
+          let handles: string[] = []
+
+          // Parse CSV - look for github handles, urls, emails, usernames
+          const lines = text.split(/\r?\n/).filter(line => line.trim())
+          const header = lines[0]?.toLowerCase() || ''
+
+          // Detect column indices
+          const cols = header.split(',').map(c => c.trim())
+          const usernameCol = cols.findIndex(c =>
+            c.includes('username') || c.includes('handle') || c.includes('github') ||
+            c.includes('user') || c.includes('email') || c.includes('url')
+          )
+
+          // If we found a header, skip it; otherwise process all lines
+          const startIdx = usernameCol >= 0 ? 1 : 0
+          const colIdx = usernameCol >= 0 ? usernameCol : 0
+
+          for (let i = startIdx; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
+            if (values[colIdx]) {
+              handles.push(values[colIdx])
+            }
+          }
+
+          // Separate emails from regular handles
+          const emails: string[] = []
+          const directHandles: string[] = []
+
+          for (const item of handles) {
+            if (isEmail(item)) {
+              emails.push(item.trim())
+            } else {
+              const handle = extractGithubHandle(item)
+              if (handle) directHandles.push(handle)
+            }
+          }
+
+          // Remove duplicates
+          const uniqueHandles = [...new Set(directHandles)]
+          const uniqueEmails = [...new Set(emails)]
+
+          // Return combined (handles first, then emails to be resolved)
+          resolve({ handles: uniqueHandles, emails: uniqueEmails })
+        } catch (err) {
+          reject(err)
+        }
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsText(file)
+    })
+  }
+
+  // Extract GitHub handle from various formats (URL, @username, plain username)
+  // Returns null for emails - those need backend lookup
+  const extractGithubHandle = (input: string): string | null => {
+    if (!input) return null
+    input = input.trim()
+
+    // GitHub URL: https://github.com/username or github.com/username
+    const urlMatch = input.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9][-a-zA-Z0-9]*)(?:\/|$)/i)
+    if (urlMatch) return urlMatch[1]
+
+    // @username format
+    if (input.startsWith('@')) return input.slice(1)
+
+    // Plain username (validate it looks like a valid GitHub username - NOT an email)
+    if (!input.includes('@') && /^[a-zA-Z0-9][-a-zA-Z0-9]*$/.test(input) && input.length <= 39) {
+      return input
+    }
+
+    return null
+  }
+
+  // Check if input looks like an email
+  const isEmail = (input: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.trim())
+  }
+
+  // Lookup GitHub username from email via backend API
+  const lookupEmailToHandle = async (email: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/lookup/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      const data = await response.json()
+      return data.success ? data.username : null
+    } catch {
+      return null
+    }
+  }
+
+  // Process bulk analysis
+  const processBulkAnalysis = async () => {
+    if (!bulkFile) return
+
+    setBulkProcessing(true)
+    setBulkResults([])
+    setBulkProgress({ current: 0, total: 0, status: 'Parsing file...' })
+
+    try {
+      const parsed = await parseUploadedFile(bulkFile)
+
+      // Phase 1: Resolve emails to GitHub handles via backend API
+      setBulkProgress({ current: 0, total: parsed.emails.length, status: `Looking up ${parsed.emails.length} email(s)...` })
+
+      const emailResolvedHandles: string[] = []
+      for (const email of parsed.emails) {
+        const handle = await lookupEmailToHandle(email)
+        if (handle) {
+          emailResolvedHandles.push(handle)
+        }
+      }
+
+      // Combine all handles
+      const allHandles = [...parsed.handles, ...emailResolvedHandles].slice(0, 100)
+
+      if (allHandles.length === 0) {
+        setBulkProgress({ current: 0, total: 0, status: 'No valid GitHub profiles found in file' })
+        setBulkProcessing(false)
+        return
+      }
+
+      setBulkProgress({ current: 0, total: allHandles.length, status: `Found ${allHandles.length} profiles to analyze` })
+
+      const results: any[] = []
+      const batchId = Date.now().toString()
+
+      for (let i = 0; i < allHandles.length; i++) {
+        const handle = allHandles[i]
+        setBulkProgress({
+          current: i + 1,
+          total: allHandles.length,
+          status: `Analyzing ${handle} (${i + 1}/${allHandles.length})`
+        })
+
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/analyze`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': tokens.vibeToken ? `Bearer ${tokens.vibeToken}` : ''
+            },
+            body: JSON.stringify({
+              githubUrl: `https://github.com/${handle}`,
+              userId: user?.id || 'guest'
+            })
+          })
+
+          const data = await response.json()
+
+          if (data.success && data.data) {
+            results.push({
+              handle,
+              success: true,
+              report: data.data,
+              timestamp: Date.now()
+            })
+          } else {
+            results.push({
+              handle,
+              success: false,
+              error: data.error || 'Analysis failed',
+              timestamp: Date.now()
+            })
+          }
+        } catch (err: any) {
+          results.push({
+            handle,
+            success: false,
+            error: err.message || 'Network error',
+            timestamp: Date.now()
+          })
+        }
+
+        // Update results in real-time
+        setBulkResults([...results])
+
+        // Rate limiting - wait 1.5 seconds between requests
+        if (i < allHandles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500))
+        }
+      }
+
+      // Save batch to history
+      const successCount = results.filter(r => r.success).length
+      const batchRecord = {
+        id: batchId,
+        filename: bulkFile.name,
+        totalProfiles: allHandles.length,
+        successCount,
+        failedCount: allHandles.length - successCount,
+        results,
+        timestamp: Date.now()
+      }
+
+      const updatedHistory = [batchRecord, ...bulkHistory]
+      setBulkHistory(updatedHistory)
+
+      // Save to storage
+      chrome.storage.local.set({ bulk_history: updatedHistory })
+
+      setBulkProgress({
+        current: allHandles.length,
+        total: allHandles.length,
+        status: `Complete! ${successCount}/${allHandles.length} profiles analyzed successfully`
+      })
+
+      // Switch to history tab to show results
+      setTimeout(() => {
+        setBulkChekkTab('history')
+      }, 2000)
+
+    } catch (err: any) {
+      setBulkProgress({ current: 0, total: 0, status: `Error: ${err.message}` })
+    } finally {
+      setBulkProcessing(false)
+      setBulkFile(null)
+    }
+  }
+
+  // Auto-refresh history when a new analysis completes (detected via logs)
+  useEffect(() => {
+    if (activeTab === 'history' && autochekkLogs.length > 0) {
+      const latest = autochekkLogs[0];
+      // If the latest log is a completed analysis (not analyzing), refresh the list
+      if (latest.type === 'analysis' && !latest.data?.analyzing) {
+        fetchHistory();
+      }
+    }
+  }, [autochekkLogs, activeTab])
+
+  const [pendingHandles, setPendingHandles] = useState<string[]>([])
+
+  const handleManualSearch = async () => {
+    if (!manualUrl) return
+
+    // Limit concurrent for guests
+    if (!user && pendingHandles.length >= 1) {
+      setShowConcurrentModal(true)
+      return
+    }
+
+    // 1. Normalize
+    let normalized = manualUrl.trim().replace(/^@/, '');
+    let ownerHandle = normalized;
+    if (normalized.includes('github.com/')) {
+      const match = normalized.match(/github\.com\/([^/]+)/i);
+      if (match) ownerHandle = match[1];
+    }
+    ownerHandle = ownerHandle.replace(/^@/, '').split('/')[0];
+
+    // 2. CHECK HISTORY (Prevent Duplicates) - DISABLED FOR QA/TESTING
+    // The user wants to see the analysis run after flushing the DB.
+    // Client-side caching prevents this. Letting it hit the backend ensures fresh data.
+    /*
+    const existingReport = history.find(h => {
+      const hHandle = h.candidate?.githubHandle || h.githubHandle;
+      return hHandle?.toLowerCase() === ownerHandle.toLowerCase();
+    });
+
+    if (existingReport) {
+      handleOpenReport(existingReport);
+      setManualUrl('');
+      setActiveTab('history');
+      return;
+    }
+    */
+
+    // 3. Prevent duplicate active processing
+    if (pendingHandles.includes(ownerHandle)) {
+      alert(`Analysis for ${ownerHandle} is already in progress.`);
+      return;
+    }
+
+    const finalUrl = normalized.includes('github.com')
+      ? (normalized.startsWith('http') ? normalized : `https://${normalized}`)
+      : `https://github.com/${normalized}`;
+
+    // 4. Queue the request & Start Simulation
+    setPendingHandles(prev => [ownerHandle, ...prev]);
+    setManualUrl('');
+    setLoadingStep(1); // Restart visual feedback for this new item
+
+    // Simulate progress steps (Purely visual for the "Run" button)
+    // We clear these timeouts when this specific request finishes, but effectively
+    // the UI will just show the step for the *latest* one, which is fine.
+    setTimeout(() => setLoadingStep(2), 1500);
+    setTimeout(() => setLoadingStep(3), 3500);
+    setTimeout(() => setLoadingStep(4), 6000);
+    setTimeout(() => setLoadingStep(5), 9000);
+    setTimeout(() => setLoadingStep(6), 12500);
+    setTimeout(() => setLoadingStep(7), 16000);
+
+    chrome.runtime.sendMessage({
+      type: 'START_VIBE_CHECK',
+      url: finalUrl
+    }, (response) => {
+      // 5. Cleanup on completion
+      setPendingHandles(prev => prev.filter(h => h !== ownerHandle));
+
+      if (response && response.success) {
+        const finalReport = {
+          ...response.data,
+          candidate: {
+            ...response.data.candidate,
+            githubHandle: response.data.candidate?.githubHandle === 'Guest' || !response.data.candidate?.githubHandle
+              ? ownerHandle
+              : response.data.candidate.githubHandle
+          }
+        };
+        setHistory((prev: any[]) => [finalReport, ...prev])
+        // 6. Auto-open if still on search page
+        if (activeTabRef.current === 'analyze') {
+          handleOpenReport(finalReport)
+        }
+      } else {
+        const err = response?.error || 'Unknown error';
+        if (err.includes('Limit reached') || err.includes('Upgrade to Pro')) {
+          setLimitPaywallOpen(true);
+        } else {
+          alert(`Failed to analyze ${ownerHandle}: ${err}`)
+        }
+      }
+    })
+  }
+
+
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true)
+    try {
+      // Get real Google OAuth token using Chrome Identity API
+      const auth = await chrome.identity.getAuthToken({ interactive: true })
+
+      if (!auth || !auth.token) {
+        throw new Error('Failed to get authentication token')
+      }
+
+      const token = auth.token
+
+      // Fetch user profile from Google
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      if (!profileRes.ok) {
+        throw new Error('Failed to fetch Google profile')
+      }
+
+      const profile = await profileRes.json()
+
+      // Send to backend for user creation/login
+      const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          email: profile.email,
+          name: profile.name,
+          picture: profile.picture
+        })
+      })
+
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}`)
+      }
+
+      const data = await res.json()
+      if (data.success) {
+        chrome.storage.local.set({ vibe_token: data.token, user_data: data.user }, () => {
+          setTokens({ ...tokens, vibeToken: data.token })
+          setUser(data.user)
+          setIsLoggingIn(false)
+        })
+      } else {
+        alert(data.error || 'Google login failed')
+        setIsLoggingIn(false)
+      }
+    } catch (e: any) {
+      console.error('Auth error:', e)
+      alert(`Authentication failed: ${e.message || 'Unknown error'}`)
+      setIsLoggingIn(false)
+    }
+  }
+
+
+
+
+  const logout = () => {
+    chrome.storage.local.remove(['vibe_token', 'user_data'], () => {
+      setTokens({ ...tokens, vibeToken: '' })
+      setUser(null)
+    })
+  }
+
+  // Handle Stripe checkout for Pro upgrade
+  const handleUpgradeToPro = async () => {
+    if (!tokens.vibeToken) {
+      alert('Please sign in first to upgrade to Pro')
+      return
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/stripe/create-checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.url) {
+        // Open Stripe Checkout in new tab
+        window.open(data.url, '_blank')
+      } else {
+        alert(data.error || 'Failed to start checkout')
+      }
+    } catch (err: any) {
+      console.error('Checkout error:', err)
+      alert('Failed to connect to payment service')
+    }
+  }
+
   const proFeaturesContent = (
     <>
                       <div
@@ -1681,623 +2298,6 @@ function App() {
 
     </>
   );
-
-
-  useEffect(() => {
-    activeTabRef.current = activeTab
-  }, [activeTab])
-
-  // Persist AutoChekk state & logs
-  useEffect(() => {
-    chrome.storage.local.get(['auto_chekk_enabled', 'autochekk_logs', 'active_searches'], (res) => {
-      if (res.auto_chekk_enabled !== undefined) {
-        setAutoChekk(!!res.auto_chekk_enabled)
-      }
-      if (res.autochekk_logs) {
-        setAutochekkLogs(res.autochekk_logs as any[])
-      }
-      if (res.active_searches) {
-        setActiveSearches(res.active_searches as any[])
-      }
-      if (res.bulk_history) {
-        setBulkHistory(res.bulk_history as any[])
-      }
-    })
-
-    const listener = (changes: any) => {
-      if (changes.autochekk_logs) {
-        const logs = changes.autochekk_logs.newValue || [];
-        setAutochekkLogs(logs);
-
-        // Get handles that have completed (success or failure) - these have analysis entries WITHOUT analyzing flag
-        const completedHandles = new Set(
-          logs
-            .filter((l: any) => l.type === 'analysis' && !l.data?.analyzing)
-            .map((l: any) => l.data?.githubHandle?.toLowerCase())
-        );
-
-        // Track analyzing entries for History skeleton cards, excluding completed ones
-        const analyzing = logs
-          .filter((l: any) => l.type === 'analysis' && l.data?.analyzing)
-          .filter((l: any) => !completedHandles.has(l.data?.githubHandle?.toLowerCase()))
-          .filter((l: any) => {
-            // Filter out stale analyses (> 3 minutes old) to prevent stuck loading states
-            const age = Date.now() - (l.timestamp || 0);
-            return age < 3 * 60 * 1000;
-          })
-          .map((l: any) => ({
-            handle: l.data?.githubHandle,
-            name: l.data?.name,
-            avatar: '',
-            timestamp: l.timestamp
-          }));
-        setPendingAnalyses(analyzing);
-      }
-    };
-
-    chrome.storage.onChanged.addListener(listener);
-
-    return () => {
-      chrome.storage.onChanged.removeListener(listener);
-    };
-  }, [])
-
-  useEffect(() => {
-    // Only allow AutoChekk for PRO users
-    // Wait until we've finished loading auth to enforce this
-    if (authLoading) return;
-
-    const isPro = user?.tier === 'PRO';
-    const shouldBeEnabled = autoChekk && isPro;
-    chrome.storage.local.set({ auto_chekk_enabled: shouldBeEnabled });
-
-    // If user is not PRO but autoChekk is true, turn it off
-    if (autoChekk && !isPro) {
-      setAutoChekk(false);
-    }
-  }, [autoChekk, user?.tier, authLoading])
-
-  const handleOpenReport = (report: any) => {
-    setSelectedReport(report)
-    setShowFullSummary(false)
-    setShowDetailedSummary(false)
-    setShowTechnicalSignal(false)
-    setShowDetailedTechnical(false)
-    setExpandedSkills([])
-    setExpandedMerits([])
-  }
-
-  useEffect(() => {
-    chrome.storage.local.get(['github_token', 'deepseek_key', 'vibe_token', 'user_data', 'auth_token', 'bulk_history'], (res) => {
-      setTokens({
-        github: (res.github_token as string) || '',
-        deepseek: (res.deepseek_key as string) || '',
-        vibeToken: (res.vibe_token as string) || ''
-      })
-      // Load bulk history from storage
-      if (res.bulk_history && Array.isArray(res.bulk_history)) {
-        setBulkHistory(res.bulk_history)
-      }
-      const userData = res.user_data as User | undefined;
-      if (userData) {
-        setUser(userData)
-      } else {
-        setUser(null)
-      }
-      // Check if GitHub has been linked (auth_token is set by GitHub OAuth flow)
-      if (res.auth_token) {
-        setGithubLinked(true)
-      }
-      // Get GitHub username/name from user_data - try multiple sources
-      if (userData?.githubLogin) {
-        setGithubUsername(userData.githubLogin) // Prioritize handle
-      } else if (userData?.name) {
-        setGithubUsername(userData.name.split(' ')[0])
-      } else if (userData?.email?.endsWith('@github.no-email')) {
-        // Extract username from generated email like "username@github.no-email"
-        setGithubUsername(userData.email.replace('@github.no-email', ''))
-      } else if (res.auth_token && userData?.name) {
-        // Fallback to name if GitHub auth exists but no githubLogin field
-        setGithubUsername(userData.name)
-      }
-      setAuthLoading(false)
-    })
-
-    // Listen for storage changes (e.g., when GitHub auth completes in another tab)
-    const storageListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
-      // If auth token changes (login/re-login), verify user data
-      if (changes.auth_token && changes.auth_token.newValue) {
-        setGithubLinked(true)
-        // Also fetch user data to ensure username is set (in case user_data didn't change)
-        chrome.storage.local.get(['user_data'], (res) => {
-          const userData = res.user_data as User | undefined;
-          if (userData?.githubLogin) {
-            setGithubUsername(userData.githubLogin)
-          } else if (userData?.name) {
-            setGithubUsername(userData.name)
-          }
-        })
-      }
-
-      if (changes.user_data && changes.user_data.newValue) {
-        const userData = changes.user_data.newValue as User | undefined;
-        setUser(userData || null)
-        // Update GitHub username when user_data changes
-        if (userData?.githubLogin) {
-          setGithubUsername(userData.githubLogin)
-        }
-      }
-    }
-    chrome.storage.onChanged.addListener(storageListener)
-
-    if (activeTab === 'history') fetchHistory()
-    if (activeTab === 'analytics') fetchAnalytics()
-
-    return () => {
-      chrome.storage.onChanged.removeListener(storageListener)
-    }
-  }, [activeTab, tierFilter])
-
-  const fetchHistory = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/history`)
-      const data = await res.json()
-      if (data.success) setHistory(data.data)
-    } catch (e) {
-      console.warn('Backend not reachable')
-    }
-  }
-
-  const fetchAnalytics = async () => {
-    try {
-      const url = tierFilter
-        ? `${BACKEND_URL}/api/analytics?tier=${encodeURIComponent(tierFilter)}`
-        : `${BACKEND_URL}/api/analytics`
-      const res = await fetch(url)
-      const data = await res.json()
-      if (data.success) setAnalytics(data.data)
-    } catch (e) {
-      console.warn('Analytics failed')
-    } finally {
-      setAnalyticsLoading(false)
-    }
-  }
-
-  // ===== BULKCHEKK FUNCTIONS =====
-
-  // Parse CSV file and extract GitHub handles/emails
-  const parseUploadedFile = async (file: File): Promise<{ handles: string[], emails: string[] }> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const text = e.target?.result as string
-          let handles: string[] = []
-
-          // Parse CSV - look for github handles, urls, emails, usernames
-          const lines = text.split(/\r?\n/).filter(line => line.trim())
-          const header = lines[0]?.toLowerCase() || ''
-
-          // Detect column indices
-          const cols = header.split(',').map(c => c.trim())
-          const usernameCol = cols.findIndex(c =>
-            c.includes('username') || c.includes('handle') || c.includes('github') ||
-            c.includes('user') || c.includes('email') || c.includes('url')
-          )
-
-          // If we found a header, skip it; otherwise process all lines
-          const startIdx = usernameCol >= 0 ? 1 : 0
-          const colIdx = usernameCol >= 0 ? usernameCol : 0
-
-          for (let i = startIdx; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''))
-            if (values[colIdx]) {
-              handles.push(values[colIdx])
-            }
-          }
-
-          // Separate emails from regular handles
-          const emails: string[] = []
-          const directHandles: string[] = []
-
-          for (const item of handles) {
-            if (isEmail(item)) {
-              emails.push(item.trim())
-            } else {
-              const handle = extractGithubHandle(item)
-              if (handle) directHandles.push(handle)
-            }
-          }
-
-          // Remove duplicates
-          const uniqueHandles = [...new Set(directHandles)]
-          const uniqueEmails = [...new Set(emails)]
-
-          // Return combined (handles first, then emails to be resolved)
-          resolve({ handles: uniqueHandles, emails: uniqueEmails })
-        } catch (err) {
-          reject(err)
-        }
-      }
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsText(file)
-    })
-  }
-
-  // Extract GitHub handle from various formats (URL, @username, plain username)
-  // Returns null for emails - those need backend lookup
-  const extractGithubHandle = (input: string): string | null => {
-    if (!input) return null
-    input = input.trim()
-
-    // GitHub URL: https://github.com/username or github.com/username
-    const urlMatch = input.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9][-a-zA-Z0-9]*)(?:\/|$)/i)
-    if (urlMatch) return urlMatch[1]
-
-    // @username format
-    if (input.startsWith('@')) return input.slice(1)
-
-    // Plain username (validate it looks like a valid GitHub username - NOT an email)
-    if (!input.includes('@') && /^[a-zA-Z0-9][-a-zA-Z0-9]*$/.test(input) && input.length <= 39) {
-      return input
-    }
-
-    return null
-  }
-
-  // Check if input looks like an email
-  const isEmail = (input: string): boolean => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.trim())
-  }
-
-  // Lookup GitHub username from email via backend API
-  const lookupEmailToHandle = async (email: string): Promise<string | null> => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/lookup/email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      })
-      const data = await response.json()
-      return data.success ? data.username : null
-    } catch {
-      return null
-    }
-  }
-
-  // Process bulk analysis
-  const processBulkAnalysis = async () => {
-    if (!bulkFile) return
-
-    setBulkProcessing(true)
-    setBulkResults([])
-    setBulkProgress({ current: 0, total: 0, status: 'Parsing file...' })
-
-    try {
-      const parsed = await parseUploadedFile(bulkFile)
-
-      // Phase 1: Resolve emails to GitHub handles via backend API
-      setBulkProgress({ current: 0, total: parsed.emails.length, status: `Looking up ${parsed.emails.length} email(s)...` })
-
-      const emailResolvedHandles: string[] = []
-      for (const email of parsed.emails) {
-        const handle = await lookupEmailToHandle(email)
-        if (handle) {
-          emailResolvedHandles.push(handle)
-        }
-      }
-
-      // Combine all handles
-      const allHandles = [...parsed.handles, ...emailResolvedHandles].slice(0, 100)
-
-      if (allHandles.length === 0) {
-        setBulkProgress({ current: 0, total: 0, status: 'No valid GitHub profiles found in file' })
-        setBulkProcessing(false)
-        return
-      }
-
-      setBulkProgress({ current: 0, total: allHandles.length, status: `Found ${allHandles.length} profiles to analyze` })
-
-      const results: any[] = []
-      const batchId = Date.now().toString()
-
-      for (let i = 0; i < allHandles.length; i++) {
-        const handle = allHandles[i]
-        setBulkProgress({
-          current: i + 1,
-          total: allHandles.length,
-          status: `Analyzing ${handle} (${i + 1}/${allHandles.length})`
-        })
-
-        try {
-          const response = await fetch(`${BACKEND_URL}/api/analyze`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': tokens.vibeToken ? `Bearer ${tokens.vibeToken}` : ''
-            },
-            body: JSON.stringify({
-              githubUrl: `https://github.com/${handle}`,
-              userId: user?.id || 'guest'
-            })
-          })
-
-          const data = await response.json()
-
-          if (data.success && data.data) {
-            results.push({
-              handle,
-              success: true,
-              report: data.data,
-              timestamp: Date.now()
-            })
-          } else {
-            results.push({
-              handle,
-              success: false,
-              error: data.error || 'Analysis failed',
-              timestamp: Date.now()
-            })
-          }
-        } catch (err: any) {
-          results.push({
-            handle,
-            success: false,
-            error: err.message || 'Network error',
-            timestamp: Date.now()
-          })
-        }
-
-        // Update results in real-time
-        setBulkResults([...results])
-
-        // Rate limiting - wait 1.5 seconds between requests
-        if (i < allHandles.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1500))
-        }
-      }
-
-      // Save batch to history
-      const successCount = results.filter(r => r.success).length
-      const batchRecord = {
-        id: batchId,
-        filename: bulkFile.name,
-        totalProfiles: allHandles.length,
-        successCount,
-        failedCount: allHandles.length - successCount,
-        results,
-        timestamp: Date.now()
-      }
-
-      const updatedHistory = [batchRecord, ...bulkHistory]
-      setBulkHistory(updatedHistory)
-
-      // Save to storage
-      chrome.storage.local.set({ bulk_history: updatedHistory })
-
-      setBulkProgress({
-        current: allHandles.length,
-        total: allHandles.length,
-        status: `Complete! ${successCount}/${allHandles.length} profiles analyzed successfully`
-      })
-
-      // Switch to history tab to show results
-      setTimeout(() => {
-        setBulkChekkTab('history')
-      }, 2000)
-
-    } catch (err: any) {
-      setBulkProgress({ current: 0, total: 0, status: `Error: ${err.message}` })
-    } finally {
-      setBulkProcessing(false)
-      setBulkFile(null)
-    }
-  }
-
-  // Auto-refresh history when a new analysis completes (detected via logs)
-  useEffect(() => {
-    if (activeTab === 'history' && autochekkLogs.length > 0) {
-      const latest = autochekkLogs[0];
-      // If the latest log is a completed analysis (not analyzing), refresh the list
-      if (latest.type === 'analysis' && !latest.data?.analyzing) {
-        fetchHistory();
-      }
-    }
-  }, [autochekkLogs, activeTab])
-
-  const [pendingHandles, setPendingHandles] = useState<string[]>([])
-
-  const handleManualSearch = async () => {
-    if (!manualUrl) return
-
-    // Limit concurrent for guests
-    if (!user && pendingHandles.length >= 1) {
-      setShowConcurrentModal(true)
-      return
-    }
-
-    // 1. Normalize
-    let normalized = manualUrl.trim().replace(/^@/, '');
-    let ownerHandle = normalized;
-    if (normalized.includes('github.com/')) {
-      const match = normalized.match(/github\.com\/([^/]+)/i);
-      if (match) ownerHandle = match[1];
-    }
-    ownerHandle = ownerHandle.replace(/^@/, '').split('/')[0];
-
-    // 2. CHECK HISTORY (Prevent Duplicates) - DISABLED FOR QA/TESTING
-    // The user wants to see the analysis run after flushing the DB.
-    // Client-side caching prevents this. Letting it hit the backend ensures fresh data.
-    /*
-    const existingReport = history.find(h => {
-      const hHandle = h.candidate?.githubHandle || h.githubHandle;
-      return hHandle?.toLowerCase() === ownerHandle.toLowerCase();
-    });
-
-    if (existingReport) {
-      handleOpenReport(existingReport);
-      setManualUrl('');
-      setActiveTab('history');
-      return;
-    }
-    */
-
-    // 3. Prevent duplicate active processing
-    if (pendingHandles.includes(ownerHandle)) {
-      alert(`Analysis for ${ownerHandle} is already in progress.`);
-      return;
-    }
-
-    const finalUrl = normalized.includes('github.com')
-      ? (normalized.startsWith('http') ? normalized : `https://${normalized}`)
-      : `https://github.com/${normalized}`;
-
-    // 4. Queue the request & Start Simulation
-    setPendingHandles(prev => [ownerHandle, ...prev]);
-    setManualUrl('');
-    setLoadingStep(1); // Restart visual feedback for this new item
-
-    // Simulate progress steps (Purely visual for the "Run" button)
-    // We clear these timeouts when this specific request finishes, but effectively
-    // the UI will just show the step for the *latest* one, which is fine.
-    setTimeout(() => setLoadingStep(2), 1500);
-    setTimeout(() => setLoadingStep(3), 3500);
-    setTimeout(() => setLoadingStep(4), 6000);
-    setTimeout(() => setLoadingStep(5), 9000);
-    setTimeout(() => setLoadingStep(6), 12500);
-    setTimeout(() => setLoadingStep(7), 16000);
-
-    chrome.runtime.sendMessage({
-      type: 'START_VIBE_CHECK',
-      url: finalUrl
-    }, (response) => {
-      // 5. Cleanup on completion
-      setPendingHandles(prev => prev.filter(h => h !== ownerHandle));
-
-      if (response && response.success) {
-        const finalReport = {
-          ...response.data,
-          candidate: {
-            ...response.data.candidate,
-            githubHandle: response.data.candidate?.githubHandle === 'Guest' || !response.data.candidate?.githubHandle
-              ? ownerHandle
-              : response.data.candidate.githubHandle
-          }
-        };
-        setHistory((prev: any[]) => [finalReport, ...prev])
-        // 6. Auto-open if still on search page
-        if (activeTabRef.current === 'analyze') {
-          handleOpenReport(finalReport)
-        }
-      } else {
-        const err = response?.error || 'Unknown error';
-        if (err.includes('Limit reached') || err.includes('Upgrade to Pro')) {
-          setLimitPaywallOpen(true);
-        } else {
-          alert(`Failed to analyze ${ownerHandle}: ${err}`)
-        }
-      }
-    })
-  }
-
-
-  const handleGoogleLogin = async () => {
-    setIsLoggingIn(true)
-    try {
-      // Get real Google OAuth token using Chrome Identity API
-      const auth = await chrome.identity.getAuthToken({ interactive: true })
-
-      if (!auth || !auth.token) {
-        throw new Error('Failed to get authentication token')
-      }
-
-      const token = auth.token
-
-      // Fetch user profile from Google
-      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      if (!profileRes.ok) {
-        throw new Error('Failed to fetch Google profile')
-      }
-
-      const profile = await profileRes.json()
-
-      // Send to backend for user creation/login
-      const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          email: profile.email,
-          name: profile.name,
-          picture: profile.picture
-        })
-      })
-
-      if (!res.ok) {
-        throw new Error(`Server responded with ${res.status}`)
-      }
-
-      const data = await res.json()
-      if (data.success) {
-        chrome.storage.local.set({ vibe_token: data.token, user_data: data.user }, () => {
-          setTokens({ ...tokens, vibeToken: data.token })
-          setUser(data.user)
-          setIsLoggingIn(false)
-        })
-      } else {
-        alert(data.error || 'Google login failed')
-        setIsLoggingIn(false)
-      }
-    } catch (e: any) {
-      console.error('Auth error:', e)
-      alert(`Authentication failed: ${e.message || 'Unknown error'}`)
-      setIsLoggingIn(false)
-    }
-  }
-
-
-
-
-  const logout = () => {
-    chrome.storage.local.remove(['vibe_token', 'user_data'], () => {
-      setTokens({ ...tokens, vibeToken: '' })
-      setUser(null)
-    })
-  }
-
-  // Handle Stripe checkout for Pro upgrade
-  const handleUpgradeToPro = async () => {
-    if (!tokens.vibeToken) {
-      alert('Please sign in first to upgrade to Pro')
-      return
-    }
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/stripe/create-checkout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.vibeToken}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (data.success && data.url) {
-        // Open Stripe Checkout in new tab
-        window.open(data.url, '_blank')
-      } else {
-        alert(data.error || 'Failed to start checkout')
-      }
-    } catch (err: any) {
-      console.error('Checkout error:', err)
-      alert('Failed to connect to payment service')
-    }
-  }
-
   return (
     <div className="popup-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderBottom: '1px solid var(--border)' }}>
