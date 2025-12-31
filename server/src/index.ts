@@ -55,8 +55,8 @@ if (!stripe) {
 const ALLOWED_ORIGINS = [
     'chrome-extension://pbnpceefkjmpchjfldfpjjnbmdingpjn', // Production extension ID
     'chrome-extension://efmkmikfihdiflhoahpomphlobpplnon', // Dev extension ID (update if different)
-    'https://vibechekk.com',
-    'https://www.vibechekk.com',
+    'https://vibechekk.dev',
+    'https://www.vibechekk.dev',
     'https://vibechekk-landing.vercel.app',
     'http://localhost:3000', // Local landing page dev
     'http://localhost:5173', // Local Vite dev
@@ -845,7 +845,7 @@ app.get('/api/referral/info', async (req, res) => {
         res.json({
             success: true,
             referralCode: user.referralCode,
-            referralLink: `https://vibechekk.com/r/${user.referralCode}`,
+            referralLink: `https://vibechekk.dev/r/${user.referralCode}`,
             totalReferrals: user.referrals.length,
             activeReferrals: activeReferrals.length,
             referralCount: user.referralCount,

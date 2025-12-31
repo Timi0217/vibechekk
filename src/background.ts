@@ -227,13 +227,22 @@ async function handleEmailDiscovery(emails: string[], tabId?: number) {
                 const githubUrl = `https://github.com/${user.login}`;
                 console.log(`[Autochekk] Resolved ${email} -> ${githubUrl}`);
 
-                if (await isDuplicate('resolution', user.login)) {
-                    console.log(`[Autochekk] Skipping known profile: ${user.login}`);
+                // SERVER IS SOURCE OF TRUTH - check if already analyzed
+                const inServerHistory = await isInServerHistory(user.login);
+                if (inServerHistory) {
+                    console.log(`[Autochekk] Skipping (Server History): ${user.login}`);
+                    processedHandles.add(user.login.toLowerCase());
                     continue;
                 }
 
-                logActivity('resolution', `Matched ${email} to ${user.login}`, { email, githubHandle: user.login, avatar: user.avatar_url });
-                await addToDedupCache('resolution', user.login);
+                // Check session cache to prevent duplicate processing in same session
+                if (processedHandles.has(user.login.toLowerCase())) {
+                    console.log(`[Autochekk] Skipping (Session Cache): ${user.login}`);
+                    continue;
+                }
+                processedHandles.add(user.login.toLowerCase());
+
+                await logActivity('resolution', `Matched ${email} to ${user.login}`, { email, githubHandle: user.login, avatar: user.avatar_url });
 
                 // Log "Analyzing..." for skeleton card
                 await logActivity('analysis', `Analyzing ${user.login}...`, { githubHandle: user.login, analyzing: true });
