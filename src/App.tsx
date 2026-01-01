@@ -2917,32 +2917,35 @@ function App() {
 
               {/* Hidden Vibe Card Template for PDF Generation */}
               {(() => {
-                // Tier-based color schemes
-                const tierColors: Record<string, { primary: string; secondary: string; bg: string; border: string; text: string; accent: string }> = {
+                // Tier-based color schemes (solid colors that render in html2canvas)
+                const tierThemes: Record<string, {
+                  bgTop: string; bgBottom: string; border: string;
+                  headerBg: string; accent: string; text: string; badge: string
+                }> = {
                   'LEGENDARY': {
-                    primary: '#f59e0b', secondary: '#d97706', bg: 'linear-gradient(145deg, #1a1a1a 0%, #2d2006 50%, #1a1a1a 100%)',
-                    border: 'linear-gradient(145deg, #fbbf24, #f59e0b, #d97706)', text: '#fef3c7', accent: '#fcd34d'
+                    bgTop: '#2d1f00', bgBottom: '#1a1400', border: '#f59e0b',
+                    headerBg: '#f59e0b', accent: '#fcd34d', text: '#fef3c7', badge: '🏆 LEGENDARY'
                   },
                   'ULTRA RARE': {
-                    primary: '#8b5cf6', secondary: '#7c3aed', bg: 'linear-gradient(145deg, #1a1a1a 0%, #1e1033 50%, #1a1a1a 100%)',
-                    border: 'linear-gradient(145deg, #a78bfa, #8b5cf6, #7c3aed)', text: '#ede9fe', accent: '#c4b5fd'
+                    bgTop: '#2d1a4a', bgBottom: '#1a0f2e', border: '#8b5cf6',
+                    headerBg: '#8b5cf6', accent: '#c4b5fd', text: '#ede9fe', badge: '💎 ULTRA RARE'
                   },
                   'RARE': {
-                    primary: '#3b82f6', secondary: '#2563eb', bg: 'linear-gradient(145deg, #1a1a1a 0%, #0c1929 50%, #1a1a1a 100%)',
-                    border: 'linear-gradient(145deg, #60a5fa, #3b82f6, #2563eb)', text: '#dbeafe', accent: '#93c5fd'
+                    bgTop: '#0c2341', bgBottom: '#061424', border: '#3b82f6',
+                    headerBg: '#3b82f6', accent: '#93c5fd', text: '#dbeafe', badge: '⚡ RARE'
                   },
                   'UNCOMMON': {
-                    primary: '#10b981', secondary: '#059669', bg: 'linear-gradient(145deg, #1a1a1a 0%, #052e16 50%, #1a1a1a 100%)',
-                    border: 'linear-gradient(145deg, #34d399, #10b981, #059669)', text: '#d1fae5', accent: '#6ee7b7'
+                    bgTop: '#0a2918', bgBottom: '#051a0f', border: '#10b981',
+                    headerBg: '#10b981', accent: '#6ee7b7', text: '#d1fae5', badge: '✦ UNCOMMON'
                   },
                   'COMMON': {
-                    primary: '#64748b', secondary: '#475569', bg: 'linear-gradient(145deg, #1a1a1a 0%, #1e293b 50%, #1a1a1a 100%)',
-                    border: 'linear-gradient(145deg, #94a3b8, #64748b, #475569)', text: '#e2e8f0', accent: '#cbd5e1'
+                    bgTop: '#1e293b', bgBottom: '#0f172a', border: '#64748b',
+                    headerBg: '#64748b', accent: '#cbd5e1', text: '#e2e8f0', badge: '● COMMON'
                   }
                 };
 
                 const tier = selectedReport.tier?.toUpperCase() || 'COMMON';
-                const colors = tierColors[tier] || tierColors['COMMON'];
+                const theme = tierThemes[tier] || tierThemes['COMMON'];
 
                 return (
                   <div id="vibe-card-template" style={{
@@ -2951,106 +2954,79 @@ function App() {
                     top: 0,
                     width: '400px',
                     height: '560px',
-                    background: colors.bg,
-                    padding: '0',
+                    background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`,
+                    padding: '8px',
                     boxSizing: 'border-box',
-                    fontFamily: "'Inter', sans-serif",
-                    color: colors.text,
-                    borderRadius: '20px',
-                    overflow: 'hidden',
-                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
+                    fontFamily: "'Inter', 'Segoe UI', sans-serif"
                   }}>
-                    {/* Outer Glow Border */}
+                    {/* Card Frame */}
                     <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      borderRadius: '20px',
-                      padding: '4px',
-                      background: colors.border,
-                      WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-                      WebkitMaskComposite: 'xor',
-                      maskComposite: 'exclude'
-                    }} />
-
-                    {/* Inner Content */}
-                    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                      {/* Header */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                      width: '100%',
+                      height: '100%',
+                      border: `6px solid ${theme.border}`,
+                      borderRadius: '16px',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`
+                    }}>
+                      {/* Header Bar */}
+                      <div style={{
+                        background: theme.headerBg,
+                        padding: '12px 16px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
                         <div>
-                          <div style={{
-                            fontSize: '10px',
-                            fontWeight: 800,
-                            color: colors.primary,
-                            textTransform: 'uppercase',
-                            letterSpacing: '2px',
-                            marginBottom: '4px'
-                          }}>
-                            {tier}
+                          <div style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(0,0,0,0.5)', letterSpacing: '1px' }}>
+                            {theme.badge}
                           </div>
-                          <h2 style={{
-                            fontSize: '28px',
-                            fontWeight: 900,
-                            margin: 0,
-                            lineHeight: 1,
-                            background: `linear-gradient(135deg, ${colors.text} 0%, ${colors.accent} 100%)`,
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent'
-                          }}>
+                          <div style={{ fontSize: '22px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
                             {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
-                          </h2>
+                          </div>
                         </div>
                         <div style={{
-                          background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
-                          borderRadius: '12px',
-                          padding: '8px 12px',
-                          display: 'flex',
-                          alignItems: 'baseline',
-                          gap: '2px'
+                          background: 'rgba(0,0,0,0.25)',
+                          borderRadius: '10px',
+                          padding: '6px 12px',
+                          textAlign: 'center'
                         }}>
-                          <span style={{ fontSize: '24px', fontWeight: 900, color: 'white' }}>
+                          <div style={{ fontSize: '26px', fontWeight: 900, color: 'white', lineHeight: 1 }}>
                             {(() => {
                               const qScore = selectedReport.metadata?.quality_score;
                               if (qScore && qScore > 0) return Math.min(99, Math.ceil(qScore * 10));
                               const stars = selectedReport.star_count || 0;
                               return Math.min(99, 40 + Math.min(59, stars * 2));
                             })()}
-                          </span>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>VP</span>
+                          </div>
+                          <div style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '1px' }}>VIBE</div>
                         </div>
                       </div>
 
                       {/* Avatar Section */}
                       <div style={{
-                        flex: '0 0 200px',
-                        borderRadius: '16px',
-                        background: 'rgba(0,0,0,0.3)',
-                        border: `2px solid ${colors.primary}40`,
+                        flex: '0 0 180px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        marginBottom: '16px'
+                        background: 'rgba(0,0,0,0.2)',
+                        position: 'relative'
                       }}>
-                        {/* Radial Glow */}
-                        <div style={{
-                          position: 'absolute',
-                          width: '200px',
-                          height: '200px',
-                          borderRadius: '50%',
-                          background: `radial-gradient(circle, ${colors.primary}30 0%, transparent 70%)`,
-                          filter: 'blur(20px)'
-                        }} />
+                        {/* Corner decorations */}
+                        <div style={{ position: 'absolute', top: '8px', left: '8px', width: '20px', height: '20px', borderTop: `3px solid ${theme.border}`, borderLeft: `3px solid ${theme.border}` }} />
+                        <div style={{ position: 'absolute', top: '8px', right: '8px', width: '20px', height: '20px', borderTop: `3px solid ${theme.border}`, borderRight: `3px solid ${theme.border}` }} />
+                        <div style={{ position: 'absolute', bottom: '8px', left: '8px', width: '20px', height: '20px', borderBottom: `3px solid ${theme.border}`, borderLeft: `3px solid ${theme.border}` }} />
+                        <div style={{ position: 'absolute', bottom: '8px', right: '8px', width: '20px', height: '20px', borderBottom: `3px solid ${theme.border}`, borderRight: `3px solid ${theme.border}` }} />
 
                         <div style={{
                           width: '130px',
                           height: '130px',
                           borderRadius: '50%',
-                          border: `4px solid ${colors.primary}`,
-                          boxShadow: `0 0 30px ${colors.primary}50`,
+                          border: `5px solid ${theme.border}`,
+                          boxShadow: `0 0 0 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4)`,
                           overflow: 'hidden',
-                          position: 'relative',
-                          zIndex: 2
+                          background: theme.headerBg
                         }}>
                           <img
                             src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
@@ -3059,89 +3035,92 @@ function App() {
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
-                              if (e.currentTarget.parentElement) {
-                                e.currentTarget.parentElement.style.background = `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`;
-                              }
                             }}
                           />
                         </div>
                       </div>
 
-                      {/* Stats Row */}
+                      {/* Stats Bar */}
                       <div style={{
                         display: 'flex',
-                        justifyContent: 'space-around',
-                        background: 'rgba(0,0,0,0.3)',
-                        borderRadius: '12px',
-                        padding: '12px',
-                        marginBottom: '16px',
-                        border: `1px solid ${colors.primary}30`
+                        background: theme.headerBg,
+                        borderTop: '2px solid rgba(0,0,0,0.2)',
+                        borderBottom: '2px solid rgba(0,0,0,0.2)'
                       }}>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>REPOS</div>
-                          <div style={{ fontSize: '20px', fontWeight: 900 }}>{selectedReport.metadata?.userStats?.totalRepos || '0'}</div>
-                        </div>
-                        <div style={{ width: '1px', background: `${colors.primary}40` }} />
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>STARS</div>
-                          <div style={{ fontSize: '20px', fontWeight: 900 }}>{selectedReport.star_count || selectedReport.metadata?.userStats?.totalStars || '0'}</div>
-                        </div>
-                        <div style={{ width: '1px', background: `${colors.primary}40` }} />
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>COMMITS</div>
-                          <div style={{ fontSize: '20px', fontWeight: 900 }}>{selectedReport.metadata?.userStats?.totalCommits || '0'}</div>
-                        </div>
+                        {[
+                          { label: 'REPOS', value: selectedReport.metadata?.userStats?.totalRepos || '0' },
+                          { label: 'STARS', value: selectedReport.star_count || selectedReport.metadata?.userStats?.totalStars || '0' },
+                          { label: 'COMMITS', value: selectedReport.metadata?.userStats?.totalCommits || '0' }
+                        ].map((stat, i) => (
+                          <div key={i} style={{
+                            flex: 1,
+                            textAlign: 'center',
+                            padding: '10px 0',
+                            borderRight: i < 2 ? '1px solid rgba(0,0,0,0.2)' : 'none'
+                          }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(0,0,0,0.5)', letterSpacing: '1px' }}>{stat.label}</div>
+                            <div style={{ fontSize: '20px', fontWeight: 900, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>{stat.value}</div>
+                          </div>
+                        ))}
                       </div>
 
-                      {/* Archetype Label */}
-                      <div style={{
-                        background: `linear-gradient(135deg, ${colors.primary}20 0%, ${colors.secondary}20 100%)`,
-                        border: `1px solid ${colors.primary}50`,
-                        borderRadius: '10px',
-                        padding: '12px 16px',
-                        marginBottom: '12px'
-                      }}>
-                        <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
-                          ARCHETYPE
-                        </div>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: colors.text }}>
-                          {selectedReport.label || selectedReport.archetype || 'Developer'}
-                        </div>
-                      </div>
-
-                      {/* Special Ability */}
-                      {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
+                      {/* Info Section */}
+                      <div style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {/* Archetype */}
                         <div style={{
-                          background: `linear-gradient(135deg, ${colors.primary}15 0%, transparent 100%)`,
+                          background: 'rgba(0,0,0,0.3)',
                           borderRadius: '10px',
-                          padding: '10px 14px',
-                          borderLeft: `3px solid ${colors.primary}`
+                          padding: '12px 14px',
+                          border: `2px solid ${theme.border}`
                         }}>
-                          <div style={{ fontSize: '9px', color: colors.primary, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>
-                            SIGNATURE TRAIT
+                          <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '2px', marginBottom: '4px' }}>
+                            ARCHETYPE
                           </div>
-                          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text, marginTop: '2px', lineHeight: 1.3 }}>
-                            {selectedReport.meritPoints[0].title || selectedReport.meritPoints[0]}
+                          <div style={{ fontSize: '18px', fontWeight: 800, color: 'white' }}>
+                            {selectedReport.label || selectedReport.archetype || 'Developer'}
                           </div>
                         </div>
-                      )}
+
+                        {/* Signature Trait */}
+                        {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
+                          <div style={{
+                            background: 'rgba(0,0,0,0.2)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            borderLeft: `4px solid ${theme.border}`
+                          }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '2px' }}>
+                              ★ SIGNATURE TRAIT
+                            </div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
+                              {selectedReport.meritPoints[0].title || (typeof selectedReport.meritPoints[0] === 'string' ? selectedReport.meritPoints[0] : 'Code Excellence')}
+                            </div>
+                          </div>
+                        )}
+                      </div>
 
                       {/* Footer */}
                       <div style={{
-                        marginTop: 'auto',
-                        paddingTop: '12px',
+                        background: 'rgba(0,0,0,0.4)',
+                        padding: '10px 16px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        borderTop: `1px solid ${colors.primary}30`
+                        borderTop: `2px solid ${theme.border}`
                       }}>
-                        <span style={{ fontSize: '10px', fontWeight: 700, color: colors.accent, letterSpacing: '2px' }}>VIBECHEKK</span>
-                        <span style={{ fontSize: '9px', color: `${colors.text}80` }}>#{selectedReport.id?.slice(-6).toUpperCase() || 'XXXXXX'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 900, color: theme.border, letterSpacing: '2px' }}>VIBECHEKK</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: theme.accent, fontWeight: 600 }}>
+                          #{selectedReport.id?.slice(-8).toUpperCase() || 'XXXXXXXX'}
+                        </div>
                       </div>
                     </div>
                   </div>
                 );
               })()}
+
+
 
               <button
                 className="download-card-btn"
