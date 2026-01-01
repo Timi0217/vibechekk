@@ -2945,11 +2945,8 @@ function App() {
                   }
                 };
 
-                // Get tier from report, fallback to deriving from label
-                let tier = selectedReport.tier?.toUpperCase() || '';
-                if (!tier || tier === 'UNKNOWN' || tier === 'UNDEFINED') {
-                  tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
-                }
+                // ALWAYS derive tier from label to ensure card color matches archetype
+                const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
                 const theme = tierThemes[tier] || tierThemes['COMMON'];
 
                 return (
