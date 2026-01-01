@@ -321,7 +321,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
         if (candidate && candidate.reports && candidate.reports.length > 0) {
             const lastReport = candidate.reports[0];
             const thirtyMinAgo = new Date();
-            thirtyMinAgo.setSeconds(thirtyMinAgo.getSeconds() - 5);
+            thirtyMinAgo.setMinutes(thirtyMinAgo.getMinutes() - 30);
 
             // If the report was created less than 30 minutes ago, return it immediately
             // This prevents rapid-fire duplicate analysis

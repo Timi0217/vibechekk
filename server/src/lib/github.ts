@@ -8,7 +8,10 @@ export const fetchUserStats = async (token: string, username: string) => {
   last90Days.setDate(last90Days.getDate() - 90);
 
   const query = `
-    query($username: String!, $from: DateTime!) {
+    query($username: String!, $from: DateTime!, $searchQuery: String!) {
+      search(query: $searchQuery, type: REPOSITORY) {
+        repositoryCount
+      }
       user(login: $username) {
         name
         createdAt
@@ -34,22 +37,20 @@ export const fetchUserStats = async (token: string, username: string) => {
   `;
 
   try {
-    const [gqlResponse, searchResponse] = await Promise.all([
-      octokit.graphql(query, {
-        username,
-        from: last90Days.toISOString()
-      }),
-      octokit.rest.search.repos({ q: `user:${username} fork:false` })
-    ]);
+    const response: any = await octokit.graphql(query, {
+      username,
+      from: last90Days.toISOString(),
+      searchQuery: `user:${username} fork:false`
+    });
 
-    const response: any = gqlResponse;
     if (!response.user) return null;
 
     const repos = response.user.repositories.nodes;
 
     return {
       totalStars: repos.reduce((sum: number, r: any) => sum + r.stargazerCount, 0),
-      totalRepos: searchResponse.data.total_count,
+      // Use GraphQL Search count (Sources)
+      totalRepos: response.search.repositoryCount,
       totalCommits: response.user.contributionsCollection.totalCommitContributions,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.totalCommitContributions,
