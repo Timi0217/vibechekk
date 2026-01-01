@@ -2975,15 +2975,27 @@ function App() {
                           <span style={{ fontSize: '14px' }}>
                             {(() => {
                               const label = (selectedReport.label || selectedReport.archetype || '').toUpperCase();
-                              if (label.includes('TITAN')) return '👑';
-                              if (label.includes('ARCHITECT')) return '🏛️';
-                              if (label.includes('PIONEER')) return '🚀';
-                              if (label.includes('CRAFTSMAN')) return '🔧';
+                              // LEGENDARY
+                              if (label.includes('10X')) return '🌟';
+                              // ULTRA RARE  
+                              if (label.includes('ARCHITECT')) return '🏗️';
+                              if (label.includes('PROFESSOR')) return '📚';
+                              // RARE
                               if (label.includes('SPECIALIST')) return '🎯';
-                              if (label.includes('TINKERER')) return '⚡';
+                              if (label.includes('SYSTEMS')) return '⚙️';
+                              // UNCOMMON
+                              if (label.includes('MAINTAINER')) return '🔧';
+                              if (label.includes('BUILDER')) return '🛠️';
                               if (label.includes('CONTRIBUTOR')) return '🤝';
-                              if (label.includes('LEARNER')) return '📚';
+                              if (label.includes('CRAFTSPERSON') || label.includes('CRAFTSMAN')) return '✨';
+                              if (label.includes('HIDDEN') || label.includes('GEM')) return '💎';
+                              // COMMON
+                              if (label.includes('TINKERER')) return '⚡';
+                              if (label.includes('GRINDER')) return '💪';
+                              if (label.includes('HOBBYIST')) return '🎮';
                               if (label.includes('EXPLORER')) return '🧭';
+                              if (label.includes('APPRENTICE')) return '🌱';
+                              if (label.includes('GHOST')) return '👻';
                               return '💻';
                             })()}
                           </span>
