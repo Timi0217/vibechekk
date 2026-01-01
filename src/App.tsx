@@ -3143,6 +3143,159 @@ function App() {
                 );
               })()}
 
+              {/* Back of Card Template */}
+              {(() => {
+                const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
+                const tierThemes: Record<string, { bgTop: string; bgBottom: string; border: string; headerBg: string; accent: string; text: string }> = {
+                  'LEGENDARY': { bgTop: '#2d1f00', bgBottom: '#1a1400', border: '#f59e0b', headerBg: '#f59e0b', accent: '#fcd34d', text: '#fef3c7' },
+                  'ULTRA RARE': { bgTop: '#2d1a4a', bgBottom: '#1a0f2e', border: '#8b5cf6', headerBg: '#8b5cf6', accent: '#c4b5fd', text: '#ede9fe' },
+                  'RARE': { bgTop: '#0c2341', bgBottom: '#061424', border: '#3b82f6', headerBg: '#3b82f6', accent: '#93c5fd', text: '#dbeafe' },
+                  'UNCOMMON': { bgTop: '#0a2918', bgBottom: '#051a0f', border: '#10b981', headerBg: '#10b981', accent: '#6ee7b7', text: '#d1fae5' },
+                  'COMMON': { bgTop: '#1e293b', bgBottom: '#0f172a', border: '#64748b', headerBg: '#64748b', accent: '#cbd5e1', text: '#e2e8f0' }
+                };
+                const theme = tierThemes[tier] || tierThemes['COMMON'];
+
+                const skills = selectedReport.metadata?.verified_skills || [];
+                const highlights = selectedReport.meritPoints || [];
+                const archetypeReason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
+
+                return (
+                  <div id="vibe-card-back-template" style={{
+                    position: 'fixed',
+                    left: '-9999px',
+                    top: 0,
+                    width: '400px',
+                    height: '560px',
+                    background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`,
+                    padding: '8px',
+                    boxSizing: 'border-box',
+                    fontFamily: "'Inter', 'Segoe UI', sans-serif"
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      border: `6px solid ${theme.border}`,
+                      borderRadius: '16px',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`
+                    }}>
+                      {/* Header */}
+                      <div style={{
+                        background: theme.headerBg,
+                        padding: '12px 16px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '16px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                          {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
+                        </div>
+                        <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(0,0,0,0.5)' }}>
+                          DEVELOPER PROFILE
+                        </div>
+                      </div>
+
+                      {/* Content Area */}
+                      <div style={{ flex: 1, padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'hidden' }}>
+
+                        {/* Archetype Reason */}
+                        {archetypeReason && (
+                          <div style={{
+                            background: 'rgba(0,0,0,0.3)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            border: `1px solid ${theme.border}40`
+                          }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '4px' }}>
+                              WHY THIS ARCHETYPE
+                            </div>
+                            <div style={{ fontSize: '11px', color: theme.text, lineHeight: 1.4, maxHeight: '48px', overflow: 'hidden' }}>
+                              {archetypeReason}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Verified Skills */}
+                        {skills.length > 0 && (
+                          <div style={{
+                            background: 'rgba(0,0,0,0.2)',
+                            borderRadius: '8px',
+                            padding: '10px 12px'
+                          }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '8px' }}>
+                              ✓ VERIFIED SKILLS
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {skills.slice(0, 8).map((skill: any, i: number) => {
+                                const name = typeof skill === 'string' ? skill.split('|')[0] : (skill.name || skill);
+                                return (
+                                  <span key={i} style={{
+                                    background: theme.headerBg,
+                                    color: 'white',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '10px',
+                                    fontWeight: 600
+                                  }}>
+                                    {name}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Highlights */}
+                        {highlights.length > 0 && (
+                          <div style={{
+                            background: 'rgba(0,0,0,0.2)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            flex: 1,
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '8px' }}>
+                              ★ HIGHLIGHTS
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {highlights.slice(0, 4).map((point: any, i: number) => (
+                                <div key={i} style={{
+                                  fontSize: '10px',
+                                  color: theme.text,
+                                  lineHeight: 1.3,
+                                  paddingLeft: '8px',
+                                  borderLeft: `2px solid ${theme.border}`
+                                }}>
+                                  <span style={{ fontWeight: 700 }}>{point.title || point}</span>
+                                  {point.detail && (
+                                    <span style={{ opacity: 0.8, display: 'block', fontSize: '9px' }}>
+                                      {point.detail.substring(0, 60)}...
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer */}
+                      <div style={{
+                        background: 'rgba(0,0,0,0.4)',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        borderTop: `2px solid ${theme.border}`
+                      }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: theme.accent }}>
+                          vibechekk.dev
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
 
               <button
@@ -3152,38 +3305,46 @@ function App() {
                     setSelectedReport(null);
                     setActiveTab('settings');
                   } else {
-                    // Use the hidden template
-                    const element = document.getElementById('vibe-card-template');
-                    if (!element) return;
+                    const frontElement = document.getElementById('vibe-card-template');
+                    const backElement = document.getElementById('vibe-card-back-template');
+                    if (!frontElement || !backElement) return;
 
                     const btn = document.querySelector('.download-card-btn') as HTMLElement;
                     const originalText = btn.innerHTML;
                     btn.innerText = 'GENERATING PDF...';
 
                     try {
-                      // Allow hidden element to be rendered
-                      // html2canvas can capture off-screen if we don't use display:none
-                      const canvas = await html2canvas(element, {
-                        scale: 2, // High quality
+                      // Capture front of card
+                      const frontCanvas = await html2canvas(frontElement, {
+                        scale: 2,
                         useCORS: true,
                         backgroundColor: null
                       });
 
-                      // Create PDF
+                      // Capture back of card
+                      const backCanvas = await html2canvas(backElement, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: null
+                      });
+
+                      // Create 2-page PDF
                       const { jsPDF } = await import('jspdf');
                       const pdf = new jsPDF({
                         orientation: 'portrait',
                         unit: 'mm',
-                        format: [63.5, 88.9] // Standard Trading Card size (2.5 x 3.5 inches) approx scaling
+                        format: [63.5, 88.9]
                       });
 
-                      // Convert canvas to image data
-                      const imgData = canvas.toDataURL('image/png');
+                      // Page 1: Front
+                      const frontImg = frontCanvas.toDataURL('image/png');
+                      pdf.addImage(frontImg, 'PNG', 0, 0, 63.5, 88.9);
 
-                      // Add image to PDF (fill page)
-                      pdf.addImage(imgData, 'PNG', 0, 0, 63.5, 88.9); // mm
+                      // Page 2: Back
+                      pdf.addPage([63.5, 88.9], 'portrait');
+                      const backImg = backCanvas.toDataURL('image/png');
+                      pdf.addImage(backImg, 'PNG', 0, 0, 63.5, 88.9);
 
-                      // Save
                       pdf.save(`VibeCard-${selectedReport.candidate?.githubHandle || 'Dev'}.pdf`);
 
                     } catch (err) {
