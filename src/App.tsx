@@ -2942,8 +2942,8 @@ function App() {
                     top: 0,
                     width: '400px',
                     height: '560px',
-                    background: '#f8f9fa',  // Light cream/white background for volume
-                    padding: '12px',
+                    background: bg,
+                    padding: '6px',
                     boxSizing: 'border-box',
                     fontFamily: "'Inter', 'Segoe UI', sans-serif"
                   }}>
@@ -3143,19 +3143,20 @@ function App() {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {selectedReport.meritPoints.slice(0, 3).map((point: any, i: number) => (
                               <div key={i} style={{
-                                background: bgLight,
-                                borderRadius: '5px',
-                                padding: '8px 10px',
-                                borderLeft: `3px solid ${a.accent}`
+                                background: '#ffffff',
+                                borderRadius: '6px',
+                                padding: '10px 12px',
+                                borderLeft: `4px solid ${a.accent}`,
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                               }}>
-                                <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1px', marginBottom: '2px' }}>
+                                <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1px', marginBottom: '3px' }}>
                                   {i === 0 ? '★ KEY STRENGTH' : i === 1 ? '◆ HIGHLIGHT' : '● NOTABLE'}
                                 </div>
-                                <div style={{ fontSize: '11px', fontWeight: 600, color: '#e6edf3', lineHeight: 1.3 }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#1f2937', lineHeight: 1.3 }}>
                                   {point.title || (typeof point === 'string' ? point : 'Excellence')}
                                 </div>
                                 {point.detail && (
-                                  <div style={{ fontSize: '9px', color: '#8b949e', marginTop: '2px', lineHeight: 1.3 }}>
+                                  <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '3px', lineHeight: 1.3 }}>
                                     {point.detail.substring(0, 45)}{point.detail.length > 45 ? '...' : ''}
                                   </div>
                                 )}
