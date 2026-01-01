@@ -3030,7 +3030,7 @@ function App() {
                         borderBottom: `1px solid ${border}`
                       }}>
                         <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '6px' }}>
-                          WHY THIS CLASSIFICATION
+                          ARCHETYPE LORE
                         </div>
                         <div style={{ fontSize: '11px', color: '#e6edf3', lineHeight: 1.5 }}>
                           {(() => {
