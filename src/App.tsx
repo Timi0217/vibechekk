@@ -3000,17 +3000,27 @@ function App() {
                         }}>
                           <span style={{ fontSize: '32px' }}>
                             {(() => {
-                              // Map archetype/tier to icon
-                              const label = (selectedReport.label || selectedReport.archetype || '').toLowerCase();
-                              if (label.includes('titan') || label.includes('pioneer')) return '🏆';
-                              if (label.includes('architect') || label.includes('visionary')) return '🔮';
-                              if (label.includes('prodigy') || label.includes('specialist')) return '⚡';
-                              if (label.includes('hidden gem') || label.includes('gem')) return '💎';
-                              if (label.includes('maintainer') || label.includes('contributor')) return '🔧';
-                              if (label.includes('builder') || label.includes('craftsperson')) return '🛠️';
-                              if (label.includes('tinkerer') || label.includes('experimenter')) return '🔬';
+                              // Map the 15 archetypes to icons based on their tier
+                              const label = (selectedReport.label || selectedReport.archetype || '').toUpperCase();
+                              // LEGENDARY tier - Trophy
+                              if (label.includes('10X') || label.includes('PROFESSOR')) return '🏆';
+                              // ULTRA RARE tier - Crystal
+                              if (label.includes('ARCHITECT')) return '🔮';
+                              // RARE tier - Lightning
+                              if (label.includes('SPECIALIST') || label.includes('SYSTEMS THINKER') || label.includes('MAINTAINER')) return '⚡';
+                              if (label.includes('HIDDEN GEM')) return '💎';
+                              // UNCOMMON tier - Tools
+                              if (label.includes('BUILDER') || label.includes('CRAFTSPERSON')) return '🛠️';
+                              if (label.includes('CONTRIBUTOR')) return '🔧';
+                              if (label.includes('TINKERER')) return '🔬';
+                              // COMMON tier - Basic
+                              if (label.includes('GRINDER')) return '💪';
+                              if (label.includes('HOBBYIST')) return '🎯';
+                              if (label.includes('EXPLORER')) return '🧭';
+                              if (label.includes('APPRENTICE')) return '📚';
+                              // Fallback by tier
                               if (tier === 'LEGENDARY') return '🏆';
-                              if (tier === 'ULTRA RARE') return '💎';
+                              if (tier === 'ULTRA RARE') return '🔮';
                               if (tier === 'RARE') return '⚡';
                               if (tier === 'UNCOMMON') return '🛠️';
                               return '💻';
