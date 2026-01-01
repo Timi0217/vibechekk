@@ -3190,7 +3190,15 @@ function App() {
                                   {point.title || (typeof point === 'string' ? point : 'Excellence')}
                                 </div>
                                 {point.detail && (
-                                  <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '3px', lineHeight: 1.3 }}>
+                                  <div style={{
+                                    fontSize: '9px',
+                                    color: '#6b7280',
+                                    marginTop: '3px',
+                                    lineHeight: 1.3,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }}>
                                     {(() => {
                                       const text = point.detail;
                                       if (!text) return '';
