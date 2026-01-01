@@ -1,6 +1,6 @@
 # Vibechekk 🚀
 
-**Trajectory of Merit for Developers**
+**Screen Technical Ability of Developers Through Github**
 
 Vibechekk is a Chrome extension that analyzes GitHub profiles to reveal developer archetypes, code quality, and AI usage patterns. Built for technical recruiters who want to go beyond resumes and star counts.
 
