@@ -3225,23 +3225,6 @@ function App() {
                       {/* Content Area */}
                       <div style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px', overflow: 'hidden' }}>
 
-                        {/* Archetype Reason */}
-                        {archetypeReason && (
-                          <div style={{
-                            background: bgLight,
-                            borderRadius: '8px',
-                            padding: '10px 12px',
-                            border: `1px solid ${a.accent}`
-                          }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '5px' }}>
-                              WHY THIS ARCHETYPE
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#e6edf3', lineHeight: 1.5 }}>
-                              {archetypeReason.length > 160 ? archetypeReason.substring(0, 160) + '...' : archetypeReason}
-                            </div>
-                          </div>
-                        )}
-
                         {/* Verified Skills */}
                         {skills.length > 0 && (
                           <div style={{
