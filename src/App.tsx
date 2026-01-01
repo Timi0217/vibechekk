@@ -2975,55 +2975,13 @@ function App() {
                       {/* Header Bar */}
                       <div style={{
                         background: theme.headerBg,
-                        padding: '12px 16px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
+                        padding: '12px 16px'
                       }}>
-                        <div>
-                          <div style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(0,0,0,0.5)', letterSpacing: '1px' }}>
-                            {theme.badge}
-                          </div>
-                          <div style={{ fontSize: '22px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-                            {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
-                          </div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                          {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
                         </div>
-                        <div style={{
-                          background: 'rgba(0,0,0,0.25)',
-                          borderRadius: '12px',
-                          padding: '8px 10px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <span style={{ fontSize: '32px' }}>
-                            {(() => {
-                              // Map the 15 archetypes to icons based on their tier
-                              const label = (selectedReport.label || selectedReport.archetype || '').toUpperCase();
-                              // LEGENDARY tier - Trophy
-                              if (label.includes('10X') || label.includes('PROFESSOR')) return '🏆';
-                              // ULTRA RARE tier - Crystal
-                              if (label.includes('ARCHITECT')) return '🔮';
-                              // RARE tier - Lightning
-                              if (label.includes('SPECIALIST') || label.includes('SYSTEMS THINKER') || label.includes('MAINTAINER')) return '⚡';
-                              if (label.includes('HIDDEN GEM')) return '💎';
-                              // UNCOMMON tier - Tools
-                              if (label.includes('BUILDER') || label.includes('CRAFTSPERSON')) return '🛠️';
-                              if (label.includes('CONTRIBUTOR')) return '🔧';
-                              if (label.includes('TINKERER')) return '🔬';
-                              // COMMON tier - Basic
-                              if (label.includes('GRINDER')) return '💪';
-                              if (label.includes('HOBBYIST')) return '🎯';
-                              if (label.includes('EXPLORER')) return '🧭';
-                              if (label.includes('APPRENTICE')) return '📚';
-                              // Fallback by tier
-                              if (tier === 'LEGENDARY') return '🏆';
-                              if (tier === 'ULTRA RARE') return '🔮';
-                              if (tier === 'RARE') return '⚡';
-                              if (tier === 'UNCOMMON') return '🛠️';
-                              return '💻';
-                            })()}
-                          </span>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(0,0,0,0.5)', letterSpacing: '1px', marginTop: '2px' }}>
+                          {tier}
                         </div>
                       </div>
 
