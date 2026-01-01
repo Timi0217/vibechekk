@@ -3164,23 +3164,6 @@ function App() {
                           </div>
                         )}
                       </div>
-
-                      {/* Footer */}
-                      <div style={{
-                        background: bgLight,
-                        padding: '10px 16px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        borderTop: `1px solid ${border}`
-                      }}>
-                        <span style={{ fontSize: '14px', fontWeight: 900, color: a.accent, letterSpacing: '2px' }}>
-                          VIBECHEKK
-                        </span>
-                        <span style={{ fontSize: '10px', color: '#8b949e', fontWeight: 600 }}>
-                          #{selectedReport.id?.slice(-8).toUpperCase() || 'XXXXXXXX'}
-                        </span>
-                      </div>
                     </div>
                   </div>
                 );
