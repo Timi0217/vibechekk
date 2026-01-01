@@ -7,7 +7,7 @@
     ],
     "env": {
         "NEXT_PUBLIC_BACKEND_URL": "https://vibechekk-production.up.railway.app",
-        "NEXT_PUBLIC_EXTENSION_URL": "https://chrome.google.com/webstore/detail/vibechekk/YOUR_EXTENSION_ID"
+        "NEXT_PUBLIC_EXTENSION_URL": "https://chrome.google.com/webstore/detail/vibechekk/pbnpceefkjmpchjfldfpjjnbmdingpjn"
     },
     "headers": [
         {
