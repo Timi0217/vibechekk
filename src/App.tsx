@@ -3005,6 +3005,14 @@ function App() {
                                 if (label.includes('MAINTAINER')) return <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />;
                                 if (label.includes('BUILDER')) return <><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /></>;
                                 if (label.includes('CONTRIBUTOR')) return <><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /></>;
+                                if (label.includes('CRAFTSPERSON') || label.includes('CRAFTSMAN')) return <><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></>;
+                                if (label.includes('HIDDEN') || label.includes('GEM')) return <path d="M6 3h12l4 6-10 13L2 9Z" />;
+                                if (label.includes('TINKERER')) return <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />;
+                                if (label.includes('GRINDER')) return <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>;
+                                if (label.includes('HOBBYIST')) return <><path d="M17 8h1a4 4 0 1 1 0 8h-1" /><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" /></>;
+                                if (label.includes('EXPLORER')) return <><circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" /></>;
+                                if (label.includes('APPRENTICE')) return <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />;
+                                if (label.includes('GHOST')) return <><path d="M9 10h.01" /><path d="M15 10h.01" /><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" /></>;
                                 return <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />;
                               })()}
                             </svg>
@@ -3016,7 +3024,7 @@ function App() {
                               letterSpacing: '1px',
                               background: `${a.accent}15`,
                               border: `1px solid ${a.accent}40`,
-                              borderRadius: '12px',
+                              borderRadius: '6px',
                               padding: '3px 10px'
                             }}>
                               {(selectedReport.label || selectedReport.archetype || 'DEVELOPER').replace(/^THE\s+/i, '').toUpperCase()}
