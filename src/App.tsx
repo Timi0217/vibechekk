@@ -3117,10 +3117,10 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Signature Traits (show 2) */}
+                        {/* Signature Traits (show 3) */}
                         {selectedReport.meritPoints && selectedReport.meritPoints.length > 0 && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {selectedReport.meritPoints.slice(0, 2).map((point: any, i: number) => (
+                            {selectedReport.meritPoints.slice(0, 3).map((point: any, i: number) => (
                               <div key={i} style={{
                                 background: bgLight,
                                 borderRadius: '5px',
@@ -3128,14 +3128,14 @@ function App() {
                                 borderLeft: `3px solid ${a.accent}`
                               }}>
                                 <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1px', marginBottom: '2px' }}>
-                                  {i === 0 ? '★ KEY STRENGTH' : '◆ HIGHLIGHT'}
+                                  {i === 0 ? '★ KEY STRENGTH' : i === 1 ? '◆ HIGHLIGHT' : '● NOTABLE'}
                                 </div>
                                 <div style={{ fontSize: '11px', fontWeight: 600, color: '#e6edf3', lineHeight: 1.3 }}>
                                   {point.title || (typeof point === 'string' ? point : 'Excellence')}
                                 </div>
                                 {point.detail && (
                                   <div style={{ fontSize: '9px', color: '#8b949e', marginTop: '2px', lineHeight: 1.3 }}>
-                                    {point.detail.substring(0, 50)}{point.detail.length > 50 ? '...' : ''}
+                                    {point.detail.substring(0, 45)}{point.detail.length > 45 ? '...' : ''}
                                   </div>
                                 )}
                               </div>
