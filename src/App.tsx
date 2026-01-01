@@ -3040,17 +3040,19 @@ function App() {
 
                             if (reason) {
                               const limit = 210; // Increased limit
+                              const minFill = limit * 0.5; // Only stop at period if it fills >50% of lines
+
                               if (reason.length <= limit) return reason;
 
-                              // 1. Prioritize ANY period that ends a sentence cleanly
+                              // 1. Try to find a period that fills enough space
                               const lastPeriod = reason.substring(0, limit).lastIndexOf('.');
-                              if (lastPeriod > 20) return reason.substring(0, lastPeriod + 1);
+                              if (lastPeriod > minFill) return reason.substring(0, lastPeriod + 1);
 
-                              // 2. If no period found, try to cut at a comma (clause)
+                              // 2. If no good period, try to cut at a comma (clause) near the end
                               const lastComma = reason.substring(0, limit).lastIndexOf(',');
-                              if (lastComma > 30) return reason.substring(0, lastComma) + '...';
+                              if (lastComma > minFill) return reason.substring(0, lastComma) + '...';
 
-                              // 3. Fallback
+                              // 3. Fallback to max fill (word boundary)
                               const lastSpace = reason.substring(0, limit - 3).lastIndexOf(' ');
                               return reason.substring(0, lastSpace) + '...';
                             }
@@ -3177,17 +3179,19 @@ function App() {
                                       const text = point.detail;
                                       if (!text) return '';
                                       const limit = 85;
+                                      const minFill = limit * 0.5;
+
                                       if (text.length <= limit) return text;
 
-                                      // 1. Prioritize ANY period
+                                      // 1. Prioritize period if it fills enough space
                                       const lastPeriod = text.substring(0, limit).lastIndexOf('.');
-                                      if (lastPeriod > 15) return text.substring(0, lastPeriod + 1);
+                                      if (lastPeriod > minFill) return text.substring(0, lastPeriod + 1);
 
-                                      // 2. Comma
+                                      // 2. Comma near end
                                       const lastComma = text.substring(0, limit).lastIndexOf(',');
-                                      if (lastComma > 20) return text.substring(0, lastComma) + '...';
+                                      if (lastComma > minFill) return text.substring(0, lastComma) + '...';
 
-                                      // 3. Fallback
+                                      // 3. Fallback to space
                                       const lastSpace = text.substring(0, limit - 3).lastIndexOf(' ');
                                       return text.substring(0, lastSpace) + '...';
                                     })()}
