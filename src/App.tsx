@@ -3070,20 +3070,41 @@ function App() {
 
                       {/* Info Section */}
                       <div style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {/* Top Languages Bar */}
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          {(selectedReport.metadata?.userStats?.languages || []).slice(0, 4).map((lang: string, i: number) => (
-                            <span key={i} style={{
+                        {/* Skills & Languages */}
+                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                          {/* Languages first */}
+                          {(selectedReport.metadata?.userStats?.languages || []).slice(0, 6).map((lang: string, i: number) => (
+                            <span key={`lang-${i}`} style={{
                               background: a.accent,
                               color: bg,
-                              padding: '3px 8px',
+                              padding: '3px 7px',
                               borderRadius: '4px',
-                              fontSize: '9px',
+                              fontSize: '8px',
                               fontWeight: 700
                             }}>
                               {lang}
                             </span>
                           ))}
+                          {/* Then verified skills */}
+                          {(selectedReport.verified_skills || []).slice(0, 4).map((skill: any, i: number) => {
+                            const name = typeof skill === 'string' ? skill : skill.name;
+                            // Skip if already shown as language
+                            const langs = (selectedReport.metadata?.userStats?.languages || []).map((l: string) => l.toLowerCase());
+                            if (langs.includes(name?.toLowerCase())) return null;
+                            return (
+                              <span key={`skill-${i}`} style={{
+                                background: 'transparent',
+                                color: a.accent,
+                                padding: '3px 7px',
+                                borderRadius: '4px',
+                                fontSize: '8px',
+                                fontWeight: 700,
+                                border: `1px solid ${a.accent}`
+                              }}>
+                                {name}
+                              </span>
+                            );
+                          })}
                         </div>
 
                         {/* Rarity Tier Box */}
