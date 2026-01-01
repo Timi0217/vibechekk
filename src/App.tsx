@@ -3036,7 +3036,13 @@ function App() {
                           {(() => {
                             const reason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
                             if (reason) {
-                              return reason.length > 180 ? reason.substring(0, 180) + '...' : reason;
+                              if (reason.length <= 180) return reason;
+                              // Try to end at a sentence boundary within limits
+                              const lastPeriod = reason.substring(0, 180).lastIndexOf('.');
+                              if (lastPeriod > 100) return reason.substring(0, lastPeriod + 1);
+                              // Fallback to word boundary
+                              const lastSpace = reason.substring(0, 177).lastIndexOf(' ');
+                              return reason.substring(0, lastSpace) + '...';
                             }
                             const archetype = (selectedReport.label || selectedReport.archetype || 'Developer').replace(/^THE\s+/i, '');
                             return `Classified as ${archetype} based on repository analysis, code patterns, and development activity.`;
@@ -3157,7 +3163,17 @@ function App() {
                                 </div>
                                 {point.detail && (
                                   <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '3px', lineHeight: 1.3 }}>
-                                    {point.detail.substring(0, 45)}{point.detail.length > 45 ? '...' : ''}
+                                    {(() => {
+                                      const text = point.detail;
+                                      if (!text) return '';
+                                      if (text.length <= 60) return text;
+                                      // Ends with period?
+                                      const lastPeriod = text.substring(0, 60).lastIndexOf('.');
+                                      if (lastPeriod > 30) return text.substring(0, lastPeriod + 1);
+                                      // Word boundary
+                                      const lastSpace = text.substring(0, 57).lastIndexOf(' ');
+                                      return text.substring(0, lastSpace) + '...';
+                                    })()}
                                   </div>
                                 )}
                               </div>
@@ -3170,147 +3186,7 @@ function App() {
                 );
               })()}
 
-              {/* Back of Card Template */}
-              {(() => {
-                const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
-                const tierAccents: Record<string, { accent: string }> = {
-                  'LEGENDARY': { accent: '#f59e0b' },
-                  'ULTRA RARE': { accent: '#a855f7' },
-                  'RARE': { accent: '#3b82f6' },
-                  'UNCOMMON': { accent: '#10b981' },
-                  'COMMON': { accent: '#6b7280' }
-                };
-                const a = tierAccents[tier] || tierAccents['COMMON'];
 
-                const bg = '#0d1117';
-                const bgLight = '#161b22';
-                const border = '#30363d';
-
-                const skills = selectedReport.metadata?.verified_skills || [];
-                const highlights = selectedReport.meritPoints || [];
-                const archetypeReason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
-
-                return (
-                  <div id="vibe-card-back-template" style={{
-                    position: 'fixed',
-                    left: '-9999px',
-                    top: 0,
-                    width: '400px',
-                    height: '560px',
-                    background: bg,
-                    padding: '6px',
-                    boxSizing: 'border-box',
-                    fontFamily: "'Inter', 'Segoe UI', sans-serif"
-                  }}>
-                    <div style={{
-                      width: '100%',
-                      height: '100%',
-                      border: `3px solid ${a.accent}`,
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      background: bg
-                    }}>
-                      {/* Header */}
-                      <div style={{
-                        background: bgLight,
-                        padding: '14px 18px',
-                        textAlign: 'center',
-                        borderBottom: `2px solid ${a.accent}`
-                      }}>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: '#ffffff' }}>
-                          {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer'}
-                        </div>
-                        <div style={{ fontSize: '10px', fontWeight: 700, color: a.accent, letterSpacing: '2px', marginTop: '4px' }}>
-                          DEVELOPER PROFILE
-                        </div>
-                      </div>
-
-                      {/* Content Area */}
-                      <div style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px', overflow: 'hidden' }}>
-
-                        {/* Verified Skills */}
-                        {skills.length > 0 && (
-                          <div style={{
-                            background: bgLight,
-                            borderRadius: '8px',
-                            padding: '10px 12px'
-                          }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '8px' }}>
-                              ✓ VERIFIED SKILLS
-                            </div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {skills.slice(0, 6).map((skill: any, i: number) => {
-                                const name = typeof skill === 'string' ? skill.split('|')[0] : (skill.name || skill);
-                                return (
-                                  <span key={i} style={{
-                                    background: a.accent,
-                                    color: '#0d1117',
-                                    padding: '5px 10px',
-                                    borderRadius: '6px',
-                                    fontSize: '10px',
-                                    fontWeight: 700
-                                  }}>
-                                    {name}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Highlights */}
-                        {highlights.length > 0 && (
-                          <div style={{
-                            background: bgLight,
-                            borderRadius: '8px',
-                            padding: '10px 12px',
-                            flex: 1,
-                            overflow: 'hidden'
-                          }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '8px' }}>
-                              ★ HIGHLIGHTS
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {highlights.slice(0, 3).map((point: any, i: number) => (
-                                <div key={i} style={{
-                                  fontSize: '11px',
-                                  color: '#e6edf3',
-                                  lineHeight: 1.4,
-                                  paddingLeft: '10px',
-                                  borderLeft: `3px solid ${a.accent}`
-                                }}>
-                                  <span style={{ fontWeight: 700 }}>{point.title || point}</span>
-                                  {point.detail && (
-                                    <span style={{ opacity: 0.7, display: 'block', fontSize: '9px', marginTop: '2px' }}>
-                                      {point.detail.substring(0, 55)}...
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Footer */}
-                      <div style={{
-                        background: bgLight,
-                        padding: '10px 16px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        borderTop: `1px solid ${border}`
-                      }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: a.accent }}>
-                          vibechekk.dev
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
 
 
               <button
@@ -3321,29 +3197,21 @@ function App() {
                     setActiveTab('settings');
                   } else {
                     const frontElement = document.getElementById('vibe-card-template');
-                    const backElement = document.getElementById('vibe-card-back-template');
-                    if (!frontElement || !backElement) return;
+                    if (!frontElement) return;
 
                     const btn = document.querySelector('.download-card-btn') as HTMLElement;
                     const originalText = btn.innerHTML;
                     btn.innerText = 'GENERATING PDF...';
 
                     try {
-                      // Capture front of card
+                      // Capture card (front only now)
                       const frontCanvas = await html2canvas(frontElement, {
                         scale: 2,
                         useCORS: true,
                         backgroundColor: null
                       });
 
-                      // Capture back of card
-                      const backCanvas = await html2canvas(backElement, {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: null
-                      });
-
-                      // Create 2-page PDF
+                      // Create 1-page PDF
                       const { jsPDF } = await import('jspdf');
                       const pdf = new jsPDF({
                         orientation: 'portrait',
@@ -3351,14 +3219,8 @@ function App() {
                         format: [63.5, 88.9]
                       });
 
-                      // Page 1: Front
                       const frontImg = frontCanvas.toDataURL('image/png');
                       pdf.addImage(frontImg, 'PNG', 0, 0, 63.5, 88.9);
-
-                      // Page 2: Back
-                      pdf.addPage([63.5, 88.9], 'portrait');
-                      const backImg = backCanvas.toDataURL('image/png');
-                      pdf.addImage(backImg, 'PNG', 0, 0, 63.5, 88.9);
 
                       pdf.save(`VibeCard-${selectedReport.candidate?.githubHandle || 'Dev'}.pdf`);
 
