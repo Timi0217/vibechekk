@@ -99,18 +99,19 @@ const getRarityClass = (rarity: string) => {
   return 'common';
 }
 
-// Map archetype labels to their rarity tiers (fallback when rarity not set)
+// Map archetype labels to their rarity tiers (matches UI badge colors)
 const getRarityFromLabel = (label: string): string => {
   const l = label?.toUpperCase() || '';
-  // LEGENDARY tier
-  if (l.includes('TITAN') || l.includes('PIONEER') || l.includes('VISIONARY')) return 'LEGENDARY';
-  // ULTRA RARE tier
-  if (l.includes('ARCHITECT') || l.includes('PRODIGY') || l.includes('SPECIALIST')) return 'ULTRA RARE';
-  // RARE tier
-  if (l.includes('HIDDEN GEM') || l.includes('MAINTAINER') || l.includes('CONTRIBUTOR')) return 'RARE';
-  // UNCOMMON tier
-  if (l.includes('BUILDER') || l.includes('CRAFTSPERSON') || l.includes('TINKERER')) return 'UNCOMMON';
-  // COMMON tier
+  // LEGENDARY tier - Amber #f59e0b
+  if (l.includes('10X') || l.includes('PROFESSOR')) return 'LEGENDARY';
+  // ULTRA RARE tier - Purple #a855f7
+  if (l.includes('ARCHITECT')) return 'ULTRA RARE';
+  // RARE tier - Blue #3b82f6
+  if (l.includes('SPECIALIST') || l.includes('SYSTEMS THINKER') || l.includes('MAINTAINER') || l.includes('HIDDEN GEM')) return 'RARE';
+  // UNCOMMON tier - Green #22c55e
+  if (l.includes('BUILDER') || l.includes('CONTRIBUTOR') || l.includes('CRAFTSPERSON') || l.includes('TINKERER')) return 'UNCOMMON';
+  // COMMON tier - Stone #78716c
+  if (l.includes('GRINDER') || l.includes('HOBBYIST') || l.includes('EXPLORER') || l.includes('APPRENTICE')) return 'COMMON';
   return 'COMMON';
 }
 
