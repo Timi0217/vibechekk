@@ -3039,12 +3039,20 @@ function App() {
                             reason = reason.replace(/Classified as THE /i, 'Classified as ');
 
                             if (reason) {
-                              if (reason.length <= 180) return reason;
-                              // Try to end at a sentence boundary within limits
-                              const lastPeriod = reason.substring(0, 180).lastIndexOf('.');
-                              if (lastPeriod > 100) return reason.substring(0, lastPeriod + 1);
-                              // Fallback to word boundary
-                              const lastSpace = reason.substring(0, 177).lastIndexOf(' ');
+                              const limit = 210; // Increased limit
+                              if (reason.length <= limit) return reason;
+
+                              // 1. Try to cut at the last period within limit
+                              const lastPeriod = reason.substring(0, limit).lastIndexOf('.');
+                              // If we have a decent chunk ending in a period, take it
+                              if (lastPeriod > limit * 0.6) return reason.substring(0, lastPeriod + 1);
+
+                              // 2. If no good period, try to cut at the last comma (clause boundary)
+                              const lastComma = reason.substring(0, limit).lastIndexOf(',');
+                              if (lastComma > limit * 0.6) return reason.substring(0, lastComma) + '...';
+
+                              // 3. Fallback to space
+                              const lastSpace = reason.substring(0, limit - 3).lastIndexOf(' ');
                               return reason.substring(0, lastSpace) + '...';
                             }
                             const archetype = (selectedReport.label || selectedReport.archetype || 'Developer').replace(/^THE\s+/i, '');
@@ -3169,12 +3177,19 @@ function App() {
                                     {(() => {
                                       const text = point.detail;
                                       if (!text) return '';
-                                      if (text.length <= 60) return text;
-                                      // Ends with period?
-                                      const lastPeriod = text.substring(0, 60).lastIndexOf('.');
-                                      if (lastPeriod > 30) return text.substring(0, lastPeriod + 1);
-                                      // Word boundary
-                                      const lastSpace = text.substring(0, 57).lastIndexOf(' ');
+                                      const limit = 85; // Increased from 60
+                                      if (text.length <= limit) return text;
+
+                                      // 1. Ends with period?
+                                      const lastPeriod = text.substring(0, limit).lastIndexOf('.');
+                                      if (lastPeriod > limit * 0.5) return text.substring(0, lastPeriod + 1);
+
+                                      // 2. Ends with comma?
+                                      const lastComma = text.substring(0, limit).lastIndexOf(',');
+                                      if (lastComma > limit * 0.5) return text.substring(0, lastComma) + '...';
+
+                                      // 3. Word boundary
+                                      const lastSpace = text.substring(0, limit - 3).lastIndexOf(' ');
                                       return text.substring(0, lastSpace) + '...';
                                     })()}
                                   </div>
