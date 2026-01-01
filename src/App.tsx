@@ -1832,6 +1832,7 @@ function App() {
                       id: searchId,
                       title: checklistForm.jobTitle || 'Untitled Search',
                       status: 'running',
+                      progressMessage: '🔍 Initializing search...',
                       timestamp: Date.now(),
                       results: []
                     };
@@ -1843,6 +1844,22 @@ function App() {
                       const tokenData = await chrome.storage.local.get('vibe_token');
                       const token = tokenData.vibe_token;
 
+                      // Update progress: Searching GitHub
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, progressMessage: '🔎 Searching GitHub for developers...' }
+                          : s
+                      ));
+
+                      await new Promise(r => setTimeout(r, 500)); // Small delay for UX
+
+                      // Update progress: Analyzing profiles
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, progressMessage: '📊 Analyzing candidate profiles...' }
+                          : s
+                      ));
+
                       const res = await fetch(`${BACKEND_URL}/api/chekklist/search`, {
                         method: 'POST',
                         headers: {
@@ -1851,6 +1868,14 @@ function App() {
                         },
                         body: JSON.stringify(checklistForm)
                       });
+
+                      // Update progress: Ranking matches
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, progressMessage: '🧠 AI ranking candidates by fit...' }
+                          : s
+                      ));
+
                       const data = await res.json();
 
                       if (data.success) {
@@ -1925,8 +1950,14 @@ function App() {
                             </div>
                           ) : (
                             <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></div>
-                              Running...
+                              <div style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                background: '#22c55e',
+                                animation: 'pulse 1.5s ease-in-out infinite'
+                              }}></div>
+                              <span>{s.progressMessage || 'Processing...'}</span>
                             </div>
                           )}
                         </div>
