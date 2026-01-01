@@ -2942,8 +2942,8 @@ function App() {
                     top: 0,
                     width: '400px',
                     height: '560px',
-                    background: bg,
-                    padding: '6px',
+                    background: '#f8f9fa',  // Light cream/white background for volume
+                    padding: '12px',
                     boxSizing: 'border-box',
                     fontFamily: "'Inter', 'Segoe UI', sans-serif"
                   }}>
