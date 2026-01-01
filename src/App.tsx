@@ -2994,7 +2994,7 @@ function App() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                             <span style={{ fontSize: '10px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px' }}>
-                              {tier}
+                              {(selectedReport.label || selectedReport.archetype || 'DEVELOPER').replace(/^THE\s+/i, '').toUpperCase()}
                             </span>
                             {/* Icon */}
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={a.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3086,7 +3086,7 @@ function App() {
                           ))}
                         </div>
 
-                        {/* Archetype Box with Percentile */}
+                        {/* Rarity Tier Box */}
                         <div style={{
                           background: bgLight,
                           borderRadius: '6px',
@@ -3097,13 +3097,13 @@ function App() {
                           alignItems: 'center'
                         }}>
                           <div>
-                            <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px' }}>ARCHETYPE</div>
+                            <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px' }}>RARITY TIER</div>
                             <div style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', marginTop: '2px' }}>
-                              {(selectedReport.label || selectedReport.archetype || 'Developer').replace(/^THE\s+/i, '')}
+                              {tier}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '8px', fontWeight: 700, color: '#8b949e', letterSpacing: '1px' }}>RARITY</div>
+                            <div style={{ fontSize: '8px', fontWeight: 700, color: '#8b949e', letterSpacing: '1px' }}>PERCENTILE</div>
                             <div style={{ fontSize: '11px', fontWeight: 700, color: a.accent, marginTop: '2px' }}>
                               {selectedReport.rarity_percentile || (() => {
                                 const t = tier;
