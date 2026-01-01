@@ -2992,19 +2992,30 @@ function App() {
                         </div>
                         <div style={{
                           background: 'rgba(0,0,0,0.25)',
-                          borderRadius: '10px',
-                          padding: '6px 12px',
-                          textAlign: 'center'
+                          borderRadius: '12px',
+                          padding: '8px 10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}>
-                          <div style={{ fontSize: '26px', fontWeight: 900, color: 'white', lineHeight: 1 }}>
+                          <span style={{ fontSize: '32px' }}>
                             {(() => {
-                              const qScore = selectedReport.metadata?.quality_score;
-                              if (qScore && qScore > 0) return Math.min(99, Math.ceil(qScore * 10));
-                              const stars = selectedReport.star_count || 0;
-                              return Math.min(99, 40 + Math.min(59, stars * 2));
+                              // Map archetype/tier to icon
+                              const label = (selectedReport.label || selectedReport.archetype || '').toLowerCase();
+                              if (label.includes('titan') || label.includes('pioneer')) return '🏆';
+                              if (label.includes('architect') || label.includes('visionary')) return '🔮';
+                              if (label.includes('prodigy') || label.includes('specialist')) return '⚡';
+                              if (label.includes('hidden gem') || label.includes('gem')) return '💎';
+                              if (label.includes('maintainer') || label.includes('contributor')) return '🔧';
+                              if (label.includes('builder') || label.includes('craftsperson')) return '🛠️';
+                              if (label.includes('tinkerer') || label.includes('experimenter')) return '🔬';
+                              if (tier === 'LEGENDARY') return '🏆';
+                              if (tier === 'ULTRA RARE') return '💎';
+                              if (tier === 'RARE') return '⚡';
+                              if (tier === 'UNCOMMON') return '🛠️';
+                              return '💻';
                             })()}
-                          </div>
-                          <div style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '1px' }}>VIBE</div>
+                          </span>
                         </div>
                       </div>
 
