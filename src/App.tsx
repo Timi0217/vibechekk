@@ -2966,7 +2966,7 @@ function App() {
                         borderBottom: `2px solid ${a.accent}`
                       }}>
                         <div style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff' }}>
-                          {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
+                          {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer'}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                           <span style={{ fontSize: '11px', fontWeight: 700, color: a.accent, letterSpacing: '2px' }}>
@@ -3169,7 +3169,7 @@ function App() {
                         borderBottom: `2px solid ${a.accent}`
                       }}>
                         <div style={{ fontSize: '18px', fontWeight: 900, color: '#ffffff' }}>
-                          {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
+                          {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer'}
                         </div>
                         <div style={{ fontSize: '10px', fontWeight: 700, color: a.accent, letterSpacing: '2px', marginTop: '4px' }}>
                           DEVELOPER PROFILE
