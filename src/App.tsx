@@ -2941,7 +2941,7 @@ function App() {
                     left: '-9999px',
                     top: 0,
                     width: '400px',
-                    height: '560px',
+                    height: '600px',
                     background: bg,
                     padding: '6px',
                     boxSizing: 'border-box',
@@ -3230,15 +3230,16 @@ function App() {
 
                       {/* Footer */}
                       <div style={{
-                        padding: '10px 16px',
+                        padding: '8px 16px',
                         textAlign: 'center',
                         background: bgLight,
-                        borderTop: `1px solid ${border}`
+                        borderTop: `1px solid ${border}`,
+                        marginTop: 'auto'
                       }}>
                         <div style={{
                           fontSize: '8px',
                           fontWeight: 700,
-                          color: '#8b949e', // Use lighter gray for contrast on dark bg
+                          color: '#8b949e',
                           letterSpacing: '1px',
                           textTransform: 'uppercase'
                         }}>
