@@ -3243,7 +3243,7 @@ function App() {
                           letterSpacing: '1px',
                           textTransform: 'uppercase'
                         }}>
-                          VIEW FULL PROFILE AT VIBECHEKK.DEV/@{(selectedReport.candidate?.githubHandle || 'dev').toLowerCase()}
+                          VIEW FULL PROFILE AT VIBECHEKK.DEV/{(selectedReport.candidate?.githubHandle || 'dev').toLowerCase()}
                         </div>
                       </div>
                     </div>
