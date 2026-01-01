@@ -3202,14 +3202,20 @@ function App() {
                           </div>
                         )}
 
+                      </div>
+
+                      {/* Footer */}
+                      <div style={{
+                        padding: '10px 16px',
+                        textAlign: 'center',
+                        background: bgLight,
+                        borderTop: `1px solid ${border}`
+                      }}>
                         <div style={{
-                          marginTop: 'auto',
-                          textAlign: 'center',
                           fontSize: '8px',
                           fontWeight: 700,
-                          color: '#4b5563',
-                          letterSpacing: '0.5px',
-                          paddingTop: '8px',
+                          color: '#8b949e', // Use lighter gray for contrast on dark bg
+                          letterSpacing: '1px',
                           textTransform: 'uppercase'
                         }}>
                           VIEW FULL PROFILE AT VIBECHEKK.DEV/@{(selectedReport.candidate?.githubHandle || 'dev').toLowerCase()}
@@ -4505,8 +4511,9 @@ function App() {
               </div>
             )}
           </>
-        )}
-      </main>
+        )
+        }
+      </main >
 
       {/* Invite Friends Modal */}
       {
