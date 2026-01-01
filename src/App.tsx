@@ -3064,36 +3064,77 @@ function App() {
                       </div>
 
                       {/* Info Section */}
-                      <div style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {/* Archetype Box */}
+                      <div style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {/* Top Languages Bar */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {(selectedReport.metadata?.userStats?.languages || []).slice(0, 4).map((lang: string, i: number) => (
+                            <span key={i} style={{
+                              background: a.accent,
+                              color: bg,
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontSize: '9px',
+                              fontWeight: 700
+                            }}>
+                              {lang}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Archetype Box with Percentile */}
                         <div style={{
                           background: bgLight,
-                          borderRadius: '8px',
-                          padding: '12px 14px',
-                          border: `1px solid ${a.accent}`
+                          borderRadius: '6px',
+                          padding: '10px 12px',
+                          border: `1px solid ${a.accent}`,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
                         }}>
-                          <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '2px', marginBottom: '4px' }}>
-                            ARCHETYPE
+                          <div>
+                            <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px' }}>ARCHETYPE</div>
+                            <div style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', marginTop: '2px' }}>
+                              {(selectedReport.label || selectedReport.archetype || 'Developer').replace(/^THE\s+/i, '')}
+                            </div>
                           </div>
-                          <div style={{ fontSize: '18px', fontWeight: 800, color: '#ffffff' }}>
-                            {selectedReport.label || selectedReport.archetype || 'Developer'}
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '8px', fontWeight: 700, color: '#8b949e', letterSpacing: '1px' }}>RARITY</div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: a.accent, marginTop: '2px' }}>
+                              {selectedReport.rarity_percentile || (() => {
+                                const t = tier;
+                                if (t === 'LEGENDARY') return 'Top 1%';
+                                if (t === 'ULTRA RARE') return 'Top 5%';
+                                if (t === 'RARE') return 'Top 15%';
+                                if (t === 'UNCOMMON') return 'Top 30%';
+                                return 'Top 50%';
+                              })()}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Signature Trait */}
-                        {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
-                          <div style={{
-                            background: bgLight,
-                            borderRadius: '6px',
-                            padding: '10px 12px',
-                            borderLeft: `3px solid ${a.accent}`
-                          }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1px', marginBottom: '3px' }}>
-                              ★ SIGNATURE TRAIT
-                            </div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#e6edf3', lineHeight: 1.4 }}>
-                              {selectedReport.meritPoints[0].title || (typeof selectedReport.meritPoints[0] === 'string' ? selectedReport.meritPoints[0] : 'Code Excellence')}
-                            </div>
+                        {/* Signature Traits (show 2) */}
+                        {selectedReport.meritPoints && selectedReport.meritPoints.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {selectedReport.meritPoints.slice(0, 2).map((point: any, i: number) => (
+                              <div key={i} style={{
+                                background: bgLight,
+                                borderRadius: '5px',
+                                padding: '8px 10px',
+                                borderLeft: `3px solid ${a.accent}`
+                              }}>
+                                <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1px', marginBottom: '2px' }}>
+                                  {i === 0 ? '★ KEY STRENGTH' : '◆ HIGHLIGHT'}
+                                </div>
+                                <div style={{ fontSize: '11px', fontWeight: 600, color: '#e6edf3', lineHeight: 1.3 }}>
+                                  {point.title || (typeof point === 'string' ? point : 'Excellence')}
+                                </div>
+                                {point.detail && (
+                                  <div style={{ fontSize: '9px', color: '#8b949e', marginTop: '2px', lineHeight: 1.3 }}>
+                                    {point.detail.substring(0, 50)}{point.detail.length > 50 ? '...' : ''}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
