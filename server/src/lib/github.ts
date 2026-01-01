@@ -34,17 +34,22 @@ export const fetchUserStats = async (token: string, username: string) => {
   `;
 
   try {
-    const response: any = await octokit.graphql(query, {
-      username,
-      from: last90Days.toISOString()
-    });
+    const [gqlResponse, searchResponse] = await Promise.all([
+      octokit.graphql(query, {
+        username,
+        from: last90Days.toISOString()
+      }),
+      octokit.rest.search.repos({ q: `user:${username} fork:false` })
+    ]);
+
+    const response: any = gqlResponse;
     if (!response.user) return null;
 
     const repos = response.user.repositories.nodes;
 
     return {
       totalStars: repos.reduce((sum: number, r: any) => sum + r.stargazerCount, 0),
-      totalRepos: repos.filter((r: any) => !r.isFork).length,
+      totalRepos: searchResponse.data.total_count,
       totalCommits: response.user.contributionsCollection.totalCommitContributions,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.totalCommitContributions,
