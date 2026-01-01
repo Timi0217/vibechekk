@@ -38,6 +38,8 @@ model Candidate {
   githubHandle  String
   lastCheckedAt DateTime     @default(now())
   reports       VibeReport[]
+
+  @@index([githubHandle])
 }
 
 model VibeReport {
@@ -57,6 +59,10 @@ model VibeReport {
   recruiterSummary  String?
   candidate         Candidate @relation(fields: [candidateId], references: [id])
   user              User?     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([candidateId])
+  @@index([createdAt])
 }
 
 enum SubscriptionTier {
