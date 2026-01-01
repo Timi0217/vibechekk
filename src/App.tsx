@@ -3201,6 +3201,19 @@ function App() {
                             ))}
                           </div>
                         )}
+
+                        <div style={{
+                          marginTop: 'auto',
+                          textAlign: 'center',
+                          fontSize: '8px',
+                          fontWeight: 700,
+                          color: '#4b5563',
+                          letterSpacing: '0.5px',
+                          paddingTop: '8px',
+                          textTransform: 'uppercase'
+                        }}>
+                          VIEW FULL PROFILE AT VIBECHEKK.DEV/@{(selectedReport.candidate?.githubHandle || 'dev').toLowerCase()}
+                        </div>
                       </div>
                     </div>
                   </div>
