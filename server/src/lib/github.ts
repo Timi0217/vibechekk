@@ -21,7 +21,7 @@ export const fetchUserStats = async (token: string, username: string) => {
           totalCommitContributions
           restrictedContributionsCount
         }
-        repositories(first: 100, privacy: PUBLIC, orderBy: {field: STARGAZERS, direction: DESC}) {
+        repositories(first: 100, ownerAffiliations: OWNER, privacy: PUBLIC, orderBy: {field: STARGAZERS, direction: DESC}) {
           totalCount
           nodes {
             stargazerCount

@@ -3082,7 +3082,7 @@ function App() {
                       }}>
                         {[
                           { label: 'REPOS', value: selectedReport.metadata?.userStats?.totalRepos || '0' },
-                          { label: 'STARS', value: selectedReport.star_count || selectedReport.metadata?.userStats?.totalStars || '0' },
+                          { label: 'STARS', value: selectedReport.metadata?.userStats?.totalStars || selectedReport.star_count || '0' },
                           { label: 'COMMITS', value: selectedReport.metadata?.userStats?.totalCommits || '0' }
                         ].map((stat, i) => (
                           <div key={i} style={{
