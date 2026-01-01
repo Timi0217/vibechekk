@@ -2944,7 +2944,11 @@ function App() {
                   }
                 };
 
-                const tier = selectedReport.tier?.toUpperCase() || 'COMMON';
+                // Get tier from report, fallback to deriving from label
+                let tier = selectedReport.tier?.toUpperCase() || '';
+                if (!tier || tier === 'UNKNOWN' || tier === 'UNDEFINED') {
+                  tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
+                }
                 const theme = tierThemes[tier] || tierThemes['COMMON'];
 
                 return (
