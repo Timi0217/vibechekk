@@ -2918,36 +2918,35 @@ function App() {
 
               {/* Hidden Vibe Card Template for PDF Generation */}
               {(() => {
-                // Tier-based color schemes (solid colors that render in html2canvas)
+                // Modern tier color schemes
                 const tierThemes: Record<string, {
-                  bgTop: string; bgBottom: string; border: string;
-                  headerBg: string; accent: string; text: string; badge: string
+                  bg1: string; bg2: string; accent: string; accentLight: string;
+                  glow: string; text: string; textMuted: string
                 }> = {
                   'LEGENDARY': {
-                    bgTop: '#2d1f00', bgBottom: '#1a1400', border: '#f59e0b',
-                    headerBg: '#f59e0b', accent: '#fcd34d', text: '#fef3c7', badge: '🏆 LEGENDARY'
+                    bg1: '#1a1408', bg2: '#0d0a04', accent: '#f59e0b', accentLight: '#fcd34d',
+                    glow: '#f59e0b', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)'
                   },
                   'ULTRA RARE': {
-                    bgTop: '#2d1a4a', bgBottom: '#1a0f2e', border: '#8b5cf6',
-                    headerBg: '#8b5cf6', accent: '#c4b5fd', text: '#ede9fe', badge: '💎 ULTRA RARE'
+                    bg1: '#1a0f2e', bg2: '#0d0818', accent: '#a855f7', accentLight: '#c4b5fd',
+                    glow: '#a855f7', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)'
                   },
                   'RARE': {
-                    bgTop: '#0c2341', bgBottom: '#061424', border: '#3b82f6',
-                    headerBg: '#3b82f6', accent: '#93c5fd', text: '#dbeafe', badge: '⚡ RARE'
+                    bg1: '#0a1628', bg2: '#050b14', accent: '#3b82f6', accentLight: '#93c5fd',
+                    glow: '#3b82f6', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)'
                   },
                   'UNCOMMON': {
-                    bgTop: '#0a2918', bgBottom: '#051a0f', border: '#10b981',
-                    headerBg: '#10b981', accent: '#6ee7b7', text: '#d1fae5', badge: '✦ UNCOMMON'
+                    bg1: '#0a1f14', bg2: '#05100a', accent: '#10b981', accentLight: '#6ee7b7',
+                    glow: '#10b981', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)'
                   },
                   'COMMON': {
-                    bgTop: '#1e293b', bgBottom: '#0f172a', border: '#64748b',
-                    headerBg: '#64748b', accent: '#cbd5e1', text: '#e2e8f0', badge: '● COMMON'
+                    bg1: '#1a1d24', bg2: '#0d0f12', accent: '#64748b', accentLight: '#94a3b8',
+                    glow: '#64748b', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)'
                   }
                 };
 
-                // ALWAYS derive tier from label to ensure card color matches archetype
                 const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
-                const theme = tierThemes[tier] || tierThemes['COMMON'];
+                const t = tierThemes[tier] || tierThemes['COMMON'];
 
                 return (
                   <div id="vibe-card-template" style={{
@@ -2956,77 +2955,102 @@ function App() {
                     top: 0,
                     width: '400px',
                     height: '560px',
-                    background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`,
-                    padding: '8px',
+                    background: `linear-gradient(160deg, ${t.bg1} 0%, ${t.bg2} 100%)`,
+                    padding: '3px',
                     boxSizing: 'border-box',
-                    fontFamily: "'Inter', 'Segoe UI', sans-serif"
+                    fontFamily: "'Inter', 'SF Pro Display', -apple-system, sans-serif",
+                    borderRadius: '24px'
                   }}>
-                    {/* Card Frame */}
+                    {/* Outer glow border */}
                     <div style={{
                       width: '100%',
                       height: '100%',
-                      border: `6px solid ${theme.border}`,
-                      borderRadius: '16px',
+                      background: `linear-gradient(160deg, ${t.bg1} 0%, ${t.bg2} 100%)`,
+                      borderRadius: '22px',
+                      border: `2px solid ${t.accent}40`,
                       overflow: 'hidden',
                       display: 'flex',
                       flexDirection: 'column',
-                      background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`
+                      boxShadow: `inset 0 1px 0 ${t.accent}20, 0 0 60px ${t.glow}15`
                     }}>
-                      {/* Header Bar */}
+
+                      {/* Top Section - Name & Tier */}
                       <div style={{
-                        background: theme.headerBg,
-                        padding: '12px 16px'
+                        padding: '20px 24px 16px',
+                        borderBottom: `1px solid ${t.accent}20`
                       }}>
-                        <div style={{ fontSize: '22px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                        <div style={{
+                          fontSize: '28px',
+                          fontWeight: 800,
+                          color: t.text,
+                          letterSpacing: '-0.5px',
+                          lineHeight: 1.1
+                        }}>
                           {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
                         </div>
-                        <div style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(0,0,0,0.5)', letterSpacing: '1px', marginTop: '2px' }}>
+                        <div style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: t.accent,
+                          letterSpacing: '2px',
+                          marginTop: '6px',
+                          textTransform: 'uppercase'
+                        }}>
                           {tier}
                         </div>
                       </div>
 
                       {/* Avatar Section */}
                       <div style={{
-                        flex: '0 0 180px',
+                        flex: '0 0 170px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: 'rgba(0,0,0,0.2)',
                         position: 'relative'
                       }}>
-                        {/* Corner decorations */}
-                        <div style={{ position: 'absolute', top: '8px', left: '8px', width: '20px', height: '20px', borderTop: `3px solid ${theme.border}`, borderLeft: `3px solid ${theme.border}` }} />
-                        <div style={{ position: 'absolute', top: '8px', right: '8px', width: '20px', height: '20px', borderTop: `3px solid ${theme.border}`, borderRight: `3px solid ${theme.border}` }} />
-                        <div style={{ position: 'absolute', bottom: '8px', left: '8px', width: '20px', height: '20px', borderBottom: `3px solid ${theme.border}`, borderLeft: `3px solid ${theme.border}` }} />
-                        <div style={{ position: 'absolute', bottom: '8px', right: '8px', width: '20px', height: '20px', borderBottom: `3px solid ${theme.border}`, borderRight: `3px solid ${theme.border}` }} />
-
+                        {/* Avatar glow ring */}
                         <div style={{
-                          width: '130px',
-                          height: '130px',
+                          position: 'absolute',
+                          width: '140px',
+                          height: '140px',
                           borderRadius: '50%',
-                          border: `5px solid ${theme.border}`,
-                          boxShadow: `0 0 0 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4)`,
-                          overflow: 'hidden',
-                          background: theme.headerBg
+                          background: `radial-gradient(circle, ${t.glow}30 0%, transparent 70%)`
+                        }} />
+
+                        {/* Avatar container */}
+                        <div style={{
+                          width: '120px',
+                          height: '120px',
+                          borderRadius: '50%',
+                          padding: '3px',
+                          background: `linear-gradient(135deg, ${t.accent}, ${t.accentLight})`,
+                          boxShadow: `0 4px 20px ${t.glow}40`
                         }}>
-                          <img
-                            src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
-                            crossOrigin="anonymous"
-                            alt="Avatar"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
+                          <div style={{
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            background: t.bg1
+                          }}>
+                            <img
+                              src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
+                              crossOrigin="anonymous"
+                              alt="Avatar"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      {/* Stats Bar */}
+                      {/* Stats Section */}
                       <div style={{
                         display: 'flex',
-                        background: theme.headerBg,
-                        borderTop: '2px solid rgba(0,0,0,0.2)',
-                        borderBottom: '2px solid rgba(0,0,0,0.2)'
+                        padding: '16px 20px',
+                        background: `${t.accent}08`,
+                        borderTop: `1px solid ${t.accent}15`,
+                        borderBottom: `1px solid ${t.accent}15`
                       }}>
                         {[
                           { label: 'REPOS', value: selectedReport.metadata?.userStats?.totalRepos || '0' },
@@ -3036,28 +3060,31 @@ function App() {
                           <div key={i} style={{
                             flex: 1,
                             textAlign: 'center',
-                            padding: '10px 0',
-                            borderRight: i < 2 ? '1px solid rgba(0,0,0,0.2)' : 'none'
+                            borderRight: i < 2 ? `1px solid ${t.accent}20` : 'none'
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(0,0,0,0.5)', letterSpacing: '1px' }}>{stat.label}</div>
-                            <div style={{ fontSize: '20px', fontWeight: 900, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>{stat.value}</div>
+                            <div style={{ fontSize: '10px', fontWeight: 600, color: t.textMuted, letterSpacing: '1px' }}>
+                              {stat.label}
+                            </div>
+                            <div style={{ fontSize: '22px', fontWeight: 800, color: t.text, marginTop: '2px' }}>
+                              {stat.value}
+                            </div>
                           </div>
                         ))}
                       </div>
 
-                      {/* Info Section */}
-                      <div style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {/* Archetype */}
+                      {/* Archetype & Trait Section */}
+                      <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {/* Archetype Card */}
                         <div style={{
-                          background: 'rgba(0,0,0,0.3)',
-                          borderRadius: '10px',
-                          padding: '12px 14px',
-                          border: `2px solid ${theme.border}`
+                          background: `linear-gradient(135deg, ${t.accent}15 0%, ${t.accent}05 100%)`,
+                          borderRadius: '14px',
+                          padding: '14px 16px',
+                          border: `1px solid ${t.accent}30`
                         }}>
-                          <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '2px', marginBottom: '4px' }}>
+                          <div style={{ fontSize: '9px', fontWeight: 700, color: t.accentLight, letterSpacing: '2px', marginBottom: '6px' }}>
                             ARCHETYPE
                           </div>
-                          <div style={{ fontSize: '18px', fontWeight: 800, color: 'white' }}>
+                          <div style={{ fontSize: '20px', fontWeight: 800, color: t.text, lineHeight: 1.2 }}>
                             {selectedReport.label || selectedReport.archetype || 'Developer'}
                           </div>
                         </div>
@@ -3065,15 +3092,15 @@ function App() {
                         {/* Signature Trait */}
                         {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.2)',
-                            borderRadius: '8px',
-                            padding: '10px 12px',
-                            borderLeft: `4px solid ${theme.border}`
+                            background: `${t.accent}08`,
+                            borderRadius: '12px',
+                            padding: '12px 14px',
+                            borderLeft: `3px solid ${t.accent}`
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '2px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accentLight, letterSpacing: '1px', marginBottom: '4px' }}>
                               ★ SIGNATURE TRAIT
                             </div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text, lineHeight: 1.3 }}>
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: t.text, lineHeight: 1.4 }}>
                               {selectedReport.meritPoints[0].title || (typeof selectedReport.meritPoints[0] === 'string' ? selectedReport.meritPoints[0] : 'Code Excellence')}
                             </div>
                           </div>
@@ -3082,19 +3109,19 @@ function App() {
 
                       {/* Footer */}
                       <div style={{
-                        background: 'rgba(0,0,0,0.4)',
-                        padding: '10px 16px',
+                        padding: '12px 20px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        borderTop: `2px solid ${theme.border}`
+                        borderTop: `1px solid ${t.accent}20`,
+                        background: `${t.accent}05`
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: 900, color: theme.border, letterSpacing: '2px' }}>VIBECHEKK</span>
-                        </div>
-                        <div style={{ fontSize: '11px', color: theme.accent, fontWeight: 600 }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: t.accent, letterSpacing: '3px' }}>
+                          VIBECHEKK
+                        </span>
+                        <span style={{ fontSize: '10px', color: t.textMuted, fontWeight: 600, fontFamily: 'monospace' }}>
                           #{selectedReport.id?.slice(-8).toUpperCase() || 'XXXXXXXX'}
-                        </div>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -3104,14 +3131,17 @@ function App() {
               {/* Back of Card Template */}
               {(() => {
                 const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
-                const tierThemes: Record<string, { bgTop: string; bgBottom: string; border: string; headerBg: string; accent: string; text: string }> = {
-                  'LEGENDARY': { bgTop: '#2d1f00', bgBottom: '#1a1400', border: '#f59e0b', headerBg: '#f59e0b', accent: '#fcd34d', text: '#fef3c7' },
-                  'ULTRA RARE': { bgTop: '#2d1a4a', bgBottom: '#1a0f2e', border: '#8b5cf6', headerBg: '#8b5cf6', accent: '#c4b5fd', text: '#ede9fe' },
-                  'RARE': { bgTop: '#0c2341', bgBottom: '#061424', border: '#3b82f6', headerBg: '#3b82f6', accent: '#93c5fd', text: '#dbeafe' },
-                  'UNCOMMON': { bgTop: '#0a2918', bgBottom: '#051a0f', border: '#10b981', headerBg: '#10b981', accent: '#6ee7b7', text: '#d1fae5' },
-                  'COMMON': { bgTop: '#1e293b', bgBottom: '#0f172a', border: '#64748b', headerBg: '#64748b', accent: '#cbd5e1', text: '#e2e8f0' }
+                const tierThemes: Record<string, {
+                  bg1: string; bg2: string; accent: string; accentLight: string;
+                  glow: string; text: string; textMuted: string
+                }> = {
+                  'LEGENDARY': { bg1: '#1a1408', bg2: '#0d0a04', accent: '#f59e0b', accentLight: '#fcd34d', glow: '#f59e0b', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)' },
+                  'ULTRA RARE': { bg1: '#1a0f2e', bg2: '#0d0818', accent: '#a855f7', accentLight: '#c4b5fd', glow: '#a855f7', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)' },
+                  'RARE': { bg1: '#0a1628', bg2: '#050b14', accent: '#3b82f6', accentLight: '#93c5fd', glow: '#3b82f6', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)' },
+                  'UNCOMMON': { bg1: '#0a1f14', bg2: '#05100a', accent: '#10b981', accentLight: '#6ee7b7', glow: '#10b981', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)' },
+                  'COMMON': { bg1: '#1a1d24', bg2: '#0d0f12', accent: '#64748b', accentLight: '#94a3b8', glow: '#64748b', text: '#ffffff', textMuted: 'rgba(255,255,255,0.6)' }
                 };
-                const theme = tierThemes[tier] || tierThemes['COMMON'];
+                const t = tierThemes[tier] || tierThemes['COMMON'];
 
                 const skills = selectedReport.metadata?.verified_skills || [];
                 const highlights = selectedReport.meritPoints || [];
@@ -3124,51 +3154,53 @@ function App() {
                     top: 0,
                     width: '400px',
                     height: '560px',
-                    background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`,
-                    padding: '8px',
+                    background: `linear-gradient(160deg, ${t.bg1} 0%, ${t.bg2} 100%)`,
+                    padding: '3px',
                     boxSizing: 'border-box',
-                    fontFamily: "'Inter', 'Segoe UI', sans-serif"
+                    fontFamily: "'Inter', 'SF Pro Display', -apple-system, sans-serif",
+                    borderRadius: '24px'
                   }}>
                     <div style={{
                       width: '100%',
                       height: '100%',
-                      border: `6px solid ${theme.border}`,
-                      borderRadius: '16px',
+                      background: `linear-gradient(160deg, ${t.bg1} 0%, ${t.bg2} 100%)`,
+                      borderRadius: '22px',
+                      border: `2px solid ${t.accent}40`,
                       overflow: 'hidden',
                       display: 'flex',
                       flexDirection: 'column',
-                      background: `linear-gradient(180deg, ${theme.bgTop} 0%, ${theme.bgBottom} 100%)`
+                      boxShadow: `inset 0 1px 0 ${t.accent}20, 0 0 60px ${t.glow}15`
                     }}>
                       {/* Header */}
                       <div style={{
-                        background: theme.headerBg,
-                        padding: '12px 16px',
+                        padding: '16px 20px',
+                        borderBottom: `1px solid ${t.accent}20`,
                         textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '16px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                        <div style={{ fontSize: '18px', fontWeight: 800, color: t.text, letterSpacing: '-0.3px' }}>
                           {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
                         </div>
-                        <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(0,0,0,0.5)' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 600, color: t.textMuted, letterSpacing: '2px', marginTop: '4px' }}>
                           DEVELOPER PROFILE
                         </div>
                       </div>
 
                       {/* Content Area */}
-                      <div style={{ flex: 1, padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px', overflow: 'hidden' }}>
 
                         {/* Archetype Reason */}
                         {archetypeReason && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.3)',
-                            borderRadius: '8px',
-                            padding: '10px 12px',
-                            border: `1px solid ${theme.border}40`
+                            background: `linear-gradient(135deg, ${t.accent}12 0%, ${t.accent}05 100%)`,
+                            borderRadius: '12px',
+                            padding: '12px 14px',
+                            border: `1px solid ${t.accent}25`
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accentLight, letterSpacing: '1.5px', marginBottom: '6px' }}>
                               WHY THIS ARCHETYPE
                             </div>
-                            <div style={{ fontSize: '11px', color: theme.text, lineHeight: 1.4, maxHeight: '48px', overflow: 'hidden' }}>
-                              {archetypeReason}
+                            <div style={{ fontSize: '11px', color: t.text, lineHeight: 1.5, opacity: 0.9 }}>
+                              {archetypeReason.length > 150 ? archetypeReason.substring(0, 150) + '...' : archetypeReason}
                             </div>
                           </div>
                         )}
@@ -3176,24 +3208,24 @@ function App() {
                         {/* Verified Skills */}
                         {skills.length > 0 && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.2)',
-                            borderRadius: '8px',
-                            padding: '10px 12px'
+                            background: `${t.accent}08`,
+                            borderRadius: '12px',
+                            padding: '12px 14px'
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '8px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accentLight, letterSpacing: '1.5px', marginBottom: '10px' }}>
                               ✓ VERIFIED SKILLS
                             </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {skills.slice(0, 8).map((skill: any, i: number) => {
+                              {skills.slice(0, 6).map((skill: any, i: number) => {
                                 const name = typeof skill === 'string' ? skill.split('|')[0] : (skill.name || skill);
                                 return (
                                   <span key={i} style={{
-                                    background: theme.headerBg,
-                                    color: 'white',
-                                    padding: '4px 8px',
-                                    borderRadius: '6px',
+                                    background: `linear-gradient(135deg, ${t.accent} 0%, ${t.accentLight} 100%)`,
+                                    color: t.bg1,
+                                    padding: '5px 10px',
+                                    borderRadius: '8px',
                                     fontSize: '10px',
-                                    fontWeight: 600
+                                    fontWeight: 700
                                   }}>
                                     {name}
                                   </span>
@@ -3206,28 +3238,28 @@ function App() {
                         {/* Highlights */}
                         {highlights.length > 0 && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.2)',
-                            borderRadius: '8px',
-                            padding: '10px 12px',
+                            background: `${t.accent}05`,
+                            borderRadius: '12px',
+                            padding: '12px 14px',
                             flex: 1,
                             overflow: 'hidden'
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, letterSpacing: '1px', marginBottom: '8px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accentLight, letterSpacing: '1.5px', marginBottom: '10px' }}>
                               ★ HIGHLIGHTS
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {highlights.slice(0, 4).map((point: any, i: number) => (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {highlights.slice(0, 3).map((point: any, i: number) => (
                                 <div key={i} style={{
-                                  fontSize: '10px',
-                                  color: theme.text,
-                                  lineHeight: 1.3,
-                                  paddingLeft: '8px',
-                                  borderLeft: `2px solid ${theme.border}`
+                                  fontSize: '11px',
+                                  color: t.text,
+                                  lineHeight: 1.4,
+                                  paddingLeft: '10px',
+                                  borderLeft: `2px solid ${t.accent}`
                                 }}>
                                   <span style={{ fontWeight: 700 }}>{point.title || point}</span>
                                   {point.detail && (
-                                    <span style={{ opacity: 0.8, display: 'block', fontSize: '9px' }}>
-                                      {point.detail.substring(0, 60)}...
+                                    <span style={{ opacity: 0.7, display: 'block', fontSize: '9px', marginTop: '2px' }}>
+                                      {point.detail.substring(0, 50)}...
                                     </span>
                                   )}
                                 </div>
@@ -3239,14 +3271,14 @@ function App() {
 
                       {/* Footer */}
                       <div style={{
-                        background: 'rgba(0,0,0,0.4)',
-                        padding: '10px 16px',
+                        padding: '12px 20px',
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        borderTop: `2px solid ${theme.border}`
+                        borderTop: `1px solid ${t.accent}20`,
+                        background: `${t.accent}05`
                       }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: theme.accent }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: t.accent, letterSpacing: '1px' }}>
                           vibechekk.dev
                         </span>
                       </div>
