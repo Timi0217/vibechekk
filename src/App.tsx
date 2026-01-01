@@ -2918,19 +2918,22 @@ function App() {
 
               {/* Hidden Vibe Card Template for PDF Generation */}
               {(() => {
-                // Pokémon TCG style tier themes
-                const tierThemes: Record<string, {
-                  bg: string; headerBg: string; border: string; accent: string; text: string
-                }> = {
-                  'LEGENDARY': { bg: '#1a1200', headerBg: '#f59e0b', border: '#f59e0b', accent: '#fcd34d', text: '#fef3c7' },
-                  'ULTRA RARE': { bg: '#1a0f2e', headerBg: '#a855f7', border: '#a855f7', accent: '#c4b5fd', text: '#ede9fe' },
-                  'RARE': { bg: '#0a1628', headerBg: '#3b82f6', border: '#3b82f6', accent: '#93c5fd', text: '#dbeafe' },
-                  'UNCOMMON': { bg: '#081a12', headerBg: '#10b981', border: '#10b981', accent: '#6ee7b7', text: '#d1fae5' },
-                  'COMMON': { bg: '#1a1d24', headerBg: '#64748b', border: '#64748b', accent: '#94a3b8', text: '#e2e8f0' }
+                // GitHub black theme with tier accent colors
+                const tierAccents: Record<string, { accent: string; accentLight: string }> = {
+                  'LEGENDARY': { accent: '#f59e0b', accentLight: '#fcd34d' },
+                  'ULTRA RARE': { accent: '#a855f7', accentLight: '#c4b5fd' },
+                  'RARE': { accent: '#3b82f6', accentLight: '#93c5fd' },
+                  'UNCOMMON': { accent: '#10b981', accentLight: '#6ee7b7' },
+                  'COMMON': { accent: '#6b7280', accentLight: '#9ca3af' }
                 };
 
                 const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
-                const t = tierThemes[tier] || tierThemes['COMMON'];
+                const a = tierAccents[tier] || tierAccents['COMMON'];
+
+                // GitHub-style colors
+                const bg = '#0d1117';
+                const bgLight = '#161b22';
+                const border = '#30363d';
 
                 return (
                   <div id="vibe-card-template" style={{
@@ -2939,61 +2942,61 @@ function App() {
                     top: 0,
                     width: '400px',
                     height: '560px',
-                    background: t.bg,
+                    background: bg,
                     padding: '6px',
                     boxSizing: 'border-box',
                     fontFamily: "'Inter', 'Segoe UI', sans-serif"
                   }}>
-                    {/* Card Frame with thick border */}
+                    {/* Card Frame */}
                     <div style={{
                       width: '100%',
                       height: '100%',
-                      border: `5px solid ${t.border}`,
+                      border: `3px solid ${a.accent}`,
                       borderRadius: '12px',
                       overflow: 'hidden',
                       display: 'flex',
                       flexDirection: 'column',
-                      background: t.bg
+                      background: bg
                     }}>
 
-                      {/* Solid Header Bar - Pokemon Style */}
+                      {/* Header - Black with accent text */}
                       <div style={{
-                        background: t.headerBg,
-                        padding: '14px 18px'
+                        background: bgLight,
+                        padding: '14px 18px',
+                        borderBottom: `2px solid ${a.accent}`
                       }}>
-                        <div style={{ fontSize: '24px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.4)' }}>
+                        <div style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff' }}>
                           {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
                         </div>
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '2px', marginTop: '4px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: a.accent, letterSpacing: '2px', marginTop: '4px' }}>
                           {tier}
                         </div>
                       </div>
 
-                      {/* Avatar Section with Corner Brackets */}
+                      {/* Avatar Section */}
                       <div style={{
                         flex: '0 0 175px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: 'rgba(0,0,0,0.3)',
-                        position: 'relative',
-                        margin: '0'
+                        background: bg,
+                        position: 'relative'
                       }}>
-                        {/* Corner brackets */}
-                        <div style={{ position: 'absolute', top: '10px', left: '10px', width: '24px', height: '24px', borderTop: `3px solid ${t.border}`, borderLeft: `3px solid ${t.border}` }} />
-                        <div style={{ position: 'absolute', top: '10px', right: '10px', width: '24px', height: '24px', borderTop: `3px solid ${t.border}`, borderRight: `3px solid ${t.border}` }} />
-                        <div style={{ position: 'absolute', bottom: '10px', left: '10px', width: '24px', height: '24px', borderBottom: `3px solid ${t.border}`, borderLeft: `3px solid ${t.border}` }} />
-                        <div style={{ position: 'absolute', bottom: '10px', right: '10px', width: '24px', height: '24px', borderBottom: `3px solid ${t.border}`, borderRight: `3px solid ${t.border}` }} />
+                        {/* Corner brackets with accent color */}
+                        <div style={{ position: 'absolute', top: '12px', left: '12px', width: '24px', height: '24px', borderTop: `3px solid ${a.accent}`, borderLeft: `3px solid ${a.accent}` }} />
+                        <div style={{ position: 'absolute', top: '12px', right: '12px', width: '24px', height: '24px', borderTop: `3px solid ${a.accent}`, borderRight: `3px solid ${a.accent}` }} />
+                        <div style={{ position: 'absolute', bottom: '12px', left: '12px', width: '24px', height: '24px', borderBottom: `3px solid ${a.accent}`, borderLeft: `3px solid ${a.accent}` }} />
+                        <div style={{ position: 'absolute', bottom: '12px', right: '12px', width: '24px', height: '24px', borderBottom: `3px solid ${a.accent}`, borderRight: `3px solid ${a.accent}` }} />
 
-                        {/* Avatar with thick border */}
+                        {/* Avatar with accent border */}
                         <div style={{
-                          width: '120px',
-                          height: '120px',
+                          width: '115px',
+                          height: '115px',
                           borderRadius: '50%',
-                          border: `5px solid ${t.border}`,
-                          boxShadow: `0 4px 20px rgba(0,0,0,0.5)`,
+                          border: `4px solid ${a.accent}`,
+                          boxShadow: `0 0 20px ${a.accent}40`,
                           overflow: 'hidden',
-                          background: t.headerBg
+                          background: bgLight
                         }}>
                           <img
                             src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
@@ -3005,10 +3008,12 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Stats Bar - Solid Header Color */}
+                      {/* Stats Bar */}
                       <div style={{
                         display: 'flex',
-                        background: t.headerBg
+                        background: bgLight,
+                        borderTop: `1px solid ${border}`,
+                        borderBottom: `1px solid ${border}`
                       }}>
                         {[
                           { label: 'REPOS', value: selectedReport.metadata?.userStats?.totalRepos || '0' },
@@ -3019,10 +3024,10 @@ function App() {
                             flex: 1,
                             textAlign: 'center',
                             padding: '12px 0',
-                            borderRight: i < 2 ? '1px solid rgba(255,255,255,0.2)' : 'none'
+                            borderRight: i < 2 ? `1px solid ${border}` : 'none'
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '1px' }}>{stat.label}</div>
-                            <div style={{ fontSize: '22px', fontWeight: 900, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>{stat.value}</div>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#8b949e', letterSpacing: '1px' }}>{stat.label}</div>
+                            <div style={{ fontSize: '22px', fontWeight: 900, color: a.accent }}>{stat.value}</div>
                           </div>
                         ))}
                       </div>
@@ -3031,15 +3036,15 @@ function App() {
                       <div style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {/* Archetype Box */}
                         <div style={{
-                          background: 'rgba(0,0,0,0.4)',
+                          background: bgLight,
                           borderRadius: '8px',
                           padding: '12px 14px',
-                          border: `2px solid ${t.border}`
+                          border: `1px solid ${a.accent}`
                         }}>
-                          <div style={{ fontSize: '9px', fontWeight: 700, color: t.accent, letterSpacing: '2px', marginBottom: '4px' }}>
+                          <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '2px', marginBottom: '4px' }}>
                             ARCHETYPE
                           </div>
-                          <div style={{ fontSize: '18px', fontWeight: 800, color: 'white' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 800, color: '#ffffff' }}>
                             {selectedReport.label || selectedReport.archetype || 'Developer'}
                           </div>
                         </div>
@@ -3047,15 +3052,15 @@ function App() {
                         {/* Signature Trait */}
                         {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.25)',
+                            background: bgLight,
                             borderRadius: '6px',
                             padding: '10px 12px',
-                            borderLeft: `4px solid ${t.border}`
+                            borderLeft: `3px solid ${a.accent}`
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accent, letterSpacing: '1px', marginBottom: '3px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1px', marginBottom: '3px' }}>
                               ★ SIGNATURE TRAIT
                             </div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: t.text, lineHeight: 1.4 }}>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#e6edf3', lineHeight: 1.4 }}>
                               {selectedReport.meritPoints[0].title || (typeof selectedReport.meritPoints[0] === 'string' ? selectedReport.meritPoints[0] : 'Code Excellence')}
                             </div>
                           </div>
@@ -3064,17 +3069,17 @@ function App() {
 
                       {/* Footer */}
                       <div style={{
-                        background: 'rgba(0,0,0,0.5)',
+                        background: bgLight,
                         padding: '10px 16px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        borderTop: `2px solid ${t.border}`
+                        borderTop: `1px solid ${border}`
                       }}>
-                        <span style={{ fontSize: '14px', fontWeight: 900, color: t.border, letterSpacing: '2px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 900, color: a.accent, letterSpacing: '2px' }}>
                           VIBECHEKK
                         </span>
-                        <span style={{ fontSize: '10px', color: t.accent, fontWeight: 600 }}>
+                        <span style={{ fontSize: '10px', color: '#8b949e', fontWeight: 600 }}>
                           #{selectedReport.id?.slice(-8).toUpperCase() || 'XXXXXXXX'}
                         </span>
                       </div>
@@ -3086,16 +3091,18 @@ function App() {
               {/* Back of Card Template */}
               {(() => {
                 const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
-                const tierThemes: Record<string, {
-                  bg: string; headerBg: string; border: string; accent: string; text: string
-                }> = {
-                  'LEGENDARY': { bg: '#1a1200', headerBg: '#f59e0b', border: '#f59e0b', accent: '#fcd34d', text: '#fef3c7' },
-                  'ULTRA RARE': { bg: '#1a0f2e', headerBg: '#a855f7', border: '#a855f7', accent: '#c4b5fd', text: '#ede9fe' },
-                  'RARE': { bg: '#0a1628', headerBg: '#3b82f6', border: '#3b82f6', accent: '#93c5fd', text: '#dbeafe' },
-                  'UNCOMMON': { bg: '#081a12', headerBg: '#10b981', border: '#10b981', accent: '#6ee7b7', text: '#d1fae5' },
-                  'COMMON': { bg: '#1a1d24', headerBg: '#64748b', border: '#64748b', accent: '#94a3b8', text: '#e2e8f0' }
+                const tierAccents: Record<string, { accent: string }> = {
+                  'LEGENDARY': { accent: '#f59e0b' },
+                  'ULTRA RARE': { accent: '#a855f7' },
+                  'RARE': { accent: '#3b82f6' },
+                  'UNCOMMON': { accent: '#10b981' },
+                  'COMMON': { accent: '#6b7280' }
                 };
-                const t = tierThemes[tier] || tierThemes['COMMON'];
+                const a = tierAccents[tier] || tierAccents['COMMON'];
+
+                const bg = '#0d1117';
+                const bgLight = '#161b22';
+                const border = '#30363d';
 
                 const skills = selectedReport.metadata?.verified_skills || [];
                 const highlights = selectedReport.meritPoints || [];
@@ -3108,7 +3115,7 @@ function App() {
                     top: 0,
                     width: '400px',
                     height: '560px',
-                    background: t.bg,
+                    background: bg,
                     padding: '6px',
                     boxSizing: 'border-box',
                     fontFamily: "'Inter', 'Segoe UI', sans-serif"
@@ -3116,23 +3123,24 @@ function App() {
                     <div style={{
                       width: '100%',
                       height: '100%',
-                      border: `5px solid ${t.border}`,
+                      border: `3px solid ${a.accent}`,
                       borderRadius: '12px',
                       overflow: 'hidden',
                       display: 'flex',
                       flexDirection: 'column',
-                      background: t.bg
+                      background: bg
                     }}>
-                      {/* Solid Header Bar */}
+                      {/* Header */}
                       <div style={{
-                        background: t.headerBg,
+                        background: bgLight,
                         padding: '14px 18px',
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        borderBottom: `2px solid ${a.accent}`
                       }}>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.4)' }}>
+                        <div style={{ fontSize: '18px', fontWeight: 900, color: '#ffffff' }}>
                           {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
                         </div>
-                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '2px', marginTop: '4px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: a.accent, letterSpacing: '2px', marginTop: '4px' }}>
                           DEVELOPER PROFILE
                         </div>
                       </div>
@@ -3143,15 +3151,15 @@ function App() {
                         {/* Archetype Reason */}
                         {archetypeReason && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.4)',
+                            background: bgLight,
                             borderRadius: '8px',
                             padding: '10px 12px',
-                            border: `2px solid ${t.border}`
+                            border: `1px solid ${a.accent}`
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accent, letterSpacing: '1.5px', marginBottom: '5px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '5px' }}>
                               WHY THIS ARCHETYPE
                             </div>
-                            <div style={{ fontSize: '11px', color: t.text, lineHeight: 1.5 }}>
+                            <div style={{ fontSize: '11px', color: '#e6edf3', lineHeight: 1.5 }}>
                               {archetypeReason.length > 160 ? archetypeReason.substring(0, 160) + '...' : archetypeReason}
                             </div>
                           </div>
@@ -3160,11 +3168,11 @@ function App() {
                         {/* Verified Skills */}
                         {skills.length > 0 && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.25)',
+                            background: bgLight,
                             borderRadius: '8px',
                             padding: '10px 12px'
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accent, letterSpacing: '1.5px', marginBottom: '8px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '8px' }}>
                               ✓ VERIFIED SKILLS
                             </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -3172,8 +3180,8 @@ function App() {
                                 const name = typeof skill === 'string' ? skill.split('|')[0] : (skill.name || skill);
                                 return (
                                   <span key={i} style={{
-                                    background: t.headerBg,
-                                    color: 'white',
+                                    background: a.accent,
+                                    color: '#0d1117',
                                     padding: '5px 10px',
                                     borderRadius: '6px',
                                     fontSize: '10px',
@@ -3190,23 +3198,23 @@ function App() {
                         {/* Highlights */}
                         {highlights.length > 0 && (
                           <div style={{
-                            background: 'rgba(0,0,0,0.2)',
+                            background: bgLight,
                             borderRadius: '8px',
                             padding: '10px 12px',
                             flex: 1,
                             overflow: 'hidden'
                           }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: t.accent, letterSpacing: '1.5px', marginBottom: '8px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '8px' }}>
                               ★ HIGHLIGHTS
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               {highlights.slice(0, 3).map((point: any, i: number) => (
                                 <div key={i} style={{
                                   fontSize: '11px',
-                                  color: t.text,
+                                  color: '#e6edf3',
                                   lineHeight: 1.4,
                                   paddingLeft: '10px',
-                                  borderLeft: `3px solid ${t.border}`
+                                  borderLeft: `3px solid ${a.accent}`
                                 }}>
                                   <span style={{ fontWeight: 700 }}>{point.title || point}</span>
                                   {point.detail && (
@@ -3223,14 +3231,14 @@ function App() {
 
                       {/* Footer */}
                       <div style={{
-                        background: 'rgba(0,0,0,0.5)',
+                        background: bgLight,
                         padding: '10px 16px',
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        borderTop: `2px solid ${t.border}`
+                        borderTop: `1px solid ${border}`
                       }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: t.border }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: a.accent }}>
                           vibechekk.dev
                         </span>
                       </div>
