@@ -2916,167 +2916,232 @@ function App() {
               )}
 
               {/* Hidden Vibe Card Template for PDF Generation */}
-              <div id="vibe-card-template" style={{
-                position: 'fixed',
-                left: '-9999px',
-                top: 0,
-                width: '400px', // Standard card ratio width
-                height: '600px', // Standard card ratio height
-                background: '#fefcf8', // bg-stone-50
-                padding: '20px',
-                boxSizing: 'border-box',
-                fontFamily: "'Inter', sans-serif",
-                color: '#1c1917',
-                border: '12px solid #fbbf24', // Gold border
-                borderRadius: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-                boxShadow: 'inset 0 0 40px rgba(251, 191, 36, 0.2)'
-              }}>
-                {/* Header: Name + HP */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: '2px solid #e7e5e4' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#b45309', textTransform: 'uppercase' }}>
-                      {(() => {
-                        const badge = selectedReport.rarity_badge?.toLowerCase();
-                        if (badge?.includes('titan') || badge?.includes('1%')) return 'LEGENDARY';
-                        if (badge?.includes('gem') || badge?.includes('star')) return 'MYTHIC';
-                        return selectedReport.candidate?.archetype || 'DEVELOPER';
-                      })()}
-                    </span>
-                    <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0, lineHeight: 1 }}>
-                      {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
-                    </h2>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '28px', fontWeight: 800, color: '#ef4444' }}>
-                      {(() => {
-                        const qScore = selectedReport.metadata?.quality_score;
-                        if (qScore && qScore > 0) return Math.min(99, Math.ceil(qScore * 10));
-                        // Fallback calculations
-                        const stars = selectedReport.star_count || 0;
-                        const repos = selectedReport.metadata?.userStats?.totalRepos || 0;
-                        const base = 40;
-                        const bonus = (stars * 2) + Math.min(40, repos);
-                        return Math.min(99, base + bonus);
-                      })()}
-                    </span>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444' }}>HP</span>
-                  </div>
-                </div>
+              {(() => {
+                // Tier-based color schemes
+                const tierColors: Record<string, { primary: string; secondary: string; bg: string; border: string; text: string; accent: string }> = {
+                  'LEGENDARY': {
+                    primary: '#f59e0b', secondary: '#d97706', bg: 'linear-gradient(145deg, #1a1a1a 0%, #2d2006 50%, #1a1a1a 100%)',
+                    border: 'linear-gradient(145deg, #fbbf24, #f59e0b, #d97706)', text: '#fef3c7', accent: '#fcd34d'
+                  },
+                  'ULTRA RARE': {
+                    primary: '#8b5cf6', secondary: '#7c3aed', bg: 'linear-gradient(145deg, #1a1a1a 0%, #1e1033 50%, #1a1a1a 100%)',
+                    border: 'linear-gradient(145deg, #a78bfa, #8b5cf6, #7c3aed)', text: '#ede9fe', accent: '#c4b5fd'
+                  },
+                  'RARE': {
+                    primary: '#3b82f6', secondary: '#2563eb', bg: 'linear-gradient(145deg, #1a1a1a 0%, #0c1929 50%, #1a1a1a 100%)',
+                    border: 'linear-gradient(145deg, #60a5fa, #3b82f6, #2563eb)', text: '#dbeafe', accent: '#93c5fd'
+                  },
+                  'UNCOMMON': {
+                    primary: '#10b981', secondary: '#059669', bg: 'linear-gradient(145deg, #1a1a1a 0%, #052e16 50%, #1a1a1a 100%)',
+                    border: 'linear-gradient(145deg, #34d399, #10b981, #059669)', text: '#d1fae5', accent: '#6ee7b7'
+                  },
+                  'COMMON': {
+                    primary: '#64748b', secondary: '#475569', bg: 'linear-gradient(145deg, #1a1a1a 0%, #1e293b 50%, #1a1a1a 100%)',
+                    border: 'linear-gradient(145deg, #94a3b8, #64748b, #475569)', text: '#e2e8f0', accent: '#cbd5e1'
+                  }
+                };
 
-                {/* Main Image - Profile Icon Style */}
-                <div style={{
-                  width: '100%',
-                  height: '240px',
-                  borderRadius: '12px',
-                  border: '4px solid #d6d3d1',
-                  boxShadow: 'inset 0 0 20px rgba(0,0,0,0.05)',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  background: 'radial-gradient(circle at center, #ffffff 0%, #e7e5e4 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  {/* Decorative Background Pattern */}
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    opacity: 0.3,
-                    backgroundImage: 'radial-gradient(#a8a29e 1px, transparent 1px)',
-                    backgroundSize: '20px 20px'
-                  }} />
+                const tier = selectedReport.tier?.toUpperCase() || 'COMMON';
+                const colors = tierColors[tier] || tierColors['COMMON'];
 
-                  {/* Centered Avatar Circle */}
-                  <div style={{
-                    width: '160px',
-                    height: '160px',
-                    borderRadius: '50%',
-                    border: '6px solid white',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                return (
+                  <div id="vibe-card-template" style={{
+                    position: 'fixed',
+                    left: '-9999px',
+                    top: 0,
+                    width: '400px',
+                    height: '560px',
+                    background: colors.bg,
+                    padding: '0',
+                    boxSizing: 'border-box',
+                    fontFamily: "'Inter', sans-serif",
+                    color: colors.text,
+                    borderRadius: '20px',
                     overflow: 'hidden',
-                    position: 'relative',
-                    zIndex: 2,
-                    background: 'white'
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
                   }}>
-                    <img
-                      src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
-                      crossOrigin="anonymous"
-                      alt="Avatar"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        if (e.currentTarget.parentElement) {
-                          e.currentTarget.parentElement.style.background = 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)';
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
+                    {/* Outer Glow Border */}
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: '20px',
+                      padding: '4px',
+                      background: colors.border,
+                      WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+                      WebkitMaskComposite: 'xor',
+                      maskComposite: 'exclude'
+                    }} />
 
-                {/* Stats Bar */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f5f5f4', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e7e5e4' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '10px', color: '#78716c', fontWeight: 600 }}>REPOS</div>
-                    <div style={{ fontSize: '14px', fontWeight: 800 }}>{selectedReport.metadata?.userStats?.totalRepos || '0'}</div>
-                  </div>
-                  <div style={{ width: '1px', background: '#d6d3d1' }}></div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '10px', color: '#78716c', fontWeight: 600 }}>CONTRIBS</div>
-                    <div style={{ fontSize: '14px', fontWeight: 800 }}>{selectedReport.metadata?.userStats?.contributions || '0'}</div>
-                  </div>
-                  <div style={{ width: '1px', background: '#d6d3d1' }}></div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '10px', color: '#78716c', fontWeight: 600 }}>YEARS</div>
-                    <div style={{ fontSize: '14px', fontWeight: 800 }}>{((new Date().getFullYear()) - (new Date(selectedReport.metadata?.userStats?.joinedDate || Date.now()).getFullYear())) || 1}</div>
-                  </div>
-                </div>
-
-                {/* Attacks / Skills */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Skills Mapping from Verified Skills */}
-                  {(selectedReport.metadata?.verified_skills || []).slice(0, 2).map((skill: any, i: number) => {
-                    const name = typeof skill === 'string' ? skill.split('|')[0] : (skill.name || skill.title || 'Skill');
-                    return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: i === 0 ? '#ef4444' : '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white', fontWeight: 800 }}>
-                          {i === 0 ? 'A' : 'B'}
+                    {/* Inner Content */}
+                    <div style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                        <div>
+                          <div style={{
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            color: colors.primary,
+                            textTransform: 'uppercase',
+                            letterSpacing: '2px',
+                            marginBottom: '4px'
+                          }}>
+                            {tier}
+                          </div>
+                          <h2 style={{
+                            fontSize: '28px',
+                            fontWeight: 900,
+                            margin: 0,
+                            lineHeight: 1,
+                            background: `linear-gradient(135deg, ${colors.text} 0%, ${colors.accent} 100%)`,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                          }}>
+                            {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
+                          </h2>
                         </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 800, fontSize: '14px' }}>{name}</div>
-                          <div style={{ fontSize: '10px', color: '#57534e' }}>Verified Code Proficiency</div>
-                        </div>
-                        <div style={{ fontWeight: 800, fontSize: '16px' }}>
-                          {(Math.random() * 40 + 40).toFixed(0)}
+                        <div style={{
+                          background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                          borderRadius: '12px',
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          gap: '2px'
+                        }}>
+                          <span style={{ fontSize: '24px', fontWeight: 900, color: 'white' }}>
+                            {(() => {
+                              const qScore = selectedReport.metadata?.quality_score;
+                              if (qScore && qScore > 0) return Math.min(99, Math.ceil(qScore * 10));
+                              const stars = selectedReport.star_count || 0;
+                              return Math.min(99, 40 + Math.min(59, stars * 2));
+                            })()}
+                          </span>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>VP</span>
                         </div>
                       </div>
-                    );
-                  })}
 
-                  {/* Fallback if no skills verified */}
-                  {(!selectedReport.metadata?.verified_skills || selectedReport.metadata.verified_skills.length === 0) && (
-                    <div style={{ textAlign: 'center', fontSize: '12px', color: '#a8a29e', fontStyle: 'italic', marginTop: '12px' }}>
-                      Analyzing combat data...
+                      {/* Avatar Section */}
+                      <div style={{
+                        flex: '0 0 200px',
+                        borderRadius: '16px',
+                        background: 'rgba(0,0,0,0.3)',
+                        border: `2px solid ${colors.primary}40`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        marginBottom: '16px'
+                      }}>
+                        {/* Radial Glow */}
+                        <div style={{
+                          position: 'absolute',
+                          width: '200px',
+                          height: '200px',
+                          borderRadius: '50%',
+                          background: `radial-gradient(circle, ${colors.primary}30 0%, transparent 70%)`,
+                          filter: 'blur(20px)'
+                        }} />
+
+                        <div style={{
+                          width: '130px',
+                          height: '130px',
+                          borderRadius: '50%',
+                          border: `4px solid ${colors.primary}`,
+                          boxShadow: `0 0 30px ${colors.primary}50`,
+                          overflow: 'hidden',
+                          position: 'relative',
+                          zIndex: 2
+                        }}>
+                          <img
+                            src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
+                            crossOrigin="anonymous"
+                            alt="Avatar"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              if (e.currentTarget.parentElement) {
+                                e.currentTarget.parentElement.style.background = `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`;
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Stats Row */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-around',
+                        background: 'rgba(0,0,0,0.3)',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        marginBottom: '16px',
+                        border: `1px solid ${colors.primary}30`
+                      }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>REPOS</div>
+                          <div style={{ fontSize: '20px', fontWeight: 900 }}>{selectedReport.metadata?.userStats?.totalRepos || '0'}</div>
+                        </div>
+                        <div style={{ width: '1px', background: `${colors.primary}40` }} />
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>STARS</div>
+                          <div style={{ fontSize: '20px', fontWeight: 900 }}>{selectedReport.star_count || selectedReport.metadata?.userStats?.totalStars || '0'}</div>
+                        </div>
+                        <div style={{ width: '1px', background: `${colors.primary}40` }} />
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>COMMITS</div>
+                          <div style={{ fontSize: '20px', fontWeight: 900 }}>{selectedReport.metadata?.userStats?.totalCommits || '0'}</div>
+                        </div>
+                      </div>
+
+                      {/* Archetype Label */}
+                      <div style={{
+                        background: `linear-gradient(135deg, ${colors.primary}20 0%, ${colors.secondary}20 100%)`,
+                        border: `1px solid ${colors.primary}50`,
+                        borderRadius: '10px',
+                        padding: '12px 16px',
+                        marginBottom: '12px'
+                      }}>
+                        <div style={{ fontSize: '9px', color: colors.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
+                          ARCHETYPE
+                        </div>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: colors.text }}>
+                          {selectedReport.label || selectedReport.archetype || 'Developer'}
+                        </div>
+                      </div>
+
+                      {/* Special Ability */}
+                      {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
+                        <div style={{
+                          background: `linear-gradient(135deg, ${colors.primary}15 0%, transparent 100%)`,
+                          borderRadius: '10px',
+                          padding: '10px 14px',
+                          borderLeft: `3px solid ${colors.primary}`
+                        }}>
+                          <div style={{ fontSize: '9px', color: colors.primary, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                            SIGNATURE TRAIT
+                          </div>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text, marginTop: '2px', lineHeight: 1.3 }}>
+                            {selectedReport.meritPoints[0].title || selectedReport.meritPoints[0]}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Footer */}
+                      <div style={{
+                        marginTop: 'auto',
+                        paddingTop: '12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        borderTop: `1px solid ${colors.primary}30`
+                      }}>
+                        <span style={{ fontSize: '10px', fontWeight: 700, color: colors.accent, letterSpacing: '2px' }}>VIBECHEKK</span>
+                        <span style={{ fontSize: '9px', color: `${colors.text}80` }}>#{selectedReport.id?.slice(-6).toUpperCase() || 'XXXXXX'}</span>
+                      </div>
                     </div>
-                  )}
-
-                  {/* Special Ability (From Merit Points) */}
-                  {selectedReport.meritPoints && selectedReport.meritPoints[0] && (
-                    <div style={{ marginTop: 'auto', padding: '8px', background: '#ecfccb', borderRadius: '8px', border: '1px solid #bef264' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#4d7c0f', textTransform: 'uppercase' }}>SPECIAL ABILITY</div>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#3f6212' }}>{selectedReport.meritPoints[0].title || 'Code Insight'}</div>
-                      <div style={{ fontSize: '10px', color: '#4d7c0f', lineHeight: 1.2, maxHeight: '32px', overflow: 'hidden' }}>{selectedReport.meritPoints[0].detail || selectedReport.meritPoints[0]}</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer / Rarity Badge */}
-                <div style={{ textAlign: 'right', fontSize: '10px', color: '#a8a29e', fontWeight: 600, fontStyle: 'italic' }}>
-                  VIBECHEKK • {selectedReport.rarity_badge || 'Standard Edition'} • {new Date().getFullYear()}
-                </div>
-              </div>
+                  </div>
+                );
+              })()}
 
               <button
                 className="download-card-btn"
