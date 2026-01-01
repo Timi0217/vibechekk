@@ -2968,8 +2968,25 @@ function App() {
                         <div style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff' }}>
                           {selectedReport.candidate?.name || selectedReport.candidate?.githubHandle}
                         </div>
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: a.accent, letterSpacing: '2px', marginTop: '4px' }}>
-                          {tier}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: a.accent, letterSpacing: '2px' }}>
+                            {tier}
+                          </span>
+                          <span style={{ fontSize: '14px' }}>
+                            {(() => {
+                              const label = (selectedReport.label || selectedReport.archetype || '').toUpperCase();
+                              if (label.includes('TITAN')) return '👑';
+                              if (label.includes('ARCHITECT')) return '🏛️';
+                              if (label.includes('PIONEER')) return '🚀';
+                              if (label.includes('CRAFTSMAN')) return '🔧';
+                              if (label.includes('SPECIALIST')) return '🎯';
+                              if (label.includes('TINKERER')) return '⚡';
+                              if (label.includes('CONTRIBUTOR')) return '🤝';
+                              if (label.includes('LEARNER')) return '📚';
+                              if (label.includes('EXPLORER')) return '🧭';
+                              return '💻';
+                            })()}
+                          </span>
                         </div>
                       </div>
 
