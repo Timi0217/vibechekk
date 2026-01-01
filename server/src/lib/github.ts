@@ -607,73 +607,132 @@ export const searchCandidates = async (token: string, criteria: any) => {
   const octokit = new Octokit({ auth: token });
   const { languages, experience, jobTitle } = criteria;
 
-  // Calculate date filter for recent activity
-  const twoMonthsAgo = new Date();
-  twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-  const dateStr = twoMonthsAgo.toISOString().split('T')[0];
+  console.log(`[Chekklist Search] Starting search with criteria:`, { languages, experience, jobTitle });
 
-  // Build language filter - at least one language required for meaningful results
-  const langList = languages && languages.length > 0 ? languages : ['JavaScript', 'TypeScript', 'Python'];
-  const langQuery = langList.map((l: string) => `language:${l}`).join(' ');
+  // Helper to run a search query
+  const runSearch = async (q: string, description: string): Promise<any[]> => {
+    console.log(`[Chekklist Search] Strategy: ${description}`);
+    console.log(`[Chekklist Search] Query: ${q}`);
 
-  // Base query: Active users with language expertise
-  // GitHub user search is limited - we search by:
-  // - type:user (only users, not orgs)
-  // - pushed:>DATE (recently active)
-  // - language:X (works with repos they own)
-  let q = `type:user pushed:>${dateStr} ${langQuery}`;
-
-  // If job title contains keywords, try to find them in bio
-  // Note: GitHub search for users is very limited - "in:bio" doesn't work well
-  // The best we can do is search for language + activity, then let DeepSeek rank by JD
-  if (jobTitle) {
-    // Extract meaningful keywords from job title (skip common words)
-    const keywords = jobTitle
-      .toLowerCase()
-      .replace(/senior|junior|lead|staff|principal|engineer|developer|intern/gi, '')
-      .trim();
-
-    if (keywords.length > 2) {
-      // Add keyword to search (GitHub will try to match in name/bio/readme)
-      q += ` ${keywords}`;
-    }
-  }
-
-  console.log(`[GitHub Search] Query: ${q}`);
-
-  const query = `
-    query($q: String!) {
-      search(query: $q, type: USER, first: 50) {
-        userCount
-        nodes {
-          ... on User {
-            login
-            name
-            avatarUrl
-            bio
-            location
-            url
-            repositories(first: 5, orderBy: {field: STARGAZERS, direction: DESC}, privacy: PUBLIC) {
-              nodes {
-                name
-                stargazerCount
-                primaryLanguage { name }
-                description
+    const query = `
+      query($q: String!) {
+        search(query: $q, type: USER, first: 50) {
+          userCount
+          nodes {
+            ... on User {
+              login
+              name
+              avatarUrl
+              bio
+              location
+              url
+              followers { totalCount }
+              repositories(first: 5, orderBy: {field: STARGAZERS, direction: DESC}, privacy: PUBLIC) {
+                nodes {
+                  name
+                  stargazerCount
+                  primaryLanguage { name }
+                  description
+                }
               }
             }
           }
         }
       }
-    }
-  `;
+    `;
 
-  try {
-    const response: any = await octokit.graphql(query, { q });
-    return response.search.nodes;
-  } catch (error) {
-    console.error('[GitHub] Search failed:', error);
-    return [];
+    try {
+      const response: any = await octokit.graphql(query, { q });
+      const users = response.search.nodes.filter((n: any) => n && n.login);
+      console.log(`[Chekklist Search] Found ${users.length} users (total matching: ${response.search.userCount})`);
+      return users;
+    } catch (error: any) {
+      console.error(`[Chekklist Search] Query failed:`, error.message);
+      return [];
+    }
+  };
+
+  // Strategy 1: Most specific - language + recent activity + followers
+  // Using followers:>10 to find established developers
+  let results: any[] = [];
+
+  // Build language filter - use first language only for broader results
+  const primaryLang = languages && languages.length > 0 ? languages[0] : 'TypeScript';
+
+  // Calculate date filter - 6 months is more reasonable
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const dateStr = sixMonthsAgo.toISOString().split('T')[0];
+
+  // Strategy 1: Language + Recent activity + Some followers
+  if (results.length === 0) {
+    const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>5`;
+    results = await runSearch(q1, "Primary language + recent activity + followers");
   }
+
+  // Strategy 2: Broaden - just language + any activity
+  if (results.length < 10 && languages && languages.length > 0) {
+    const q2 = `type:user language:${primaryLang} repos:>3`;
+    const moreResults = await runSearch(q2, "Primary language + has repos");
+
+    // Merge unique results
+    const existingLogins = new Set(results.map(r => r.login));
+    moreResults.forEach(r => {
+      if (!existingLogins.has(r.login)) {
+        results.push(r);
+      }
+    });
+  }
+
+  // Strategy 3: Search by job title keywords in bio/location
+  if (results.length < 10 && jobTitle) {
+    // Extract meaningful keywords
+    const roleKeywords = jobTitle
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w: string) => w.length > 3 && !['the', 'and', 'for'].includes(w))
+      .slice(0, 2)
+      .join(' ');
+
+    if (roleKeywords) {
+      const q3 = `type:user ${roleKeywords} repos:>2 followers:>3`;
+      const keywordResults = await runSearch(q3, `Job title keywords: "${roleKeywords}"`);
+
+      const existingLogins = new Set(results.map(r => r.login));
+      keywordResults.forEach(r => {
+        if (!existingLogins.has(r.login)) {
+          results.push(r);
+        }
+      });
+    }
+  }
+
+  // Strategy 4: Ultimate fallback - popular developers in any language
+  if (results.length < 5) {
+    const q4 = `type:user followers:>50 repos:>5`;
+    const fallbackResults = await runSearch(q4, "Fallback: Popular developers");
+
+    const existingLogins = new Set(results.map(r => r.login));
+    fallbackResults.forEach(r => {
+      if (!existingLogins.has(r.login)) {
+        results.push(r);
+      }
+    });
+  }
+
+  // Sort by combined signal: followers + stars
+  results = results
+    .map(user => ({
+      ...user,
+      totalStars: (user.repositories?.nodes || []).reduce((sum: number, r: any) => sum + (r?.stargazerCount || 0), 0),
+      followerCount: user.followers?.totalCount || 0
+    }))
+    .sort((a, b) => (b.followerCount + b.totalStars) - (a.followerCount + a.totalStars))
+    .slice(0, 50);
+
+  console.log(`[Chekklist Search] Final results: ${results.length} candidates`);
+
+  return results;
 };
 
 // Search for a GitHub user by email using GitHub's Search API
