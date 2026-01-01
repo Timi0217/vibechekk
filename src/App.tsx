@@ -3030,11 +3030,14 @@ function App() {
                         borderBottom: `1px solid ${border}`
                       }}>
                         <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '6px' }}>
-                          ARCHETYPE LORE
+                          LORE
                         </div>
                         <div style={{ fontSize: '11px', color: '#e6edf3', lineHeight: 1.5 }}>
                           {(() => {
-                            const reason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
+                            let reason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
+                            // Remove "THE " if present
+                            reason = reason.replace(/Classified as THE /i, 'Classified as ');
+
                             if (reason) {
                               if (reason.length <= 180) return reason;
                               // Try to end at a sentence boundary within limits
