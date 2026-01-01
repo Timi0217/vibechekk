@@ -44,7 +44,7 @@ export const fetchUserStats = async (token: string, username: string) => {
 
     return {
       totalStars: repos.reduce((sum: number, r: any) => sum + r.stargazerCount, 0),
-      totalRepos: response.user.repositories.totalCount,
+      totalRepos: repos.length,
       totalCommits: response.user.contributionsCollection.totalCommitContributions,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.totalCommitContributions,
