@@ -2959,75 +2959,24 @@ function App() {
                       background: bg
                     }}>
 
-                      {/* Header - Black with accent text */}
+                      {/* Header with Avatar */}
                       <div style={{
                         background: bgLight,
-                        padding: '14px 18px',
-                        borderBottom: `2px solid ${a.accent}`
-                      }}>
-                        <div style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff' }}>
-                          {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer'}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: a.accent, letterSpacing: '2px' }}>
-                            {tier}
-                          </span>
-                          {/* Inline SVG icon matching ArchetypeIcon Lucide icons */}
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={a.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            {(() => {
-                              const label = (selectedReport.label || selectedReport.archetype || '').toUpperCase();
-                              // LEGENDARY - Rocket
-                              if (label.includes('10X')) return <><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" /><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" /><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" /></>;
-                              // ULTRA RARE - Layers (Architect), BookOpen (Professor)
-                              if (label.includes('ARCHITECT')) return <><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></>;
-                              if (label.includes('PROFESSOR')) return <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></>;
-                              // RARE - Target (Specialist), Cpu (Systems)
-                              if (label.includes('SPECIALIST')) return <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></>;
-                              if (label.includes('SYSTEMS')) return <><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /><rect x="9" y="9" width="6" height="6" /><line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" /><line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" /><line x1="20" y1="9" x2="23" y2="9" /><line x1="20" y1="14" x2="23" y2="14" /><line x1="1" y1="9" x2="4" y2="9" /><line x1="1" y1="14" x2="4" y2="14" /></>;
-                              // UNCOMMON - Heart, Hammer, GitPullRequest, Code, Gem
-                              if (label.includes('MAINTAINER')) return <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />;
-                              if (label.includes('BUILDER')) return <><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91" /></>;
-                              if (label.includes('CONTRIBUTOR')) return <><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></>;
-                              if (label.includes('CRAFTSPERSON') || label.includes('CRAFTSMAN')) return <><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></>;
-                              if (label.includes('HIDDEN') || label.includes('GEM')) return <path d="M6 3h12l4 6-10 13L2 9Z" />;
-                              // COMMON - Wrench, TrendingUp, Coffee, Compass, Zap
-                              if (label.includes('TINKERER')) return <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />;
-                              if (label.includes('GRINDER')) return <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>;
-                              if (label.includes('HOBBYIST')) return <><path d="M17 8h1a4 4 0 1 1 0 8h-1" /><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" /><line x1="6" y1="2" x2="6" y2="4" /><line x1="10" y1="2" x2="10" y2="4" /><line x1="14" y1="2" x2="14" y2="4" /></>;
-                              if (label.includes('EXPLORER')) return <><circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" /></>;
-                              if (label.includes('APPRENTICE')) return <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />;
-                              if (label.includes('GHOST')) return <><path d="M9 10h.01" /><path d="M15 10h.01" /><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" /></>;
-                              // Default - Zap
-                              return <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />;
-                            })()}
-                          </svg>
-                        </div>
-                      </div>
-
-                      {/* Avatar Section */}
-                      <div style={{
-                        flex: '0 0 175px',
+                        padding: '12px 16px',
+                        borderBottom: `2px solid ${a.accent}`,
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        background: bg,
-                        position: 'relative'
+                        gap: '14px'
                       }}>
-                        {/* Corner brackets with accent color */}
-                        <div style={{ position: 'absolute', top: '12px', left: '12px', width: '24px', height: '24px', borderTop: `3px solid ${a.accent}`, borderLeft: `3px solid ${a.accent}` }} />
-                        <div style={{ position: 'absolute', top: '12px', right: '12px', width: '24px', height: '24px', borderTop: `3px solid ${a.accent}`, borderRight: `3px solid ${a.accent}` }} />
-                        <div style={{ position: 'absolute', bottom: '12px', left: '12px', width: '24px', height: '24px', borderBottom: `3px solid ${a.accent}`, borderLeft: `3px solid ${a.accent}` }} />
-                        <div style={{ position: 'absolute', bottom: '12px', right: '12px', width: '24px', height: '24px', borderBottom: `3px solid ${a.accent}`, borderRight: `3px solid ${a.accent}` }} />
-
-                        {/* Avatar with accent border */}
+                        {/* Avatar in Header */}
                         <div style={{
-                          width: '115px',
-                          height: '115px',
+                          width: '56px',
+                          height: '56px',
                           borderRadius: '50%',
-                          border: `4px solid ${a.accent}`,
-                          boxShadow: `0 0 20px ${a.accent}40`,
+                          border: `3px solid ${a.accent}`,
                           overflow: 'hidden',
-                          background: bgLight
+                          flexShrink: 0,
+                          background: bg
                         }}>
                           <img
                             src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
@@ -3036,6 +2985,62 @@ function App() {
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                           />
+                        </div>
+
+                        {/* Name and Tier */}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '20px', fontWeight: 900, color: '#ffffff', lineHeight: 1.2 }}>
+                            {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer'}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px' }}>
+                              {tier}
+                            </span>
+                            {/* Icon */}
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={a.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              {(() => {
+                                const label = (selectedReport.label || selectedReport.archetype || '').toUpperCase();
+                                if (label.includes('10X')) return <><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" /><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /></>;
+                                if (label.includes('ARCHITECT')) return <><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></>;
+                                if (label.includes('PROFESSOR')) return <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></>;
+                                if (label.includes('SPECIALIST')) return <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></>;
+                                if (label.includes('SYSTEMS')) return <><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /><rect x="9" y="9" width="6" height="6" /></>;
+                                if (label.includes('MAINTAINER')) return <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />;
+                                if (label.includes('BUILDER')) return <><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /></>;
+                                if (label.includes('CONTRIBUTOR')) return <><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /></>;
+                                if (label.includes('CRAFTSPERSON') || label.includes('CRAFTSMAN')) return <><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></>;
+                                if (label.includes('HIDDEN') || label.includes('GEM')) return <path d="M6 3h12l4 6-10 13L2 9Z" />;
+                                if (label.includes('TINKERER')) return <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />;
+                                if (label.includes('GRINDER')) return <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>;
+                                if (label.includes('HOBBYIST')) return <><path d="M17 8h1a4 4 0 1 1 0 8h-1" /><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" /></>;
+                                if (label.includes('EXPLORER')) return <><circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" /></>;
+                                if (label.includes('APPRENTICE')) return <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />;
+                                if (label.includes('GHOST')) return <><path d="M9 10h.01" /><path d="M15 10h.01" /><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" /></>;
+                                return <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />;
+                              })()}
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Classification Reason Section */}
+                      <div style={{
+                        padding: '12px 14px',
+                        background: bg,
+                        borderBottom: `1px solid ${border}`
+                      }}>
+                        <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '6px' }}>
+                          WHY THIS CLASSIFICATION
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#e6edf3', lineHeight: 1.5 }}>
+                          {(() => {
+                            const reason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
+                            if (reason) {
+                              return reason.length > 180 ? reason.substring(0, 180) + '...' : reason;
+                            }
+                            const archetype = (selectedReport.label || selectedReport.archetype || 'Developer').replace(/^THE\s+/i, '');
+                            return `Classified as ${archetype} based on repository analysis, code patterns, and development activity.`;
+                          })()}
                         </div>
                       </div>
 
