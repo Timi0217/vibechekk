@@ -1509,20 +1509,42 @@ function App() {
           }}>
             {/* Tabs Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.08)', padding: '2px', borderRadius: '8px' }}>
+              <div style={{
+                display: 'flex',
+                gap: '0',
+                background: 'rgba(255,255,255,0.08)',
+                padding: '3px',
+                borderRadius: '8px',
+                position: 'relative'
+              }}>
+                {/* Sliding background */}
+                <div style={{
+                  position: 'absolute',
+                  top: '3px',
+                  bottom: '3px',
+                  left: checklistTab === 'configure' ? '3px' : 'calc(50% + 1px)',
+                  width: 'calc(50% - 4px)',
+                  background: 'rgba(255,255,255,0.15)',
+                  borderRadius: '6px',
+                  transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  zIndex: 0
+                }} />
                 <button
                   onClick={() => setChecklistTab('configure')}
                   style={{
-                    padding: '4px 12px',
+                    padding: '6px 16px',
                     fontSize: '10px',
                     fontWeight: 700,
                     borderRadius: '6px',
                     border: 'none',
-                    background: checklistTab === 'configure' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    background: 'transparent',
                     color: 'white',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    letterSpacing: '0.02em'
+                    letterSpacing: '0.02em',
+                    position: 'relative',
+                    zIndex: 1,
+                    flex: 1
                   }}
                 >
                   CONFIGURE
@@ -1530,16 +1552,19 @@ function App() {
                 <button
                   onClick={() => setChecklistTab('active')}
                   style={{
-                    padding: '4px 12px',
+                    padding: '6px 16px',
                     fontSize: '10px',
                     fontWeight: 700,
                     borderRadius: '6px',
                     border: 'none',
-                    background: checklistTab === 'active' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    background: 'transparent',
                     color: 'white',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    letterSpacing: '0.02em'
+                    letterSpacing: '0.02em',
+                    position: 'relative',
+                    zIndex: 1,
+                    flex: 1
                   }}
                 >
                   ACTIVE
