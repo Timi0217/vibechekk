@@ -2512,7 +2512,7 @@ function App() {
                       <>
                         <FileSpreadsheet size={32} color="#cbd5e1" style={{ marginBottom: '10px' }} />
                         <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
-                          Click to upload CSV or JSON
+                          Click to upload CSV
                         </div>
                         <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
                           Max 100 profiles per batch
