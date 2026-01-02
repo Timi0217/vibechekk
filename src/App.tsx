@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, FileSpreadsheet, Shield } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
 import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
@@ -1977,28 +1977,29 @@ function App() {
                               });
                             }}
                             style={{
-                              padding: '4px',
-                              borderRadius: '6px',
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
                               border: 'none',
-                              background: 'transparent',
+                              background: '#ef4444',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              opacity: 0.5,
-                              transition: 'all 0.2s ease'
+                              transition: 'all 0.2s ease',
+                              flexShrink: 0
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = '#fee2e2';
-                              e.currentTarget.style.opacity = '1';
+                              e.currentTarget.style.background = '#dc2626';
+                              e.currentTarget.style.transform = 'scale(1.1)';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'transparent';
-                              e.currentTarget.style.opacity = '0.5';
+                              e.currentTarget.style.background = '#ef4444';
+                              e.currentTarget.style.transform = 'scale(1)';
                             }}
                             title="Delete search"
                           >
-                            <X size={12} color="#dc2626" />
+                            <Minus size={12} color="white" strokeWidth={3} />
                           </button>
                         </div>
                       </div>
