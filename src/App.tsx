@@ -214,6 +214,7 @@ function App() {
     loading: false
   })
   const [activeSearches, setActiveSearches] = useState<any[]>([])
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [checklistFilters, setChecklistFilters] = useState<{ location: string; minScore: number }>({ location: '', minScore: 0 })
   const [autochekkLogs, setAutochekkLogs] = useState<any[]>([])
   const [pendingAnalyses, setPendingAnalyses] = useState<{ handle: string, name?: string, avatar: string, timestamp: number }[]>([])
@@ -2016,11 +2017,7 @@ function App() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setActiveSearches(prev => {
-                                const updated = prev.filter(search => search.id !== s.id);
-                                chrome.storage.local.set({ active_searches: updated });
-                                return updated;
-                              });
+                              setDeleteConfirmId(s.id);
                             }}
                             style={{
                               width: '20px',
@@ -2730,6 +2727,103 @@ function App() {
           </span>
         </div>
       </header>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '24px',
+            maxWidth: '320px',
+            width: '90%',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            animation: 'slideUpFade 0.3s ease'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: '#fee2e2',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <Trash size={24} color="#dc2626" />
+            </div>
+            <h3 style={{
+              fontSize: '16px',
+              fontWeight: 700,
+              color: 'var(--text-main)',
+              textAlign: 'center',
+              margin: '0 0 8px'
+            }}>
+              Delete Search?
+            </h3>
+            <p style={{
+              fontSize: '13px',
+              color: 'var(--text-dim)',
+              textAlign: 'center',
+              margin: '0 0 24px',
+              lineHeight: 1.5
+            }}>
+              This will permanently remove this search and all its results.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: 'white',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: 'var(--text-main)',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setActiveSearches(prev => {
+                    const updated = prev.filter(search => search.id !== deleteConfirmId);
+                    chrome.storage.local.set({ active_searches: updated });
+                    return updated;
+                  });
+                  setDeleteConfirmId(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: '#dc2626',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error Toast */}
       {errorToast && (
