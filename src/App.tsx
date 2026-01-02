@@ -1950,15 +1950,26 @@ function App() {
                               Found {s.results?.length || 0} candidates
                             </div>
                           ) : (
-                            <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', lineHeight: '1.3' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                                <span>{s.progressMessage || 'Searching...'}</span>
+                              </div>
                               <div style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                background: '#22c55e',
-                                animation: 'pulse 1.5s ease-in-out infinite'
-                              }}></div>
-                              <span>{s.progressMessage || 'Processing...'}</span>
+                                height: '3px',
+                                background: '#e5e7eb',
+                                borderRadius: '2px',
+                                overflow: 'hidden',
+                                width: '100%'
+                              }}>
+                                <div style={{
+                                  height: '100%',
+                                  background: 'var(--primary)',
+                                  borderRadius: '2px',
+                                  animation: 'progressIndeterminate 1.5s ease-in-out infinite',
+                                  width: '40%'
+                                }} />
+                              </div>
                             </div>
                           )}
                         </div>
@@ -2124,7 +2135,6 @@ function App() {
                                   <button
                                     onClick={() => {
                                       setManualUrl(`https://github.com/${c.handle}`);
-                                      setActiveTab('home');
                                     }}
                                     style={{
                                       padding: '4px 10px',
