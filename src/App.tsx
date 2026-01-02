@@ -2090,6 +2090,32 @@ function App() {
                                   Clear
                                 </button>
                               )}
+
+                              {/* Chekk All Button */}
+                              <button
+                                onClick={() => {
+                                  // Add all filtered results to bulk chekk queue
+                                  const urls = filteredResults.map((c: any) => `https://github.com/${c.handle}`);
+                                  setBulkUrls(urls.join('\n'));
+                                  setActiveTab('bulk');
+                                }}
+                                style={{
+                                  marginLeft: 'auto',
+                                  padding: '5px 10px',
+                                  borderRadius: '5px',
+                                  background: 'var(--primary)',
+                                  border: 'none',
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  color: 'white',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                Chekk All
+                              </button>
                             </div>
 
                             {/* Results - Premium Card Design */}
