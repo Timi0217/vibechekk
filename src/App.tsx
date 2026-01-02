@@ -1944,7 +1944,7 @@ function App() {
                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                       >
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)' }}>{s.title}</div>
+                          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>{s.title}</div>
                           {s.status === 'completed' ? (
                             <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
                               Found {s.results?.length || 0} candidates
