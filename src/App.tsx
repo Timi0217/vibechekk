@@ -214,6 +214,7 @@ function App() {
     loading: false
   })
   const [activeSearches, setActiveSearches] = useState<any[]>([])
+  const [checklistFilters, setChecklistFilters] = useState<{ location: string; minScore: number }>({ location: '', minScore: 0 })
   const [autochekkLogs, setAutochekkLogs] = useState<any[]>([])
   const [pendingAnalyses, setPendingAnalyses] = useState<{ handle: string, name?: string, avatar: string, timestamp: number }[]>([])
   const [githubLinked, setGithubLinked] = useState(false)
@@ -1967,74 +1968,167 @@ function App() {
                       </div>
 
                       {/* Results List */}
-                      {expandedSearchId === s.id && s.results && (
-                        <div style={{
-                          marginTop: '12px',
-                          paddingTop: '12px',
-                          borderTop: '1px solid var(--border-light)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px',
-                          maxHeight: '300px',
-                          overflowY: 'auto'
-                        }}>
-                          {s.results.map((c: any, i: number) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
-                              <img src={c.avatar} alt={c.handle} style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>{c.name}</div>
-                                  {c.matchScore !== undefined && (
-                                    <div style={{
-                                      fontSize: '9px',
-                                      fontWeight: 700,
-                                      color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
-                                      background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
-                                      padding: '1px 4px',
-                                      borderRadius: '4px'
-                                    }}>
-                                      {c.matchScore}%
-                                    </div>
-                                  )}
-                                </div>
-                                <div style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  @{c.handle}
-                                  {c.archetype && (
-                                    <span style={{ fontSize: '9px', background: '#e5e7eb', padding: '0 4px', borderRadius: '4px', color: '#374151', fontWeight: 500 }}>
-                                      {c.archetype.replace('THE ', '')}
-                                    </span>
-                                  )}
-                                </div>
-                                {c.matchReason && (
-                                  <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px', lineHeight: '1.2', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={c.matchReason}>
-                                    {c.matchReason}
-                                  </div>
-                                )}
-                              </div>
-                              <a
-                                href={`https://github.com/${c.handle}`}
-                                target="_blank"
-                                rel="noreferrer"
+                      {expandedSearchId === s.id && s.results && (() => {
+                        // Get unique locations from results
+                        const uniqueLocations = [...new Set(s.results.map((c: any) => c.location).filter(Boolean))] as string[];
+
+                        // Apply filters
+                        const filteredResults = s.results.filter((c: any) => {
+                          if (checklistFilters.location && c.location !== checklistFilters.location) return false;
+                          if (checklistFilters.minScore > 0 && (c.matchScore || 0) < checklistFilters.minScore) return false;
+                          return true;
+                        });
+
+                        return (
+                          <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+                            {/* Filter Bar */}
+                            <div style={{
+                              display: 'flex',
+                              gap: '8px',
+                              marginBottom: '10px',
+                              flexWrap: 'wrap',
+                              alignItems: 'center'
+                            }}>
+                              {/* Location Filter */}
+                              <select
+                                value={checklistFilters.location}
+                                onChange={(e) => setChecklistFilters(prev => ({ ...prev, location: e.target.value }))}
                                 style={{
                                   padding: '4px 8px',
                                   borderRadius: '6px',
-                                  background: 'white',
                                   border: '1px solid var(--border)',
-                                  fontSize: '10px',
+                                  fontSize: '9px',
                                   fontWeight: 600,
+                                  background: checklistFilters.location ? '#dbeafe' : 'white',
                                   color: 'var(--text-main)',
-                                  textDecoration: 'none'
+                                  cursor: 'pointer',
+                                  minWidth: '80px'
                                 }}
                               >
-                                View
-                              </a>
+                                <option value="">📍 All Locations</option>
+                                {uniqueLocations.map((loc, i) => (
+                                  <option key={i} value={loc}>{loc}</option>
+                                ))}
+                              </select>
+
+                              {/* Score Filter */}
+                              <select
+                                value={checklistFilters.minScore}
+                                onChange={(e) => setChecklistFilters(prev => ({ ...prev, minScore: Number(e.target.value) }))}
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border)',
+                                  fontSize: '9px',
+                                  fontWeight: 600,
+                                  background: checklistFilters.minScore > 0 ? '#dbeafe' : 'white',
+                                  color: 'var(--text-main)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value={0}>⭐ Any Score</option>
+                                <option value={50}>≥50%</option>
+                                <option value={70}>≥70%</option>
+                                <option value={80}>≥80%</option>
+                              </select>
+
+                              {/* Clear Filters */}
+                              {(checklistFilters.location || checklistFilters.minScore > 0) && (
+                                <button
+                                  onClick={() => setChecklistFilters({ location: '', minScore: 0 })}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    fontSize: '9px',
+                                    fontWeight: 600,
+                                    background: '#fee2e2',
+                                    color: '#dc2626',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  ✕ Clear
+                                </button>
+                              )}
+
+                              {/* Result count */}
+                              <span style={{ fontSize: '9px', color: 'var(--text-dim)', marginLeft: 'auto' }}>
+                                {filteredResults.length}/{s.results.length}
+                              </span>
                             </div>
-                          ))}
-                          {s.results.length === 0 && (
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', padding: '10px' }}>No candidates found matching criteria.</div>
-                          )}
-                        </div>
-                      )}
+
+                            {/* Results */}
+                            <div style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px',
+                              maxHeight: '280px',
+                              overflowY: 'auto'
+                            }}>
+                              {filteredResults.map((c: any, i: number) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
+                                  <img src={c.avatar} alt={c.handle} style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>{c.name}</div>
+                                      {c.matchScore !== undefined && (
+                                        <div style={{
+                                          fontSize: '9px',
+                                          fontWeight: 700,
+                                          color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
+                                          background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
+                                          padding: '1px 4px',
+                                          borderRadius: '4px'
+                                        }}>
+                                          {c.matchScore}%
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                      @{c.handle}
+                                      {c.location && (
+                                        <span style={{ fontSize: '8px', color: '#6b7280' }}>📍{c.location}</span>
+                                      )}
+                                      {c.archetype && (
+                                        <span style={{ fontSize: '9px', background: '#e5e7eb', padding: '0 4px', borderRadius: '4px', color: '#374151', fontWeight: 500 }}>
+                                          {c.archetype.replace('THE ', '')}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {c.matchReason && (
+                                      <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px', lineHeight: '1.2', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={c.matchReason}>
+                                        {c.matchReason}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <a
+                                    href={`https://github.com/${c.handle}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      padding: '4px 8px',
+                                      borderRadius: '6px',
+                                      background: 'white',
+                                      border: '1px solid var(--border)',
+                                      fontSize: '10px',
+                                      fontWeight: 600,
+                                      color: 'var(--text-main)',
+                                      textDecoration: 'none'
+                                    }}
+                                  >
+                                    View
+                                  </a>
+                                </div>
+                              ))}
+                              {filteredResults.length === 0 && (
+                                <div style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', padding: '10px' }}>
+                                  No candidates match your filters.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
