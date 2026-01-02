@@ -2113,50 +2113,41 @@ function App() {
                               overflowY: 'auto'
                             }}>
                               {filteredResults.map((c: any, i: number) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
-                                  <img src={c.avatar} alt={c.handle} style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>{c.name}</div>
-                                      {c.matchScore !== undefined && (
-                                        <div style={{
-                                          fontSize: '9px',
-                                          fontWeight: 700,
-                                          color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
-                                          background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
-                                          padding: '1px 4px',
-                                          borderRadius: '4px'
-                                        }}>
-                                          {c.matchScore}%
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                                      @{c.handle}
-                                      {c.location && (
-                                        <span style={{ fontSize: '8px', color: '#6b7280' }}>📍{c.location}</span>
-                                      )}
-                                      {c.archetype && (
-                                        <span style={{ fontSize: '9px', background: '#e5e7eb', padding: '0 4px', borderRadius: '4px', color: '#374151', fontWeight: 500 }}>
-                                          {c.archetype.replace('THE ', '')}
-                                        </span>
-                                      )}
-                                    </div>
-
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
+                                  <img src={c.avatar} alt={c.name} style={{ width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0 }} />
+                                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
+                                    {c.name || c.handle}
                                   </div>
+                                  {c.matchScore !== undefined && (
+                                    <div style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
+                                      background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      flexShrink: 0
+                                    }}>
+                                      {c.matchScore}%
+                                    </div>
+                                  )}
+                                  {c.location && (
+                                    <span style={{ fontSize: '8px', color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>📍{c.location.split(',')[0]}</span>
+                                  )}
                                   <a
                                     href={`https://github.com/${c.handle}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     style={{
-                                      padding: '4px 8px',
+                                      padding: '4px 10px',
                                       borderRadius: '6px',
                                       background: 'white',
                                       border: '1px solid var(--border)',
                                       fontSize: '10px',
                                       fontWeight: 600,
                                       color: 'var(--text-main)',
-                                      textDecoration: 'none'
+                                      textDecoration: 'none',
+                                      flexShrink: 0
                                     }}
                                   >
                                     View
@@ -2187,10 +2178,10 @@ function App() {
             )}
           </div>
         </div>
-      </div>
+      </div >
 
       {/* BULKCHEKK Card */}
-      <div style={{
+      < div style={{
         position: 'relative',
         marginBottom: '12px',
         borderRadius: '16px',
@@ -2199,9 +2190,10 @@ function App() {
         boxShadow: showBulkChekkForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
         background: 'linear-gradient(135deg, #020617 0%, #172554 100%)',
         border: showBulkChekkForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
-      }}>
+      }
+      }>
         {/* Blob container with overflow hidden */}
-        <div style={{
+        < div style={{
           position: 'absolute',
           inset: 0,
           borderRadius: '16px',
@@ -2218,12 +2210,12 @@ function App() {
             borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
             zIndex: 0
           }} />
-        </div>
+        </div >
 
         {/* Content Layer */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        < div style={{ position: 'relative', zIndex: 1 }}>
           {/* Header / Toggle */}
-          <div
+          < div
             onClick={() => {
               if (user?.tier !== 'PRO') {
                 setProFeaturePaywallOpen('BulkChekk');
@@ -2241,7 +2233,7 @@ function App() {
             }}
           >
             {/* Icon Box */}
-            <div style={{
+            < div style={{
               width: '42px',
               height: '42px',
               borderRadius: '12px',
@@ -2254,10 +2246,10 @@ function App() {
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }}>
               <FileSpreadsheet size={24} color="white" strokeWidth={2.5} />
-            </div>
+            </div >
 
             {/* Text Info */}
-            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+            < div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                 <span style={{
                   fontSize: '13px',
@@ -2331,10 +2323,10 @@ function App() {
                   boxShadow: showBulkChekkForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none'
                 }} />
               </div>
-            </div>
+            </div >
 
             {/* Arrow */}
-            <ChevronRight
+            < ChevronRight
               size={18}
               color="rgba(255, 255, 255, 0.5)"
               style={{
@@ -2343,9 +2335,9 @@ function App() {
                 transition: 'transform 0.2s ease'
               }}
             />
-          </div>
+          </div >
           {/* Form Content (Correctly Animated) */}
-          <div style={{
+          < div style={{
             maxHeight: showBulkChekkForm ? '500px' : '0',
             opacity: showBulkChekkForm ? 1 : 0,
             overflow: 'hidden',
@@ -2629,9 +2621,9 @@ function App() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      </div>
+          </div >
+        </div >
+      </div >
 
     </>
   );
