@@ -2118,28 +2118,34 @@ function App() {
                                   <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
                                     {c.name || c.handle}
                                   </div>
-                                  {c.matchScore !== undefined && (
-                                    <div style={{
-                                      fontSize: '9px',
-                                      fontWeight: 700,
-                                      color: c.matchScore >= 80 ? '#059669' : c.matchScore >= 50 ? '#d97706' : '#dc2626',
-                                      background: c.matchScore >= 80 ? '#d1fae5' : c.matchScore >= 50 ? '#fef3c7' : '#fee2e2',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      flexShrink: 0
-                                    }}>
-                                      {c.matchScore}%
-                                    </div>
-                                  )}
                                   {c.location && (
                                     <span style={{ fontSize: '8px', color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>📍{c.location.split(',')[0]}</span>
                                   )}
+                                  <button
+                                    onClick={() => {
+                                      setManualUrl(`https://github.com/${c.handle}`);
+                                      setActiveTab('home');
+                                    }}
+                                    style={{
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      background: 'var(--primary)',
+                                      border: 'none',
+                                      fontSize: '10px',
+                                      fontWeight: 600,
+                                      color: 'white',
+                                      cursor: 'pointer',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    Chekk
+                                  </button>
                                   <a
                                     href={`https://github.com/${c.handle}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     style={{
-                                      padding: '4px 10px',
+                                      padding: '4px 8px',
                                       borderRadius: '6px',
                                       background: 'white',
                                       border: '1px solid var(--border)',
