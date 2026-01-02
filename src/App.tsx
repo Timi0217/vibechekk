@@ -1968,7 +1968,16 @@ function App() {
 
                       {/* Results List */}
                       {expandedSearchId === s.id && s.results && (
-                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{
+                          marginTop: '12px',
+                          paddingTop: '12px',
+                          borderTop: '1px solid var(--border-light)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          maxHeight: '300px',
+                          overflowY: 'auto'
+                        }}>
                           {s.results.map((c: any, i: number) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
                               <img src={c.avatar} alt={c.handle} style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
