@@ -442,43 +442,57 @@ app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
     if (!GITHUB_TOKEN) return res.status(500).json({ success: false, error: 'GitHub Token missing' });
 
     try {
-        // 1. Search GitHub
-        // Import dynamically if needed or just use the import from top if I added it (I need to check imports!)
-        // Since I can't easily add import to top with replace_file_content efficiently without reading whole file, 
-        // I'll assume I need to add import. Wait, I can't add import at top in this chunk.
-        // I will rely on the fact that I can't easily import it without editing the top.
-        // I'll use `require` or `import()` dynamic import? Or just add the import in a separate step?
-        // Let's assume I'll fix imports in next step to be safe.
-        // Or I can use multi_replace to add import.
-        // I'll use Dynamic Import for now to avoid breaking file if I miss line numbers at top.
         const { searchCandidates } = await import('./lib/github.js');
 
         const candidates = await searchCandidates(GITHUB_TOKEN, { languages, experience, jobTitle });
 
         console.log(`[Chekklist] Found ${candidates.length} candidates.`);
 
-        // 2. Filter/Analyze with DeepSeek
+        // 2. Filter/Analyze with DeepSeek (if API key exists)
         let rankings: any = {};
-        if (process.env.DEEPSEEK_API_KEY && jd) {
+        if (process.env.DEEPSEEK_API_KEY) {
             try {
                 const { rankCandidates } = await import('./lib/deepseek');
-                rankings = await rankCandidates(process.env.DEEPSEEK_API_KEY, { jobTitle, jd, experience, languages, archetypes, tiers }, candidates);
-            } catch (e) { console.error('DeepSeek Rank Step Failed:', e); }
+                // Use job title as fallback if no JD
+                const effectiveJd = jd || `Looking for: ${jobTitle}. Skills: ${(languages || []).join(', ')}`;
+                rankings = await rankCandidates(process.env.DEEPSEEK_API_KEY, {
+                    jobTitle,
+                    jd: effectiveJd,
+                    experience,
+                    languages,
+                    archetypes,
+                    tiers
+                }, candidates);
+                console.log(`[Chekklist] Rankings generated for ${Object.keys(rankings).length} candidates`);
+            } catch (e) {
+                console.error('[Chekklist] DeepSeek Rank Step Failed:', e);
+            }
         }
 
         const results = candidates.map((c: any) => {
             const rank = rankings[c.login] || { score: 60, reason: 'Matched via keywords' };
+
+            // Calculate a basic score based on repo data if no ranking
+            let finalScore = rank.score;
+            if (!rankings[c.login] && c.totalStars) {
+                // Boost score based on stars/followers
+                finalScore = Math.min(90, 60 + Math.floor(c.totalStars / 100) + Math.floor((c.followerCount || 0) / 50));
+            }
+
             return {
                 handle: c.login,
                 name: c.name || c.login,
                 avatar: c.avatarUrl,
                 bio: c.bio,
-                matchScore: rank.score,
+                location: c.location || null,  // Include location!
+                matchScore: finalScore,
                 matchReason: rank.reason,
                 archetype: rank.archetype,
                 tier: rank.tier,
-                topRepo: c.repositories.nodes[0]?.name || 'Unknown',
-                topRepoDesc: c.repositories.nodes[0]?.description
+                topRepo: c.repositories?.nodes?.[0]?.name || 'Unknown',
+                topRepoDesc: c.repositories?.nodes?.[0]?.description,
+                followers: c.followerCount || 0,
+                totalStars: c.totalStars || 0
             };
         }).sort((a: any, b: any) => b.matchScore - a.matchScore);
 
