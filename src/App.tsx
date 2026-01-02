@@ -2112,9 +2112,9 @@ function App() {
                                   style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '10px',
-                                    padding: '10px 12px',
-                                    borderRadius: '10px',
+                                    gap: '8px',
+                                    padding: '8px 10px',
+                                    borderRadius: '8px',
                                     background: 'white',
                                     border: '1px solid var(--border)',
                                     transition: 'all 0.2s ease',
@@ -2133,67 +2133,57 @@ function App() {
                                     src={c.avatar}
                                     alt={c.name}
                                     style={{
-                                      width: '32px',
-                                      height: '32px',
-                                      borderRadius: '8px',
-                                      flexShrink: 0,
-                                      border: '2px solid var(--bg-gray)'
+                                      width: '28px',
+                                      height: '28px',
+                                      borderRadius: '6px',
+                                      flexShrink: 0
                                     }}
                                   />
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{
-                                      fontSize: '12px',
+                                  <div style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: 'var(--text-main)',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }}>
+                                    {c.name || c.handle}
+                                  </div>
+                                  <button
+                                    onClick={() => setManualUrl(`https://github.com/${c.handle}`)}
+                                    style={{
+                                      padding: '5px 10px',
+                                      borderRadius: '5px',
+                                      background: 'var(--primary)',
+                                      border: 'none',
+                                      fontSize: '9px',
                                       fontWeight: 700,
-                                      color: 'var(--text-main)',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      marginBottom: '2px'
-                                    }}>
-                                      {c.name || c.handle}
-                                    </div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                                      @{c.handle}
-                                    </div>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                                    <button
-                                      onClick={() => setManualUrl(`https://github.com/${c.handle}`)}
-                                      style={{
-                                        padding: '6px 12px',
-                                        borderRadius: '6px',
-                                        background: 'var(--primary)',
-                                        border: 'none',
-                                        fontSize: '10px',
-                                        fontWeight: 700,
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.5px'
-                                      }}
-                                    >
-                                      Chekk
-                                    </button>
-                                    <a
-                                      href={`https://github.com/${c.handle}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={{
-                                        padding: '6px 10px',
-                                        borderRadius: '6px',
-                                        background: 'var(--bg-gray)',
-                                        border: 'none',
-                                        fontSize: '10px',
-                                        fontWeight: 600,
-                                        color: 'var(--text-main)',
-                                        textDecoration: 'none',
-                                        display: 'flex',
-                                        alignItems: 'center'
-                                      }}
-                                    >
-                                      View
-                                    </a>
-                                  </div>
+                                      color: 'white',
+                                      cursor: 'pointer',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    Chekk
+                                  </button>
+                                  <a
+                                    href={`https://github.com/${c.handle}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      padding: '5px 8px',
+                                      borderRadius: '5px',
+                                      background: 'var(--bg-gray)',
+                                      fontSize: '9px',
+                                      fontWeight: 600,
+                                      color: 'var(--text-dim)',
+                                      textDecoration: 'none',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    View
+                                  </a>
                                 </div>
                               ))}
                               {filteredResults.length === 0 && (
