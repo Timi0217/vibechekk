@@ -2090,11 +2090,6 @@ function App() {
                                   Clear
                                 </button>
                               )}
-
-                              {/* Result count */}
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto', fontWeight: 500 }}>
-                                {filteredResults.length} of {s.results.length}
-                              </span>
                             </div>
 
                             {/* Results - Premium Card Design */}
