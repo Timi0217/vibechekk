@@ -2068,106 +2068,143 @@ function App() {
                                 ))}
                               </select>
 
-                              {/* Score Filter */}
-                              <select
-                                value={checklistFilters.minScore}
-                                onChange={(e) => setChecklistFilters(prev => ({ ...prev, minScore: Number(e.target.value) }))}
-                                style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid var(--border)',
-                                  fontSize: '9px',
-                                  fontWeight: 600,
-                                  background: checklistFilters.minScore > 0 ? '#dbeafe' : 'white',
-                                  color: 'var(--text-main)',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <option value={0}>⭐ Any Score</option>
-                                <option value={50}>≥50%</option>
-                                <option value={70}>≥70%</option>
-                                <option value={80}>≥80%</option>
-                              </select>
-
                               {/* Clear Filters */}
-                              {(checklistFilters.location || checklistFilters.minScore > 0) && (
+                              {checklistFilters.location && (
                                 <button
                                   onClick={() => setChecklistFilters({ location: '', minScore: 0 })}
                                   style={{
-                                    padding: '4px 8px',
+                                    padding: '4px 10px',
                                     borderRadius: '6px',
                                     border: 'none',
                                     fontSize: '9px',
                                     fontWeight: 600,
                                     background: '#fee2e2',
                                     color: '#dc2626',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
                                   }}
                                 >
-                                  ✕ Clear
+                                  <X size={10} />
+                                  Clear
                                 </button>
                               )}
 
                               {/* Result count */}
-                              <span style={{ fontSize: '9px', color: 'var(--text-dim)', marginLeft: 'auto' }}>
-                                {filteredResults.length}/{s.results.length}
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginLeft: 'auto', fontWeight: 500 }}>
+                                {filteredResults.length} of {s.results.length}
                               </span>
                             </div>
 
-                            {/* Results */}
+                            {/* Results - Premium Card Design */}
                             <div style={{
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: '8px',
-                              maxHeight: '280px',
-                              overflowY: 'auto'
+                              gap: '6px',
+                              maxHeight: '300px',
+                              overflowY: 'auto',
+                              paddingRight: '4px'
                             }}>
                               {filteredResults.map((c: any, i: number) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 8px', borderRadius: '8px', background: 'var(--bg-gray)', overflow: 'hidden' }}>
-                                  <img src={c.avatar} alt={c.name} style={{ width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0 }} />
-                                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
-                                    {c.name || c.handle}
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      setManualUrl(`https://github.com/${c.handle}`);
-                                    }}
+                                <div
+                                  key={i}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    padding: '10px 12px',
+                                    borderRadius: '10px',
+                                    background: 'white',
+                                    border: '1px solid var(--border)',
+                                    transition: 'all 0.2s ease',
+                                    cursor: 'default'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--accent)';
+                                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(180, 83, 9, 0.08)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--border)';
+                                    e.currentTarget.style.boxShadow = 'none';
+                                  }}
+                                >
+                                  <img
+                                    src={c.avatar}
+                                    alt={c.name}
                                     style={{
-                                      padding: '4px 10px',
-                                      borderRadius: '6px',
-                                      background: 'var(--primary)',
-                                      border: 'none',
-                                      fontSize: '10px',
-                                      fontWeight: 600,
-                                      color: 'white',
-                                      cursor: 'pointer',
-                                      flexShrink: 0
+                                      width: '32px',
+                                      height: '32px',
+                                      borderRadius: '8px',
+                                      flexShrink: 0,
+                                      border: '2px solid var(--bg-gray)'
                                     }}
-                                  >
-                                    Chekk
-                                  </button>
-                                  <a
-                                    href={`https://github.com/${c.handle}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={{
-                                      padding: '4px 8px',
-                                      borderRadius: '6px',
-                                      background: 'white',
-                                      border: '1px solid var(--border)',
-                                      fontSize: '10px',
-                                      fontWeight: 600,
+                                  />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                      fontSize: '12px',
+                                      fontWeight: 700,
                                       color: 'var(--text-main)',
-                                      textDecoration: 'none',
-                                      flexShrink: 0
-                                    }}
-                                  >
-                                    View
-                                  </a>
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      marginBottom: '2px'
+                                    }}>
+                                      {c.name || c.handle}
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                                      @{c.handle}
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                    <button
+                                      onClick={() => setManualUrl(`https://github.com/${c.handle}`)}
+                                      style={{
+                                        padding: '6px 12px',
+                                        borderRadius: '6px',
+                                        background: 'var(--primary)',
+                                        border: 'none',
+                                        fontSize: '10px',
+                                        fontWeight: 700,
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px'
+                                      }}
+                                    >
+                                      Chekk
+                                    </button>
+                                    <a
+                                      href={`https://github.com/${c.handle}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '6px',
+                                        background: 'var(--bg-gray)',
+                                        border: 'none',
+                                        fontSize: '10px',
+                                        fontWeight: 600,
+                                        color: 'var(--text-main)',
+                                        textDecoration: 'none',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                      }}
+                                    >
+                                      View
+                                    </a>
+                                  </div>
                                 </div>
                               ))}
                               {filteredResults.length === 0 && (
-                                <div style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', padding: '10px' }}>
+                                <div style={{
+                                  fontSize: '11px',
+                                  color: 'var(--text-dim)',
+                                  textAlign: 'center',
+                                  padding: '20px',
+                                  background: 'var(--bg-gray)',
+                                  borderRadius: '8px'
+                                }}>
                                   No candidates match your filters.
                                 </div>
                               )}
