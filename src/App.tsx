@@ -1941,10 +1941,10 @@ function App() {
                     }}>
                       <div
                         onClick={() => setExpandedSearchId(expandedSearchId === s.id ? null : s.id)}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: '12px' }}
                       >
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>{s.title}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '2px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title}</div>
                           {s.status === 'completed' ? (
                             <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
                               Found {s.results?.length || 0} candidates
@@ -1962,7 +1962,7 @@ function App() {
                             </div>
                           )}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                           {s.status === 'completed' && (
                             <div style={{
                               width: '20px',
