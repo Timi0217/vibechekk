@@ -1964,7 +1964,17 @@ function App() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {s.status === 'completed' && (
-                            <ChevronDown size={14} color="var(--text-dim)" style={{ transform: expandedSearchId === s.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                            <div style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              background: '#e5e7eb',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <ChevronDown size={14} color="#374151" strokeWidth={2.5} style={{ transform: expandedSearchId === s.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                            </div>
                           )}
                           {/* Delete Button */}
                           <button
