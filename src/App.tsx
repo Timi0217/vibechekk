@@ -1943,7 +1943,7 @@ function App() {
                         onClick={() => setExpandedSearchId(expandedSearchId === s.id ? null : s.id)}
                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                       >
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: 'var(--text-main)' }}>{s.title}</div>
                           {s.status === 'completed' ? (
                             <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
@@ -1962,9 +1962,45 @@ function App() {
                             </div>
                           )}
                         </div>
-                        {s.status === 'completed' && (
-                          <ChevronDown size={14} color="var(--text-dim)" style={{ transform: expandedSearchId === s.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {s.status === 'completed' && (
+                            <ChevronDown size={14} color="var(--text-dim)" style={{ transform: expandedSearchId === s.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                          )}
+                          {/* Delete Button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveSearches(prev => {
+                                const updated = prev.filter(search => search.id !== s.id);
+                                chrome.storage.local.set({ active_searches: updated });
+                                return updated;
+                              });
+                            }}
+                            style={{
+                              padding: '4px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: 0.5,
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = '#fee2e2';
+                              e.currentTarget.style.opacity = '1';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent';
+                              e.currentTarget.style.opacity = '0.5';
+                            }}
+                            title="Delete search"
+                          >
+                            <X size={12} color="#dc2626" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Results List */}
