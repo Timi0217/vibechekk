@@ -2126,7 +2126,7 @@ function App() {
                                 }}
                                 style={{
                                   marginLeft: 'auto',
-                                  padding: '5px 10px',
+                                  padding: '5px 12px',
                                   borderRadius: '5px',
                                   background: 'var(--primary)',
                                   border: 'none',
@@ -2134,9 +2134,9 @@ function App() {
                                   fontWeight: 700,
                                   color: 'white',
                                   cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px'
+                                  whiteSpace: 'nowrap',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.03em'
                                 }}
                               >
                                 Chekk All
@@ -2208,7 +2208,9 @@ function App() {
                                       fontWeight: 700,
                                       color: 'white',
                                       cursor: 'pointer',
-                                      flexShrink: 0
+                                      flexShrink: 0,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.03em'
                                     }}
                                   >
                                     Chekk
@@ -2225,7 +2227,9 @@ function App() {
                                       fontWeight: 600,
                                       color: 'var(--text-dim)',
                                       textDecoration: 'none',
-                                      flexShrink: 0
+                                      flexShrink: 0,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.03em'
                                     }}
                                   >
                                     View
