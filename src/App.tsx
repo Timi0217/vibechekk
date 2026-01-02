@@ -1941,16 +1941,16 @@ function App() {
                     }}>
                       <div
                         onClick={() => setExpandedSearchId(expandedSearchId === s.id ? null : s.id)}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: '12px' }}
+                        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '12px' }}
                       >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '2px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title}</div>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <div style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.3' }}>{s.title}</div>
                           {s.status === 'completed' ? (
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500, lineHeight: '1.3' }}>
                               Found {s.results?.length || 0} candidates
                             </div>
                           ) : (
-                            <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', lineHeight: '1.3' }}>
                               <div style={{
                                 width: '6px',
                                 height: '6px',
@@ -1962,7 +1962,7 @@ function App() {
                             </div>
                           )}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, alignSelf: 'center' }}>
                           {s.status === 'completed' && (
                             <div style={{
                               width: '20px',
