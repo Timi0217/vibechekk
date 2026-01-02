@@ -2142,7 +2142,7 @@ function App() {
                                         </span>
                                       )}
                                     </div>
-                                    {c.matchReason && (
+                                    {c.matchReason && c.matchReason !== 'Matched via keywords' && (
                                       <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '2px', lineHeight: '1.2', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={c.matchReason}>
                                         {c.matchReason}
                                       </div>
