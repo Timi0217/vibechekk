@@ -2044,7 +2044,6 @@ function App() {
                               display: 'flex',
                               gap: '8px',
                               marginBottom: '10px',
-                              flexWrap: 'wrap',
                               alignItems: 'center'
                             }}>
                               {/* Location Filter */}
@@ -2124,14 +2123,11 @@ function App() {
                               overflowY: 'auto'
                             }}>
                               {filteredResults.map((c: any, i: number) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '8px', background: 'var(--bg-gray)' }}>
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 8px', borderRadius: '8px', background: 'var(--bg-gray)', overflow: 'hidden' }}>
                                   <img src={c.avatar} alt={c.name} style={{ width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0 }} />
                                   <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
                                     {c.name || c.handle}
                                   </div>
-                                  {c.location && (
-                                    <span style={{ fontSize: '8px', color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>📍{c.location.split(',')[0]}</span>
-                                  )}
                                   <button
                                     onClick={() => {
                                       setManualUrl(`https://github.com/${c.handle}`);
