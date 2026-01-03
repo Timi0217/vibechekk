@@ -30,16 +30,25 @@ model User {
   referralCount        Int              @default(0)       // Number of successful referrals (friends who ran a chekk)
   
   reports              VibeReport[]
+  candidate            Candidate?
 }
 
 model Candidate {
   id            String       @id @default(cuid())
   githubUrl     String       @unique
   githubHandle  String
+  name          String?
+  email         String?
+  emailVerified Boolean      @default(false)
+  claimed       Boolean      @default(false)
+  userId        String?      @unique
+  user          User?        @relation(fields: [userId], references: [id])
+  lastEmailedAt DateTime?
   lastCheckedAt DateTime     @default(now())
   reports       VibeReport[]
 
   @@index([githubHandle])
+  @@index([email])
 }
 
 model VibeReport {

@@ -4,6 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import { sendProfileViewedEmail } from './lib/email.js';
 import { analyzeGitHubProfile, calculateReachability } from './lib/github.js';
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
 import Stripe from 'stripe';
@@ -381,8 +382,17 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
 
         const savedCandidate = await prisma.candidate.upsert({
             where: { githubUrl },
-            update: { lastCheckedAt: new Date() },
-            create: { githubUrl, githubHandle: owner }
+            update: {
+                lastCheckedAt: new Date(),
+                name: profileData.userStats?.name || null,
+                email: profileData.email || null
+            },
+            create: {
+                githubUrl,
+                githubHandle: owner,
+                name: profileData.userStats?.name || null,
+                email: profileData.email || null
+            }
         });
 
         const requesterIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || null;
@@ -402,6 +412,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 metadata: {
                     userStats: profileData.userStats,
                     email: profileData.email,
+                    claimed: savedCandidate.claimed,
                     lastActive: profileData.lastActive,
                     reachability: profileData.reachability,
                     starDistribution: profileData.starDistribution,
@@ -427,6 +438,12 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
             if (user.usageCount === 0) {
                 processReferralBonus(user.id);
             }
+        }
+
+        // GROWTH LOOP: Trigger "Someone viewed your profile" email
+        if (savedCandidate.email && !savedCandidate.claimed) {
+            // Run in background, don't await
+            sendProfileViewedEmail(savedCandidate.id, reportData.label).catch(e => console.error('[GrowthLoop] email failed:', e));
         }
 
         res.json({ success: true, data: report, isPro });
@@ -649,6 +666,7 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         handle: candidate.login,
                         name: candidate.name || candidate.login,
                         email: candidate.email,
+                        claimed: await prisma.candidate.findUnique({ where: { githubUrl: candidate.url } }).then(c => c?.claimed || false),
                         avatar: candidate.avatarUrl,
                         bio: candidate.bio,
                         location: candidate.location || null,
@@ -656,7 +674,7 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         tier: tier,
                         summary: reportData.recruiter_summary,
                         topRepo: candidate.repositories?.nodes?.[0]?.name || 'Unknown',
-                        lastActive: candidate.repositories?.nodes?.[0]?.pushedAt || null,
+                        lastActive: profileData.lastActive || null,
                         followers: candidate.followerCount || 0,
                         totalStars: candidate.totalStars || 0,
                         warmthScore,
@@ -666,6 +684,59 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                     };
 
                     sendEvent('candidate', result);
+
+                    // GROWTH LOOP: Persist and trigger email
+                    try {
+                        const savedCandidate = await prisma.candidate.upsert({
+                            where: { githubUrl: candidate.url },
+                            update: {
+                                lastCheckedAt: new Date(),
+                                name: candidate.name || profileData.userStats?.name || null,
+                                email: candidate.email || profileData.email || null
+                            },
+                            create: {
+                                githubUrl: candidate.url,
+                                githubHandle: candidate.login,
+                                name: candidate.name || profileData.userStats?.name || null,
+                                email: candidate.email || profileData.email || null
+                            }
+                        });
+
+                        // Save report for the dev's claim flow
+                        await prisma.vibeReport.create({
+                            data: {
+                                candidateId: savedCandidate.id,
+                                userId: user?.id || null,
+                                archetype: result.archetype,
+                                tier: result.tier,
+                                label: result.archetype,
+                                trajectorySummary: reportData.trajectory_summary || 'Analysis pending.',
+                                recruiterSummary: reportData.recruiter_summary || 'Analysis pending.',
+                                meritPoints: (reportData.highlights || []) as any,
+                                confidence: 100,
+                                repoName: result.topRepo,
+                                metadata: {
+                                    userStats: profileData.userStats,
+                                    email: result.email,
+                                    claimed: savedCandidate.claimed,
+                                    lastActive: result.lastActive,
+                                    reachability: profileData.reachability,
+                                    starDistribution: profileData.starDistribution,
+                                    qualitySignals: profileData.qualitySignals,
+                                    technical_signal: reportData.technical_signal,
+                                    archetype_reason: reportData.archetype_reason
+                                } as any
+                            }
+                        });
+
+                        // Trigger Growth Loop Email
+                        if (savedCandidate.email && !savedCandidate.claimed) {
+                            sendProfileViewedEmail(savedCandidate.id, result.archetype).catch(e => console.error('[GrowthLoop] email failed:', e));
+                        }
+                    } catch (dbErr) {
+                        console.error('[GrowthLoop] database error:', dbErr);
+                    }
+
                     sendEvent('status', {
                         message: `Found ${nonGhosts}/${TARGET_RESULTS} quality candidates...`,
                         progress: 5 + Math.round((nonGhosts / TARGET_RESULTS) * 95),
@@ -743,6 +814,40 @@ app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
     }
 });
 
+// Public endpoint for growth loop claim previews
+app.get('/api/public/report/:handle', async (req, res) => {
+    const { handle } = req.params;
+    try {
+        const candidate = await prisma.candidate.findFirst({
+            where: {
+                githubHandle: {
+                    equals: handle,
+                    mode: 'insensitive'
+                }
+            },
+            include: { reports: { orderBy: { createdAt: 'desc' }, take: 1 } }
+        });
+
+        if (!candidate || !candidate.reports[0]) {
+            return res.status(404).json({ success: false, error: 'Report not found' });
+        }
+
+        const report = candidate.reports[0];
+        res.json({
+            success: true,
+            data: {
+                handle: candidate.githubHandle,
+                archetype: report.archetype,
+                tier: report.tier,
+                lastCheckedAt: candidate.lastCheckedAt
+            }
+        });
+    } catch (e: any) {
+        console.error('[Public API Error]', e);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
 app.get('/api/auth/github/callback', async (req, res) => {
     const { code } = req.query;
     if (!code) return res.status(400).send('No code provided');
@@ -796,17 +901,41 @@ app.get('/api/auth/github/callback', async (req, res) => {
         const user = await prisma.user.upsert({
             where: { email },
             update: {
-                githubLogin: githubUser.login
-                // Don't update picture - keep their existing one
+                githubLogin: githubUser.login,
+                tier: 'AUTHENTICATED'
             },
             create: {
                 email,
-                name: githubUser.name || githubUser.login,
-                picture: githubUser.avatar_url,
                 githubLogin: githubUser.login,
                 tier: 'AUTHENTICATED'
             }
         });
+
+        // GROWTH LOOP: Link Candidate record and mark as claimed
+        try {
+            const existingCandidate = await prisma.candidate.findFirst({
+                where: {
+                    githubHandle: {
+                        equals: githubUser.login,
+                        mode: 'insensitive'
+                    }
+                }
+            });
+
+            if (existingCandidate) {
+                await prisma.candidate.update({
+                    where: { id: existingCandidate.id },
+                    data: {
+                        claimed: true,
+                        userId: user.id,
+                        emailVerified: true // They proved ownership of the GitHub account
+                    }
+                });
+                console.log(`[GrowthLoop] Marked candidate ${githubUser.login} as claimed by user ${user.email}`);
+            }
+        } catch (claimErr) {
+            console.error('[GrowthLoop] Failed to auto-claim candidate:', claimErr);
+        }
 
         const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, SECURE_JWT_SECRET);
 

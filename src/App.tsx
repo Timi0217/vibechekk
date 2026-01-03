@@ -99,7 +99,7 @@ const getRarityClass = (rarity: string) => {
   return 'common';
 }
 
-// Map archetype labels to their rarity tiers (matches UI badge colors)
+// Map archetype labels to their rarity tiers (matches backend DeepSeek classification)
 const getRarityFromLabel = (label: string): string => {
   const l = label?.toUpperCase() || '';
   // LEGENDARY tier - Amber #f59e0b
@@ -107,9 +107,9 @@ const getRarityFromLabel = (label: string): string => {
   // ULTRA RARE tier - Purple #a855f7
   if (l.includes('ARCHITECT')) return 'ULTRA RARE';
   // RARE tier - Blue #3b82f6
-  if (l.includes('SPECIALIST') || l.includes('SYSTEMS THINKER') || l.includes('MAINTAINER') || l.includes('HIDDEN GEM')) return 'RARE';
+  if (l.includes('SPECIALIST') || l.includes('SYSTEMS THINKER')) return 'RARE';
   // UNCOMMON tier - Green #22c55e
-  if (l.includes('BUILDER') || l.includes('CONTRIBUTOR') || l.includes('CRAFTSPERSON') || l.includes('TINKERER')) return 'UNCOMMON';
+  if (l.includes('MAINTAINER') || l.includes('BUILDER') || l.includes('CONTRIBUTOR') || l.includes('CRAFTSPERSON') || l.includes('HIDDEN GEM') || l.includes('TINKERER')) return 'UNCOMMON';
   // COMMON tier - Stone #78716c
   if (l.includes('GRINDER') || l.includes('HOBBYIST') || l.includes('EXPLORER') || l.includes('APPRENTICE')) return 'COMMON';
   return 'COMMON';
@@ -292,6 +292,7 @@ function App() {
   const [bulkChekkTab, setBulkChekkTab] = useState<'import' | 'history'>('import')
   const [bulkHistory, setBulkHistory] = useState<any[]>([])
   const [bulkFile, setBulkFile] = useState<File | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [bulkProcessing, setBulkProcessing] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, status: '' })
   const [bulkResults, setBulkResults] = useState<any[]>([])
@@ -703,11 +704,47 @@ function App() {
       setBulkProgress({ current: 0, total: parsed.emails.length, status: `Looking up ${parsed.emails.length} email(s)...` })
 
       const emailResolvedHandles: string[] = []
-      for (const email of parsed.emails) {
-        const handle = await lookupEmailToHandle(email)
-        if (handle) {
-          emailResolvedHandles.push(handle)
-        }
+
+      // Process emails in parallel chunks to prevent hanging
+      const chunkSize = 5;
+      for (let i = 0; i < parsed.emails.length; i += chunkSize) {
+        const chunk = parsed.emails.slice(i, i + chunkSize);
+
+        // Update status for user feedback
+        setBulkProgress({
+          current: i,
+          total: parsed.emails.length,
+          status: `Looking up emails ${i + 1}-${Math.min(i + chunkSize, parsed.emails.length)} of ${parsed.emails.length}...`
+        });
+
+        // Use Promise.all to look up 5 emails at once
+        const chunkResults = await Promise.all(chunk.map(async (email) => {
+          try {
+            // Add a timeout race to prevent indefinite hanging
+            const timeoutPromise = new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error('Timeout')), 8000)
+            );
+
+            // Race the lookup against the timeout
+            const handle = await Promise.race([
+              lookupEmailToHandle(email),
+              timeoutPromise
+            ]) as string | null;
+
+            return handle;
+          } catch (e) {
+            console.warn(`Lookup failed/timed out for ${email}`, e);
+            return null;
+          }
+        }));
+
+        // Add found handles
+        chunkResults.forEach(handle => {
+          if (handle) emailResolvedHandles.push(handle);
+        });
+
+        // Small delay to be nice to the API
+        await new Promise(r => setTimeout(r, 500));
       }
 
       // Combine all handles
@@ -1652,19 +1689,17 @@ function App() {
 
         {/* Chekklist Form Dropdown */}
         <div style={{
-          maxHeight: showChecklistForm ? '800px' : '0',
+          maxHeight: showChecklistForm ? '560px' : '0',
           opacity: showChecklistForm ? 1 : 0,
           overflow: 'hidden',
           transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
           background: 'rgba(255, 255, 255, 0.03)',
-          borderTop: showChecklistForm ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+          borderTop: showChecklistForm ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+          display: 'flex',
+          flexDirection: 'column'
         }}>
-          <div style={{
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }}>
+          {/* Header - Fixed */}
+          <div style={{ padding: '20px 20px 10px 20px', flexShrink: 0 }}>
             {/* Tabs Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <div style={{
@@ -1730,6 +1765,18 @@ function App() {
               </div>
               <X size={14} color="rgba(255,255,255,0.4)" style={{ cursor: 'pointer' }} onClick={() => setShowChecklistForm(false)} />
             </div>
+          </div>
+
+          {/* Scrollable Content Area */}
+          <div className="custom-scrollbar" style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '0 20px 20px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+
 
             {checklistTab === 'configure' ? (
               <>
@@ -2070,143 +2117,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Search Button */}
-                <button
-                  onClick={async () => {
-                    if (checklistForm.loading) return;
-
-                    setChecklistForm(prev => ({ ...prev, loading: true }));
-                    console.log('Search with:', checklistForm);
-
-                    const searchId = Date.now();
-                    const newSearch = {
-                      id: searchId,
-                      title: checklistForm.jobTitle || 'Untitled Search',
-                      status: 'running',
-                      progressMessage: '🔍 Initializing search...',
-                      timestamp: Date.now(),
-                      results: []
-                    };
-
-                    setActiveSearches(prev => [newSearch, ...prev]);
-                    setChecklistTab('active');
-
-                    try {
-                      const tokenData = await chrome.storage.local.get('vibe_token');
-                      const token = tokenData.vibe_token;
-
-                      // Update progress: Searching GitHub
-                      setActiveSearches(prev => prev.map(s =>
-                        s.id === searchId
-                          ? { ...s, progressMessage: '🔎 Searching GitHub for developers...', progressPercent: 0 }
-                          : s
-                      ));
-
-                      // Build SSE URL with query params
-                      const params = new URLSearchParams({
-                        jobTitle: checklistForm.jobTitle,
-                        jd: checklistForm.jd || '',
-                        experience: checklistForm.experience || '',
-                        location: (checklistForm as any).location || ''
-                      });
-
-                      // Add languages as separate params
-                      checklistForm.languages.forEach(lang => params.append('languages', lang));
-                      checklistForm.archetypes.forEach(arch => params.append('archetypes', arch));
-                      checklistForm.tiers.forEach(tier => params.append('tiers', tier));
-                      checklistForm.reachability.forEach(reach => params.append('reachability', reach));
-
-                      // Use SSE for progressive loading
-                      const eventSource = new EventSource(
-                        `${BACKEND_URL}/api/chekklist/stream?${params.toString()}`
-                      );
-
-                      eventSource.addEventListener('status', (e) => {
-                        const data = JSON.parse(e.data);
-                        setActiveSearches(prev => prev.map(s =>
-                          s.id === searchId
-                            ? {
-                              ...s,
-                              progressMessage: data.message,
-                              progressPercent: data.progress || 0,
-                              analyzed: data.analyzed,
-                              total: data.total
-                            }
-                            : s
-                        ));
-                      });
-
-                      eventSource.addEventListener('candidate', (e) => {
-                        const candidate = JSON.parse(e.data);
-                        setActiveSearches(prev => prev.map(s =>
-                          s.id === searchId
-                            ? { ...s, results: [...(s.results || []), candidate] }
-                            : s
-                        ));
-                      });
-
-                      eventSource.addEventListener('complete', (e) => {
-                        const data = JSON.parse(e.data);
-                        eventSource.close();
-                        setActiveSearches(prev => prev.map(s =>
-                          s.id === searchId
-                            ? { ...s, status: 'completed', progressMessage: data.message }
-                            : s
-                        ));
-                        // Save to storage
-                        setActiveSearches(current => {
-                          chrome.storage.local.set({ active_searches: current });
-                          return current;
-                        });
-                        setChecklistForm(prev => ({ ...prev, loading: false }));
-                      });
-
-                      eventSource.addEventListener('error', (e) => {
-                        eventSource.close();
-                        setActiveSearches(prev => prev.map(s =>
-                          s.id === searchId
-                            ? { ...s, status: 'completed', results: [], error: 'Analysis failed' }
-                            : s
-                        ));
-                        setChecklistForm(prev => ({ ...prev, loading: false }));
-                      });
-
-                      eventSource.onerror = () => {
-                        eventSource.close();
-                        setActiveSearches(prev => prev.map(s =>
-                          s.id === searchId
-                            ? { ...s, status: 'completed', results: s.results || [], error: s.results?.length ? undefined : 'Connection lost' }
-                            : s
-                        ));
-                        setChecklistForm(prev => ({ ...prev, loading: false }));
-                      };
-
-                    } catch (e) {
-                      console.error(e);
-                      setActiveSearches(prev => prev.map(s =>
-                        s.id === searchId
-                          ? { ...s, status: 'completed', results: [], error: 'Search failed' }
-                          : s
-                      ));
-                      setChecklistForm(prev => ({ ...prev, loading: false }));
-                    }
-                  }}
-                  disabled={checklistForm.loading}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
-                    color: 'white',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  {checklistForm.loading ? 'SEARCHING...' : 'FIND DEVS'}
-                </button>
               </>
             ) : (
               activeSearches.length > 0 ? (
@@ -2472,9 +2382,13 @@ function App() {
                                         color: 'var(--text-main)',
                                         whiteSpace: 'nowrap',
                                         overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
+                                        textOverflow: 'ellipsis',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
                                       }}>
                                         {c.name || c.handle}
+                                        {c.claimed && <BadgeCheck size={12} color="#059669" fill="#d1fae5" />}
                                       </span>
                                       {c.archetype && (
                                         <span style={{
@@ -2503,11 +2417,6 @@ function App() {
                                       alignItems: 'center',
                                       gap: '8px'
                                     }}>
-                                      {c.lastActive && (
-                                        <span style={{ color: getLastSeenColor(c.lastActive) }}>
-                                          Last seen: {formatLastSeen(c.lastActive)}
-                                        </span>
-                                      )}
                                       <EmailTooltip
                                         email={c.email}
                                         handle={c.handle}
@@ -2610,11 +2519,154 @@ function App() {
               )
             )}
           </div>
+
+          {/* Footer - Fixed Button only for Configure */}
+          {checklistTab === 'configure' && (
+            <div style={{ padding: '0 20px 20px 20px', flexShrink: 0 }}>
+              <button
+                onClick={async () => {
+                  if (checklistForm.loading) return;
+
+                  setChecklistForm(prev => ({ ...prev, loading: true }));
+                  console.log('Search with:', checklistForm);
+
+                  const searchId = Date.now();
+                  const newSearch = {
+                    id: searchId,
+                    title: checklistForm.jobTitle || 'Untitled Search',
+                    status: 'running',
+                    progressMessage: '🔍 Initializing search...',
+                    timestamp: Date.now(),
+                    results: []
+                  };
+
+                  setActiveSearches(prev => [newSearch, ...prev]);
+                  setChecklistTab('active');
+
+                  try {
+                    const tokenData = await chrome.storage.local.get('vibe_token');
+                    const token = tokenData.vibe_token;
+
+                    // Update progress: Searching GitHub
+                    setActiveSearches(prev => prev.map(s =>
+                      s.id === searchId
+                        ? { ...s, progressMessage: '🔎 Searching GitHub for developers...', progressPercent: 0 }
+                        : s
+                    ));
+
+                    // Build SSE URL with query params
+                    const params = new URLSearchParams({
+                      jobTitle: checklistForm.jobTitle,
+                      jd: checklistForm.jd || '',
+                      experience: checklistForm.experience || '',
+                      location: (checklistForm as any).location || ''
+                    });
+
+                    // Add languages as separate params
+                    checklistForm.languages.forEach(lang => params.append('languages', lang));
+                    checklistForm.archetypes.forEach(arch => params.append('archetypes', arch));
+                    checklistForm.tiers.forEach(tier => params.append('tiers', tier));
+                    checklistForm.reachability.forEach(reach => params.append('reachability', reach));
+
+                    // Use SSE for progressive loading
+                    const eventSource = new EventSource(
+                      `${BACKEND_URL}/api/chekklist/stream?${params.toString()}`
+                    );
+
+                    eventSource.addEventListener('status', (e) => {
+                      const data = JSON.parse(e.data);
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? {
+                            ...s,
+                            progressMessage: data.message,
+                            progressPercent: data.progress || 0,
+                            analyzed: data.analyzed,
+                            total: data.total
+                          }
+                          : s
+                      ));
+                    });
+
+                    eventSource.addEventListener('candidate', (e) => {
+                      const candidate = JSON.parse(e.data);
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, results: [...(s.results || []), candidate] }
+                          : s
+                      ));
+                    });
+
+                    eventSource.addEventListener('complete', (e) => {
+                      const data = JSON.parse(e.data);
+                      eventSource.close();
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, status: 'completed', progressMessage: data.message }
+                          : s
+                      ));
+                      // Save to storage
+                      setActiveSearches(current => {
+                        chrome.storage.local.set({ active_searches: current });
+                        return current;
+                      });
+                      setChecklistForm(prev => ({ ...prev, loading: false }));
+                    });
+
+                    eventSource.addEventListener('error', (e) => {
+                      eventSource.close();
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, status: 'completed', results: [], error: 'Analysis failed' }
+                          : s
+                      ));
+                      setChecklistForm(prev => ({ ...prev, loading: false }));
+                    });
+
+                    eventSource.onerror = () => {
+                      eventSource.close();
+                      setActiveSearches(prev => prev.map(s =>
+                        s.id === searchId
+                          ? { ...s, status: 'completed', results: s.results || [], error: s.results?.length ? undefined : 'Connection lost' }
+                          : s
+                      ));
+                      setChecklistForm(prev => ({ ...prev, loading: false }));
+                    };
+
+                  } catch (e) {
+                    console.error(e);
+                    setActiveSearches(prev => prev.map(s =>
+                      s.id === searchId
+                        ? { ...s, status: 'completed', results: [], error: 'Search failed' }
+                        : s
+                    ));
+                    setChecklistForm(prev => ({ ...prev, loading: false }));
+                  }
+                }}
+                disabled={checklistForm.loading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
+                  color: 'white',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)'
+                }}
+              >
+                {checklistForm.loading ? 'SEARCHING...' : 'FIND QUALITY DEVS'}
+              </button>
+            </div>
+          )}
         </div>
-      </div >
+      </div>
 
       {/* BULKCHEKK Card */}
-      < div style={{
+      <div style={{
         position: 'relative',
         marginBottom: '12px',
         borderRadius: '16px',
@@ -2623,10 +2675,9 @@ function App() {
         boxShadow: showBulkChekkForm ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
         background: 'linear-gradient(135deg, #020617 0%, #172554 100%)',
         border: showBulkChekkForm ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent'
-      }
-      }>
+      }}>
         {/* Blob container with overflow hidden */}
-        < div style={{
+        <div style={{
           position: 'absolute',
           inset: 0,
           borderRadius: '16px',
@@ -2643,12 +2694,12 @@ function App() {
             borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
             zIndex: 0
           }} />
-        </div >
+        </div>
 
         {/* Content Layer */}
-        < div style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{ position: 'relative', zIndex: 1 }}>
           {/* Header / Toggle */}
-          < div
+          <div
             onClick={() => {
               if (user?.tier !== 'PRO') {
                 setProFeaturePaywallOpen('BulkChekk');
@@ -2666,7 +2717,7 @@ function App() {
             }}
           >
             {/* Icon Box */}
-            < div style={{
+            <div style={{
               width: '42px',
               height: '42px',
               borderRadius: '12px',
@@ -2679,10 +2730,10 @@ function App() {
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }}>
               <FileSpreadsheet size={24} color="white" strokeWidth={2.5} />
-            </div >
+            </div>
 
             {/* Text Info */}
-            < div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                 <span style={{
                   fontSize: '13px',
@@ -2756,10 +2807,10 @@ function App() {
                   boxShadow: showBulkChekkForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none'
                 }} />
               </div>
-            </div >
+            </div>
 
             {/* Arrow */}
-            < ChevronRight
+            <ChevronRight
               size={18}
               color="rgba(255, 255, 255, 0.5)"
               style={{
@@ -2768,9 +2819,9 @@ function App() {
                 transition: 'transform 0.2s ease'
               }}
             />
-          </div >
+          </div>
           {/* Form Content (Correctly Animated) */}
-          < div style={{
+          <div style={{
             maxHeight: showBulkChekkForm ? '500px' : '0',
             opacity: showBulkChekkForm ? 1 : 0,
             overflow: 'hidden',
@@ -2834,16 +2885,36 @@ function App() {
                   />
                   <label
                     htmlFor="bulk-file-input"
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setIsDragging(true)
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setIsDragging(false)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setIsDragging(false)
+                      const file = e.dataTransfer.files?.[0]
+                      if (file && file.name.endsWith('.csv')) {
+                        setBulkFile(file)
+                      }
+                    }}
                     style={{
                       display: 'block',
-                      border: bulkFile ? '2px solid #4f46e5' : '2px dashed #e2e8f0',
+                      border: isDragging ? '2px dashed #4f46e5' : (bulkFile ? '2px solid #4f46e5' : '2px dashed #e2e8f0'),
                       borderRadius: '12px',
                       padding: '30px',
                       textAlign: 'center',
-                      background: bulkFile ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc',
+                      background: isDragging ? 'rgba(79, 70, 229, 0.1)' : (bulkFile ? 'rgba(79, 70, 229, 0.05)' : '#f8fafc'),
                       cursor: bulkProcessing ? 'not-allowed' : 'pointer',
                       marginBottom: '16px',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
+                      transform: isDragging ? 'scale(1.02)' : 'scale(1)'
                     }}
                   >
                     {bulkFile ? (
@@ -2860,7 +2931,7 @@ function App() {
                       <>
                         <FileSpreadsheet size={32} color="#cbd5e1" style={{ marginBottom: '10px' }} />
                         <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
-                          Click to upload CSV
+                          Click or drag CSV here
                         </div>
                         <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
                           Max 100 profiles per batch
@@ -2929,7 +3000,10 @@ function App() {
                             borderRadius: '50%',
                             background: r.success ? '#059669' : '#dc2626'
                           }} />
-                          <span style={{ fontWeight: 600 }}>{r.handle}</span>
+                          <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {r.handle}
+                            {r.report?.metadata?.claimed && <BadgeCheck size={10} color="#059669" fill="#d1fae5" />}
+                          </span>
                           <span style={{ opacity: 0.7 }}>
                             {r.success ? (r.report?.archetype || 'Analyzed') : r.error}
                           </span>
@@ -3054,9 +3128,9 @@ function App() {
                 </div>
               )}
             </div>
-          </div >
-        </div >
-      </div >
+          </div>
+        </div>
+      </div>
 
     </>
   );
@@ -3401,6 +3475,12 @@ function App() {
                             {selectedReport.star_count !== undefined && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
                                 <Star size={10} fill="currentColor" /> {selectedReport.star_count} STARS
+                              </div>
+                            )}
+                            {selectedReport.metadata?.lastActive && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: getLastSeenColor(selectedReport.metadata.lastActive) }} />
+                                Last seen {formatLastSeen(selectedReport.metadata.lastActive)}
                               </div>
                             )}
                           </div>
@@ -4020,7 +4100,7 @@ function App() {
                 <FileDown size={16} />
                 DOWNLOAD REPORT CARD
               </button>
-            </div >
+            </div>
           )
 
 
@@ -4255,20 +4335,7 @@ function App() {
                         )}
                         <div className="history-meta">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span className="history-name">{pending.name || pending.handle || 'Analyzing...'}</span>
-                            <div style={{ fontSize: '9px', color: 'var(--text-dim)', marginTop: '1px' }}>
-                              {pending.lastActive && (
-                                <span style={{ color: getLastSeenColor(pending.lastActive) }}>
-                                  Seen: {formatLastSeen(pending.lastActive)}
-                                </span>
-                              )}
-                            </div>
-                            <EmailTooltip
-                              email={pending.email}
-                              handle={pending.handle}
-                              activeTooltip={emailTooltip}
-                              setActiveTooltip={setEmailTooltip}
-                            />
+                            <span className="history-name">{pending.handle || 'Analyzing...'}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <Loader2 size={12} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
@@ -4291,7 +4358,39 @@ function App() {
                   ));
 
                   if (filteredHistory.length === 0 && pendingAnalyses.length === 0) {
-                    return <p className="footer-info">{archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No reports found.'}</p>;
+                    return (
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        color: 'var(--text-dim)',
+                        background: 'white',
+                        borderRadius: '16px',
+                        border: '2px dashed var(--border)'
+                      }}>
+                        <div style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '50%',
+                          background: 'var(--bg-gray)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginBottom: '12px'
+                        }}>
+                          <Ghost size={24} color="var(--primary)" />
+                        </div>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                          {archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No chekks yet!'}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                          Search for a GitHub handle above to see results here.
+                        </span>
+                      </div>
+                    );
                   }
 
                   const historyCards = filteredHistory.map((item: any, i: number) => {
@@ -4312,21 +4411,15 @@ function App() {
                           )}
                           <div className="history-meta">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span className="history-name">
-                                {(item.metadata?.userStats?.name ? item.metadata.userStats.name : handle) || 'Guest Profile'}
+                              <span className="history-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {item.metadata?.userStats?.name || item.candidate?.name || handle || 'Guest Profile'}
+                                {item.metadata?.claimed && <BadgeCheck size={12} color="#059669" fill="#d1fae5" />}
                               </span>
                               {item.metadata?.reachability?.signal && (
                                 <span style={{ fontSize: '10px' }} title={`Reachability: ${item.metadata.reachability.label}`}>
                                   {item.metadata.reachability.signal}
                                 </span>
                               )}
-                              <div style={{ fontSize: '9px', color: 'var(--text-dim)', marginTop: '1px' }}>
-                                {item.metadata?.lastActive && (
-                                  <span style={{ color: getLastSeenColor(item.metadata.lastActive) }}>
-                                    Seen: {formatLastSeen(item.metadata.lastActive)}
-                                  </span>
-                                )}
-                              </div>
                               <EmailTooltip
                                 email={item.metadata?.email}
                                 handle={handle}
@@ -5292,7 +5385,7 @@ function App() {
           </>
         )
         }
-      </main >
+      </main>
 
       {/* Invite Friends Modal */}
       {
@@ -5583,7 +5676,7 @@ function App() {
           </div>
         )
       }
-    </div >
+    </div>
   );
 }
 
