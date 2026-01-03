@@ -899,7 +899,15 @@ function App() {
               : response.data.candidate.githubHandle
           }
         };
-        setHistory((prev: any[]) => [finalReport, ...prev]);
+        setHistory((prev: any[]) => {
+          // Prevent duplicate entries
+          const exists = prev.some((h: any) => {
+            const existingHandle = h.candidate?.githubHandle || h.githubHandle;
+            return existingHandle?.toLowerCase() === handle.toLowerCase();
+          });
+          if (exists) return prev;
+          return [finalReport, ...prev];
+        });
 
         if (usageInfo) {
           setUsageInfo({ ...usageInfo, used: usageInfo.used + 1 });
@@ -2170,13 +2178,13 @@ function App() {
                               {/* Chekk All Button */}
                               <button
                                 onClick={() => {
-                                  // Trigger analysis for first 5 filtered results to avoid rate limits
+                                  // Trigger analysis for all filtered results
+                                  // Stagger 3 seconds apart to avoid rate limiting
                                   const toProcess = filteredResults;
                                   toProcess.forEach((c: any, index: number) => {
-                                    // Stagger the requests slightly to avoid overwhelming
                                     setTimeout(() => {
                                       triggerAnalysis(c.handle);
-                                    }, index * 500);
+                                    }, index * 3000); // 3 seconds between each
                                   });
                                 }}
                                 style={{
