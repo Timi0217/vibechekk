@@ -605,9 +605,9 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
 
 export const searchCandidates = async (token: string, criteria: any) => {
   const octokit = new Octokit({ auth: token });
-  const { languages, experience, jobTitle } = criteria;
+  const { languages, experience, jobTitle, location } = criteria;
 
-  console.log(`[Chekklist Search] Starting search with criteria:`, { languages, experience, jobTitle });
+  console.log(`[Chekklist Search] Starting search with criteria:`, { languages, experience, jobTitle, location });
 
   // Helper to run a search query
   const runSearch = async (q: string, description: string): Promise<any[]> => {
@@ -616,7 +616,7 @@ export const searchCandidates = async (token: string, criteria: any) => {
 
     const query = `
       query($q: String!) {
-        search(query: $q, type: USER, first: 50) {
+        search(query: $q, type: USER, first: 100) {
           userCount
           nodes {
             ... on User {
@@ -664,10 +664,13 @@ export const searchCandidates = async (token: string, criteria: any) => {
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
   const dateStr = sixMonthsAgo.toISOString().split('T')[0];
 
-  // Strategy 1: Language + Recent activity + Good followers
+  // Build location filter if provided
+  const locationFilter = location ? ` location:"${location}"` : '';
+
+  // Strategy 1: Language + Recent activity + Good followers + Location
   if (results.length === 0) {
-    const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20`;
-    results = await runSearch(q1, "Primary language + recent activity + followers>20");
+    const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20${locationFilter}`;
+    results = await runSearch(q1, "Primary language + recent activity + followers>20" + (location ? ` + location:${location}` : ''));
   }
 
   // Strategy 2: Broaden - language + more repos

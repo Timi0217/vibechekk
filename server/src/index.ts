@@ -433,8 +433,160 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
     }
 });
 
+// New SSE endpoint for progressive Chekklist analysis
+app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
+    const { jobTitle, jd, experience, languages, archetypes, tiers, location } = req.query;
+    const user = (req as any).user;
+
+    console.log(`[Chekklist SSE] Stream request from ${user?.email || 'guest'}: ${jobTitle}`);
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.flushHeaders();
+
+    const sendEvent = (event: string, data: any) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    if (!GITHUB_TOKEN || !DEEPSEEK_KEY) {
+        sendEvent('error', { message: 'API keys missing' });
+        res.end();
+        return;
+    }
+
+    try {
+        const { searchCandidates, analyzeGitHubProfile } = await import('./lib/github.js');
+
+        sendEvent('status', { message: 'Searching GitHub...', progress: 0 });
+
+        // Parse languages array from query string
+        const languagesArray = languages ? (Array.isArray(languages) ? languages : [languages]) : [];
+
+        const allCandidates = await searchCandidates(GITHUB_TOKEN, {
+            languages: languagesArray,
+            experience,
+            jobTitle,
+            location
+        });
+
+        // Take top 50 by GitHub signals (already sorted by followers + stars)
+        const candidates = allCandidates.slice(0, 50);
+        const toAnalyze = candidates.length;
+
+        sendEvent('status', {
+            message: `Found ${allCandidates.length} candidates. Analyzing top ${toAnalyze}...`,
+            progress: 5,
+            total: toAnalyze
+        });
+
+        if (candidates.length === 0) {
+            sendEvent('complete', { message: 'No candidates found', total: 0 });
+            res.end();
+            return;
+        }
+
+        // Process candidates in parallel batches of 5
+        const BATCH_SIZE = 5;
+        let analyzed = 0;
+        let nonGhosts = 0;
+
+        for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+            const batch = candidates.slice(i, i + BATCH_SIZE);
+
+            const batchPromises = batch.map(async (candidate: any) => {
+                try {
+                    // Get full GitHub profile data
+                    const profileData = await analyzeGitHubProfile(GITHUB_TOKEN, candidate.login);
+
+                    // Run DeepSeek analysis
+                    const reportData = await analyzeWithDeepSeek(DEEPSEEK_KEY, profileData, profileData.codeSamples);
+
+                    analyzed++;
+                    const progress = 5 + Math.round((analyzed / toAnalyze) * 95);
+
+                    // Check if GHOST
+                    const archetype = reportData.label || 'GHOST';
+                    const tier = reportData.rarity || 'GHOST';
+
+                    if (archetype === 'GHOST' || tier === 'GHOST') {
+                        sendEvent('status', {
+                            message: `Analyzing ${analyzed}/${toAnalyze}... (${candidate.login} filtered)`,
+                            progress,
+                            analyzed,
+                            total: toAnalyze
+                        });
+                        return null;
+                    }
+
+                    nonGhosts++;
+
+                    // Send candidate result
+                    const result = {
+                        handle: candidate.login,
+                        name: candidate.name || candidate.login,
+                        avatar: candidate.avatarUrl,
+                        bio: candidate.bio,
+                        location: candidate.location || null,
+                        archetype: archetype,
+                        tier: tier,
+                        summary: reportData.recruiter_summary,
+                        topRepo: candidate.repositories?.nodes?.[0]?.name || 'Unknown',
+                        followers: candidate.followerCount || 0,
+                        totalStars: candidate.totalStars || 0
+                    };
+
+                    sendEvent('candidate', result);
+                    sendEvent('status', {
+                        message: `Analyzing ${analyzed}/${toAnalyze}...`,
+                        progress,
+                        analyzed,
+                        nonGhosts,
+                        total: toAnalyze
+                    });
+
+                    return result;
+                } catch (err: any) {
+                    console.error(`[Chekklist] Failed to analyze ${candidate.login}:`, err.message);
+                    analyzed++;
+                    sendEvent('status', {
+                        message: `Analyzing ${analyzed}/${toAnalyze}... (${candidate.login} error)`,
+                        progress: 5 + Math.round((analyzed / toAnalyze) * 95),
+                        analyzed,
+                        total: toAnalyze
+                    });
+                    return null;
+                }
+            });
+
+            // Wait for batch to complete
+            await Promise.all(batchPromises);
+
+            // Small delay between batches to avoid rate limits
+            if (i + BATCH_SIZE < candidates.length) {
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
+
+        sendEvent('complete', {
+            message: `Analysis complete. ${nonGhosts} quality candidates found.`,
+            total: nonGhosts,
+            filtered: analyzed - nonGhosts
+        });
+
+    } catch (e: any) {
+        console.error('[Chekklist SSE Error]', e);
+        sendEvent('error', { message: e.message });
+    }
+
+    res.end();
+});
+
+// Legacy endpoint (keep for backwards compatibility)
 app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
-    const { jobTitle, jd, experience, languages, archetypes, tiers } = req.body;
+    const { jobTitle, jd, experience, languages, archetypes, tiers, location } = req.body;
     const user = (req as any).user;
 
     console.log(`[Chekklist] Search request from ${user?.email || 'guest'}: ${jobTitle}`);
@@ -444,59 +596,24 @@ app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
     try {
         const { searchCandidates } = await import('./lib/github.js');
 
-        const candidates = await searchCandidates(GITHUB_TOKEN, { languages, experience, jobTitle });
+        const candidates = await searchCandidates(GITHUB_TOKEN, { languages, experience, jobTitle, location });
 
         console.log(`[Chekklist] Found ${candidates.length} candidates.`);
 
-        // 2. Filter/Analyze with DeepSeek (if API key exists)
-        let rankings: any = {};
-        if (process.env.DEEPSEEK_API_KEY) {
-            try {
-                const { rankCandidates } = await import('./lib/deepseek');
-                // Use job title as fallback if no JD
-                const effectiveJd = jd || `Looking for: ${jobTitle}. Skills: ${(languages || []).join(', ')}`;
-                rankings = await rankCandidates(process.env.DEEPSEEK_API_KEY, {
-                    jobTitle,
-                    jd: effectiveJd,
-                    experience,
-                    languages,
-                    archetypes,
-                    tiers
-                }, candidates);
-                console.log(`[Chekklist] Rankings generated for ${Object.keys(rankings).length} candidates`);
-            } catch (e) {
-                console.error('[Chekklist] DeepSeek Rank Step Failed:', e);
-            }
-        }
+        // Return basic results without full analysis (client can use SSE for progressive)
+        const results = candidates.map((c: any) => ({
+            handle: c.login,
+            name: c.name || c.login,
+            avatar: c.avatarUrl,
+            bio: c.bio,
+            location: c.location || null,
+            topRepo: c.repositories?.nodes?.[0]?.name || 'Unknown',
+            topRepoDesc: c.repositories?.nodes?.[0]?.description,
+            followers: c.followerCount || 0,
+            totalStars: c.totalStars || 0
+        }));
 
-        const results = candidates.map((c: any) => {
-            const rank = rankings[c.login] || { score: 60, reason: 'Matched via keywords' };
-
-            // Calculate a basic score based on repo data if no ranking
-            let finalScore = rank.score;
-            if (!rankings[c.login] && c.totalStars) {
-                // Boost score based on stars/followers
-                finalScore = Math.min(90, 60 + Math.floor(c.totalStars / 100) + Math.floor((c.followerCount || 0) / 50));
-            }
-
-            return {
-                handle: c.login,
-                name: c.name || c.login,
-                avatar: c.avatarUrl,
-                bio: c.bio,
-                location: c.location || null,  // Include location!
-                matchScore: finalScore,
-                matchReason: rank.reason,
-                archetype: rank.archetype,
-                tier: rank.tier,
-                topRepo: c.repositories?.nodes?.[0]?.name || 'Unknown',
-                topRepoDesc: c.repositories?.nodes?.[0]?.description,
-                followers: c.followerCount || 0,
-                totalStars: c.totalStars || 0
-            };
-        }).sort((a: any, b: any) => b.matchScore - a.matchScore);
-
-        res.json({ success: true, candidates: results });
+        res.json({ success: true, candidates: results, useSSE: true });
 
     } catch (e: any) {
         console.error(e);

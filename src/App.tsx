@@ -208,6 +208,7 @@ function App() {
     jobTitle: '',
     jd: '',
     experience: '',
+    location: '',
     archetypes: [] as string[],
     languages: [] as string[],
     tiers: [] as string[],
@@ -1788,6 +1789,29 @@ function App() {
                   </div>
                 </div>
 
+                {/* Location */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Location (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. San Francisco, USA or Remote"
+                    value={checklistForm.location}
+                    onChange={(e) => setChecklistForm({ ...checklistForm, location: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      fontSize: '11px',
+                      fontFamily: 'inherit',
+                      background: 'white',
+                      color: 'var(--text-main)'
+                    }}
+                  />
+                </div>
+
                 {/* Archetypes - All 15 from deepseek.ts */}
                 <div>
                   <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
@@ -1936,56 +1960,88 @@ function App() {
                       // Update progress: Searching GitHub
                       setActiveSearches(prev => prev.map(s =>
                         s.id === searchId
-                          ? { ...s, progressMessage: '🔎 Searching GitHub for developers...' }
+                          ? { ...s, progressMessage: '🔎 Searching GitHub for developers...', progressPercent: 0 }
                           : s
                       ));
 
-                      await new Promise(r => setTimeout(r, 500)); // Small delay for UX
-
-                      // Update progress: Analyzing profiles
-                      setActiveSearches(prev => prev.map(s =>
-                        s.id === searchId
-                          ? { ...s, progressMessage: '📊 Analyzing candidate profiles...' }
-                          : s
-                      ));
-
-                      const res = await fetch(`${BACKEND_URL}/api/chekklist/search`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': token ? `Bearer ${token}` : ''
-                        },
-                        body: JSON.stringify(checklistForm)
+                      // Build SSE URL with query params
+                      const params = new URLSearchParams({
+                        jobTitle: checklistForm.jobTitle,
+                        jd: checklistForm.jd || '',
+                        experience: checklistForm.experience || '',
+                        location: (checklistForm as any).location || ''
                       });
 
-                      // Update progress: Ranking matches
-                      setActiveSearches(prev => prev.map(s =>
-                        s.id === searchId
-                          ? { ...s, progressMessage: '🧠 AI ranking candidates by fit...' }
-                          : s
-                      ));
+                      // Add languages as separate params
+                      checklistForm.languages.forEach(lang => params.append('languages', lang));
+                      checklistForm.archetypes.forEach(arch => params.append('archetypes', arch));
+                      checklistForm.tiers.forEach(tier => params.append('tiers', tier));
 
-                      const data = await res.json();
+                      // Use SSE for progressive loading
+                      const eventSource = new EventSource(
+                        `${BACKEND_URL}/api/chekklist/stream?${params.toString()}`
+                      );
 
-                      if (data.success) {
+                      eventSource.addEventListener('status', (e) => {
+                        const data = JSON.parse(e.data);
                         setActiveSearches(prev => prev.map(s =>
                           s.id === searchId
-                            ? { ...s, status: 'completed', results: data.candidates || [] }
+                            ? {
+                              ...s,
+                              progressMessage: data.message,
+                              progressPercent: data.progress || 0,
+                              analyzed: data.analyzed,
+                              total: data.total
+                            }
                             : s
                         ));
+                      });
 
-                        // Update storage with latest searches
+                      eventSource.addEventListener('candidate', (e) => {
+                        const candidate = JSON.parse(e.data);
+                        setActiveSearches(prev => prev.map(s =>
+                          s.id === searchId
+                            ? { ...s, results: [...(s.results || []), candidate] }
+                            : s
+                        ));
+                      });
+
+                      eventSource.addEventListener('complete', (e) => {
+                        const data = JSON.parse(e.data);
+                        eventSource.close();
+                        setActiveSearches(prev => prev.map(s =>
+                          s.id === searchId
+                            ? { ...s, status: 'completed', progressMessage: data.message }
+                            : s
+                        ));
+                        // Save to storage
                         setActiveSearches(current => {
                           chrome.storage.local.set({ active_searches: current });
                           return current;
                         });
-                      } else {
+                        setChecklistForm(prev => ({ ...prev, loading: false }));
+                      });
+
+                      eventSource.addEventListener('error', (e) => {
+                        eventSource.close();
                         setActiveSearches(prev => prev.map(s =>
                           s.id === searchId
-                            ? { ...s, status: 'completed', results: [], error: data.error }
+                            ? { ...s, status: 'completed', results: [], error: 'Analysis failed' }
                             : s
                         ));
-                      }
+                        setChecklistForm(prev => ({ ...prev, loading: false }));
+                      });
+
+                      eventSource.onerror = () => {
+                        eventSource.close();
+                        setActiveSearches(prev => prev.map(s =>
+                          s.id === searchId
+                            ? { ...s, status: 'completed', results: s.results || [], error: s.results?.length ? undefined : 'Connection lost' }
+                            : s
+                        ));
+                        setChecklistForm(prev => ({ ...prev, loading: false }));
+                      };
+
                     } catch (e) {
                       console.error(e);
                       setActiveSearches(prev => prev.map(s =>
@@ -1993,7 +2049,6 @@ function App() {
                           ? { ...s, status: 'completed', results: [], error: 'Search failed' }
                           : s
                       ));
-                    } finally {
                       setChecklistForm(prev => ({ ...prev, loading: false }));
                     }
                   }}
@@ -2042,9 +2097,14 @@ function App() {
                               <div style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
                                 <span>{s.progressMessage || 'Searching...'}</span>
+                                {s.results?.length > 0 && (
+                                  <span style={{ color: 'var(--accent)', marginLeft: 'auto' }}>
+                                    {s.results.length} found
+                                  </span>
+                                )}
                               </div>
                               <div style={{
-                                height: '3px',
+                                height: '4px',
                                 background: '#e5e7eb',
                                 borderRadius: '2px',
                                 overflow: 'hidden',
@@ -2052,10 +2112,10 @@ function App() {
                               }}>
                                 <div style={{
                                   height: '100%',
-                                  background: 'var(--primary)',
+                                  background: 'linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%)',
                                   borderRadius: '2px',
-                                  animation: 'progressIndeterminate 1.5s ease-in-out infinite',
-                                  width: '40%'
+                                  width: `${s.progressPercent || 0}%`,
+                                  transition: 'width 0.3s ease'
                                 }} />
                               </div>
                             </div>
