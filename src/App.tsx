@@ -304,6 +304,7 @@ function App() {
     archetypes: [] as string[],
     languages: [] as string[],
     tiers: [] as string[],
+    reachability: [] as string[],
     loading: false
   })
   const [activeSearches, setActiveSearches] = useState<any[]>([])
@@ -2025,6 +2026,50 @@ function App() {
                   </div>
                 </div>
 
+                {/* Reachability */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Reachability
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {[
+                      { name: 'HIGH', label: 'HIGH REACHABILITY', signal: '🟢', color: '#16a34a' },
+                      { name: 'MEDIUM', label: 'MEDIUM REACHABILITY', signal: '🟡', color: '#ca8a04' },
+                      { name: 'LOW', label: 'LOW REACHABILITY', signal: '🔴', color: '#dc2626' }
+                    ].map(reach => {
+                      const isSelected = checklistForm.reachability.includes(reach.label);
+                      return (
+                        <button
+                          key={reach.name}
+                          onClick={() => {
+                            const newReach = isSelected
+                              ? checklistForm.reachability.filter(r => r !== reach.label)
+                              : [...checklistForm.reachability, reach.label];
+                            setChecklistForm({ ...checklistForm, reachability: newReach });
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            border: `1px solid ${reach.color}40`,
+                            background: isSelected ? `${reach.color}15` : 'white',
+                            color: isSelected ? reach.color : 'var(--text-dim)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <span style={{ fontSize: '10px' }}>{reach.signal}</span>
+                          {reach.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Search Button */}
                 <button
                   onClick={async () => {
@@ -2069,6 +2114,7 @@ function App() {
                       checklistForm.languages.forEach(lang => params.append('languages', lang));
                       checklistForm.archetypes.forEach(arch => params.append('archetypes', arch));
                       checklistForm.tiers.forEach(tier => params.append('tiers', tier));
+                      checklistForm.reachability.forEach(reach => params.append('reachability', reach));
 
                       // Use SSE for progressive loading
                       const eventSource = new EventSource(

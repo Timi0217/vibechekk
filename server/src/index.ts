@@ -438,7 +438,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
 
 // New SSE endpoint for progressive Chekklist analysis
 app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
-    const { jobTitle, jd, experience, languages, archetypes, tiers, location } = req.query;
+    const { jobTitle, jd, experience, languages, archetypes, tiers, reachability: reachabilityQuery, location } = req.query;
     const user = (req as any).user;
 
     console.log(`[Chekklist SSE] Stream request from ${user?.email || 'guest'}: ${jobTitle}`);
@@ -538,6 +538,39 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                     const tierFilters: string[] = tiers
                         ? (Array.isArray(tiers) ? tiers.map(t => String(t)) : [String(tiers)])
                         : [];
+                    const reachabilityFilters: string[] = reachabilityQuery
+                        ? (Array.isArray(reachabilityQuery) ? reachabilityQuery.map(r => String(r)) : [String(reachabilityQuery)])
+                        : [];
+
+                    // Calculate reachability early for filtering
+                    const reachStats = {
+                        lastPushedAt: candidate.repositories?.nodes?.[0]?.pushedAt,
+                        contributionCalendar: candidate.contributionsCollection?.contributionCalendar,
+                        pullRequests: candidate.pullRequests?.totalCount,
+                        issues: candidate.issues?.totalCount,
+                        starredRepositories: candidate.starredRepositories?.totalCount,
+                        updatedAt: candidate.updatedAt
+                    };
+                    const reachabilityResult = calculateReachability(reachStats);
+
+                    // Apply reachability filter if user specified any
+                    if (reachabilityFilters.length > 0) {
+                        const matchesReach = reachabilityFilters.some(filter =>
+                            reachabilityResult.label.toUpperCase().includes(filter.toUpperCase())
+                        );
+                        if (!matchesReach) {
+                            sendEvent('status', {
+                                message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
+                                progress,
+                                analyzed,
+                                nonGhosts,
+                                total: TARGET_RESULTS
+                            });
+                            return null;
+                        }
+                    }
+
+                    const reachability = reachabilityResult;
 
                     // Apply archetype filter if user specified any
                     if (archetypeFilters.length > 0) {
@@ -575,17 +608,6 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
 
                     nonGhosts++;
 
-                    // Map candidate data to reachability stats
-                    const reachStats = {
-                        lastPushedAt: candidate.repositories?.nodes?.[0]?.pushedAt,
-                        contributionCalendar: candidate.contributionsCollection?.contributionCalendar,
-                        pullRequests: candidate.pullRequests?.totalCount,
-                        issues: candidate.issues?.totalCount,
-                        starredRepositories: candidate.starredRepositories?.totalCount,
-                        updatedAt: candidate.updatedAt
-                    };
-
-                    const reachability = calculateReachability(reachStats);
                     const bioLower = (candidate.bio || '').toLowerCase();
                     const warmthReasons: string[] = [];
 
