@@ -2190,10 +2190,14 @@ function App() {
                               {/* Chekk All Button */}
                               <button
                                 onClick={() => {
-                                  // Add all filtered results to bulk chekk queue
-                                  const urls = filteredResults.map((c: any) => `https://github.com/${c.handle}`);
-                                  setBulkUrls(urls.join('\n'));
-                                  setActiveTab('bulk');
+                                  // Trigger analysis for first 5 filtered results to avoid rate limits
+                                  const toProcess = filteredResults.slice(0, 5);
+                                  toProcess.forEach((c: any, index: number) => {
+                                    // Stagger the requests slightly to avoid overwhelming
+                                    setTimeout(() => {
+                                      triggerAnalysis(c.handle);
+                                    }, index * 500);
+                                  });
                                 }}
                                 style={{
                                   marginLeft: 'auto',
