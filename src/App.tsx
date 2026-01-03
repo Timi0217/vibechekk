@@ -867,6 +867,80 @@ function App() {
     })
   }
 
+  // Helper to trigger analysis directly with a handle (for Chekklist CHEKK buttons)
+  const triggerAnalysis = (handle: string) => {
+    const url = `https://github.com/${handle}`;
+    setManualUrl(url);
+
+    // Switch to analyze tab and trigger the search
+    setActiveTab('analyze');
+
+    // Use setTimeout to ensure state is updated before triggering
+    setTimeout(() => {
+      // Directly trigger the analysis logic
+      if (!user && pendingHandles.length >= 1) {
+        setShowConcurrentModal(true);
+        return;
+      }
+
+      if (pendingHandles.includes(handle)) {
+        return;
+      }
+
+      setPendingHandles(prev => [handle, ...prev]);
+      setManualUrl('');
+      setLoadingStep(1);
+
+      setTimeout(() => setLoadingStep(2), 1500);
+      setTimeout(() => setLoadingStep(3), 3500);
+      setTimeout(() => setLoadingStep(4), 6000);
+      setTimeout(() => setLoadingStep(5), 9000);
+      setTimeout(() => setLoadingStep(6), 12500);
+      setTimeout(() => setLoadingStep(7), 16000);
+
+      chrome.runtime.sendMessage({
+        type: 'START_VIBE_CHECK',
+        url: url
+      }, (response) => {
+        setPendingHandles(prev => prev.filter(h => h !== handle));
+        setLoadingStep(0);
+
+        if (response && response.success) {
+          const finalReport = {
+            ...response.data,
+            candidate: {
+              ...response.data.candidate,
+              githubHandle: response.data.candidate?.githubHandle === 'Guest' || !response.data.candidate?.githubHandle
+                ? handle
+                : response.data.candidate.githubHandle
+            }
+          };
+          setHistory((prev: any[]) => [finalReport, ...prev]);
+
+          if (usageInfo) {
+            setUsageInfo({ ...usageInfo, used: usageInfo.used + 1 });
+          }
+
+          if (activeTabRef.current === 'analyze') {
+            handleOpenReport(finalReport);
+          }
+        } else {
+          const err = response?.error || 'Unknown error';
+          const code = response?.code || '';
+
+          if (code === 'GUEST_LIMIT_REACHED' || code === 'USAGE_LIMIT_REACHED') {
+            setLimitPaywallOpen(true);
+          } else {
+            setErrorToast({
+              message: `Could not analyze ${handle}`,
+              action: err
+            });
+            setTimeout(() => setErrorToast(null), 5000);
+          }
+        }
+      });
+    }, 50);
+  }
 
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true)
@@ -2195,7 +2269,7 @@ function App() {
                                     {c.name || c.handle}
                                   </div>
                                   <button
-                                    onClick={() => setManualUrl(`https://github.com/${c.handle}`)}
+                                    onClick={() => triggerAnalysis(c.handle)}
                                     style={{
                                       padding: '5px 10px',
                                       borderRadius: '5px',
