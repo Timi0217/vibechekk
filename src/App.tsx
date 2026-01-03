@@ -870,76 +870,56 @@ function App() {
   // Helper to trigger analysis directly with a handle (for Chekklist CHEKK buttons)
   const triggerAnalysis = (handle: string) => {
     const url = `https://github.com/${handle}`;
-    setManualUrl(url);
 
-    // Switch to analyze tab and trigger the search
-    setActiveTab('analyze');
+    // Check limits without switching tabs
+    if (!user && pendingHandles.length >= 1) {
+      setShowConcurrentModal(true);
+      return;
+    }
 
-    // Use setTimeout to ensure state is updated before triggering
-    setTimeout(() => {
-      // Directly trigger the analysis logic
-      if (!user && pendingHandles.length >= 1) {
-        setShowConcurrentModal(true);
-        return;
-      }
+    if (pendingHandles.includes(handle)) {
+      return;
+    }
 
-      if (pendingHandles.includes(handle)) {
-        return;
-      }
+    setPendingHandles(prev => [handle, ...prev]);
 
-      setPendingHandles(prev => [handle, ...prev]);
-      setManualUrl('');
-      setLoadingStep(1);
+    chrome.runtime.sendMessage({
+      type: 'START_VIBE_CHECK',
+      url: url
+    }, (response) => {
+      setPendingHandles(prev => prev.filter(h => h !== handle));
 
-      setTimeout(() => setLoadingStep(2), 1500);
-      setTimeout(() => setLoadingStep(3), 3500);
-      setTimeout(() => setLoadingStep(4), 6000);
-      setTimeout(() => setLoadingStep(5), 9000);
-      setTimeout(() => setLoadingStep(6), 12500);
-      setTimeout(() => setLoadingStep(7), 16000);
-
-      chrome.runtime.sendMessage({
-        type: 'START_VIBE_CHECK',
-        url: url
-      }, (response) => {
-        setPendingHandles(prev => prev.filter(h => h !== handle));
-        setLoadingStep(0);
-
-        if (response && response.success) {
-          const finalReport = {
-            ...response.data,
-            candidate: {
-              ...response.data.candidate,
-              githubHandle: response.data.candidate?.githubHandle === 'Guest' || !response.data.candidate?.githubHandle
-                ? handle
-                : response.data.candidate.githubHandle
-            }
-          };
-          setHistory((prev: any[]) => [finalReport, ...prev]);
-
-          if (usageInfo) {
-            setUsageInfo({ ...usageInfo, used: usageInfo.used + 1 });
+      if (response && response.success) {
+        const finalReport = {
+          ...response.data,
+          candidate: {
+            ...response.data.candidate,
+            githubHandle: response.data.candidate?.githubHandle === 'Guest' || !response.data.candidate?.githubHandle
+              ? handle
+              : response.data.candidate.githubHandle
           }
+        };
+        setHistory((prev: any[]) => [finalReport, ...prev]);
 
-          if (activeTabRef.current === 'analyze') {
-            handleOpenReport(finalReport);
-          }
-        } else {
-          const err = response?.error || 'Unknown error';
-          const code = response?.code || '';
-
-          if (code === 'GUEST_LIMIT_REACHED' || code === 'USAGE_LIMIT_REACHED') {
-            setLimitPaywallOpen(true);
-          } else {
-            setErrorToast({
-              message: `Could not analyze ${handle}`,
-              action: err
-            });
-            setTimeout(() => setErrorToast(null), 5000);
-          }
+        if (usageInfo) {
+          setUsageInfo({ ...usageInfo, used: usageInfo.used + 1 });
         }
-      });
-    }, 50);
+        // Don't auto-open report - stay on Chekklist
+      } else {
+        const err = response?.error || 'Unknown error';
+        const code = response?.code || '';
+
+        if (code === 'GUEST_LIMIT_REACHED' || code === 'USAGE_LIMIT_REACHED') {
+          setLimitPaywallOpen(true);
+        } else {
+          setErrorToast({
+            message: `Could not analyze ${handle}`,
+            action: err
+          });
+          setTimeout(() => setErrorToast(null), 5000);
+        }
+      }
+    });
   }
 
   const handleGoogleLogin = async () => {
@@ -2272,64 +2252,68 @@ function App() {
                                   }}>
                                     {c.name || c.handle}
                                   </div>
-                                  {pendingHandles.includes(c.handle) ? (
-                                    <div style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '6px',
-                                      padding: '5px 12px',
-                                      borderRadius: '5px',
-                                      background: 'var(--accent)',
-                                      color: 'white',
-                                      fontSize: '9px',
-                                      fontWeight: 700,
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.03em'
-                                    }}>
-                                      <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
-                                      Analyzing
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={() => triggerAnalysis(c.handle)}
-                                        style={{
-                                          padding: '5px 10px',
-                                          borderRadius: '5px',
-                                          background: 'var(--primary)',
-                                          border: 'none',
-                                          fontSize: '9px',
-                                          fontWeight: 700,
-                                          color: 'white',
-                                          cursor: 'pointer',
-                                          flexShrink: 0,
-                                          textTransform: 'uppercase',
-                                          letterSpacing: '0.03em'
-                                        }}
-                                      >
-                                        Chekk
-                                      </button>
-                                      <a
-                                        href={`https://github.com/${c.handle}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        style={{
-                                          padding: '5px 8px',
-                                          borderRadius: '5px',
-                                          background: 'var(--bg-gray)',
-                                          fontSize: '9px',
-                                          fontWeight: 600,
-                                          color: 'var(--text-dim)',
-                                          textDecoration: 'none',
-                                          flexShrink: 0,
-                                          textTransform: 'uppercase',
-                                          letterSpacing: '0.03em'
-                                        }}
-                                      >
-                                        View
-                                      </a>
-                                    </>
-                                  )}
+                                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                    {pendingHandles.includes(c.handle) ? (
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px',
+                                        padding: '5px 10px',
+                                        borderRadius: '5px',
+                                        background: 'var(--accent)',
+                                        color: 'white',
+                                        fontSize: '9px',
+                                        fontWeight: 700,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em',
+                                        minWidth: '52px'
+                                      }}>
+                                        <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                                        Analyzing
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => triggerAnalysis(c.handle)}
+                                          style={{
+                                            padding: '5px 10px',
+                                            borderRadius: '5px',
+                                            background: 'var(--primary)',
+                                            border: 'none',
+                                            fontSize: '9px',
+                                            fontWeight: 700,
+                                            color: 'white',
+                                            cursor: 'pointer',
+                                            flexShrink: 0,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.03em'
+                                          }}
+                                        >
+                                          Chekk
+                                        </button>
+                                        <a
+                                          href={`https://github.com/${c.handle}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          style={{
+                                            padding: '5px 8px',
+                                            borderRadius: '5px',
+                                            background: 'var(--bg-gray)',
+                                            fontSize: '9px',
+                                            fontWeight: 600,
+                                            color: 'var(--text-dim)',
+                                            textDecoration: 'none',
+                                            flexShrink: 0,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.03em'
+                                          }}
+                                        >
+                                          View
+                                        </a>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                               {filteredResults.length === 0 && (
