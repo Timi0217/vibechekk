@@ -667,61 +667,56 @@ export const searchCandidates = async (token: string, criteria: any) => {
   // Build location filter if provided
   const locationFilter = location ? ` location:"${location}"` : '';
 
-  // Strategy 1: Language + Recent activity + Good followers + Location
-  if (results.length === 0) {
-    const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20${locationFilter}`;
-    results = await runSearch(q1, "Primary language + recent activity + followers>20" + (location ? ` + location:${location}` : ''));
-  }
-
-  // Strategy 2: Broaden - language + more repos
-  if (results.length < 10 && languages && languages.length > 0) {
-    const q2 = `type:user language:${primaryLang} repos:>10 followers:>10`;
-    const moreResults = await runSearch(q2, "Primary language + repos>10 + followers>10");
-
-    // Merge unique results
+  // Helper to merge unique results
+  const mergeResults = (newResults: any[]) => {
     const existingLogins = new Set(results.map(r => r.login));
-    moreResults.forEach(r => {
+    newResults.forEach(r => {
       if (!existingLogins.has(r.login)) {
         results.push(r);
       }
     });
+  };
+
+  // Strategy 1: Language + Recent activity + High followers + Location
+  const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>50${locationFilter}`;
+  results = await runSearch(q1, "Primary language + recent + followers>50" + (location ? ` + ${location}` : ''));
+
+  // Strategy 2: Language + Recent activity + Medium followers
+  const q2 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20`;
+  mergeResults(await runSearch(q2, "Primary language + recent + followers>20"));
+
+  // Strategy 3: Language + Good repos
+  if (languages && languages.length > 0) {
+    const q3 = `type:user language:${primaryLang} repos:>15 followers:>10`;
+    mergeResults(await runSearch(q3, "Primary language + repos>15 + followers>10"));
   }
 
-  // Strategy 3: Search by job title keywords in bio/location
-  if (results.length < 10 && jobTitle) {
-    // Extract meaningful keywords
+  // Strategy 4: Second language if provided
+  if (languages && languages.length > 1) {
+    const q4 = `type:user language:${languages[1]} pushed:>${dateStr} followers:>20`;
+    mergeResults(await runSearch(q4, `${languages[1]} + recent + followers>20`));
+  }
+
+  // Strategy 5: Job title keywords + high followers
+  if (jobTitle) {
     const roleKeywords = jobTitle
       .toLowerCase()
       .split(/\s+/)
-      .filter((w: string) => w.length > 3 && !['the', 'and', 'for'].includes(w))
+      .filter((w: string) => w.length > 3 && !['the', 'and', 'for', 'senior', 'junior', 'lead'].includes(w))
       .slice(0, 2)
       .join(' ');
 
     if (roleKeywords) {
-      const q3 = `type:user ${roleKeywords} repos:>5 followers:>15`;
-      const keywordResults = await runSearch(q3, `Job title keywords: "${roleKeywords}"`);
-
-      const existingLogins = new Set(results.map(r => r.login));
-      keywordResults.forEach(r => {
-        if (!existingLogins.has(r.login)) {
-          results.push(r);
-        }
-      });
+      const q5 = `type:user ${roleKeywords} repos:>5 followers:>25`;
+      mergeResults(await runSearch(q5, `Job keywords: "${roleKeywords}"`));
     }
   }
 
-  // Strategy 4: Ultimate fallback - popular developers in any language
-  if (results.length < 5) {
-    const q4 = `type:user followers:>100 repos:>10`;
-    const fallbackResults = await runSearch(q4, "Fallback: Popular developers");
+  // Strategy 6: Popular devs in primary lang (lower threshold)
+  const q6 = `type:user language:${primaryLang} followers:>100`;
+  mergeResults(await runSearch(q6, `${primaryLang} + followers>100`));
 
-    const existingLogins = new Set(results.map(r => r.login));
-    fallbackResults.forEach(r => {
-      if (!existingLogins.has(r.login)) {
-        results.push(r);
-      }
-    });
-  }
+  console.log(`[Chekklist Search] Total raw candidates: ${results.length}`);
 
   // Sort by combined signal: followers + stars
   results = results
@@ -740,7 +735,7 @@ export const searchCandidates = async (token: string, criteria: any) => {
       return true;
     })
     .sort((a, b) => (b.followerCount + b.totalStars) - (a.followerCount + a.totalStars))
-    .slice(0, 50);
+    .slice(0, 500);  // Return top 500 for analysis
 
   console.log(`[Chekklist Search] Final results after quality filter: ${results.length} candidates`);
 

@@ -472,14 +472,15 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
             location
         });
 
-        // Take top 50 by GitHub signals (already sorted by followers + stars)
-        const candidates = allCandidates.slice(0, 50);
-        const toAnalyze = candidates.length;
+        // Use all candidates (up to 500), stop when we have 50 quality results
+        const TARGET_RESULTS = 50;
+        const candidates = allCandidates;
+        const totalPool = candidates.length;
 
         sendEvent('status', {
-            message: `Found ${allCandidates.length} candidates. Analyzing top ${toAnalyze}...`,
+            message: `Found ${totalPool} candidates. Analyzing until ${TARGET_RESULTS} quality matches...`,
             progress: 5,
-            total: toAnalyze
+            total: TARGET_RESULTS
         });
 
         if (candidates.length === 0) {
@@ -488,15 +489,20 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
             return;
         }
 
-        // Process candidates in parallel batches of 5
+        // Process candidates in parallel batches of 5, stop when we hit 50 non-GHOSTs
         const BATCH_SIZE = 5;
         let analyzed = 0;
         let nonGhosts = 0;
+        let currentIndex = 0;
 
-        for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
-            const batch = candidates.slice(i, i + BATCH_SIZE);
+        while (nonGhosts < TARGET_RESULTS && currentIndex < candidates.length) {
+            const batch = candidates.slice(currentIndex, currentIndex + BATCH_SIZE);
+            currentIndex += BATCH_SIZE;
 
             const batchPromises = batch.map(async (candidate: any) => {
+                // Check if we already have enough
+                if (nonGhosts >= TARGET_RESULTS) return null;
+
                 try {
                     // Get full GitHub profile data
                     const profileData = await analyzeGitHubProfile(GITHUB_TOKEN, candidate.login);
@@ -505,7 +511,7 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                     const reportData = await analyzeWithDeepSeek(DEEPSEEK_KEY, profileData, profileData.codeSamples);
 
                     analyzed++;
-                    const progress = 5 + Math.round((analyzed / toAnalyze) * 95);
+                    const progress = 5 + Math.round((nonGhosts / TARGET_RESULTS) * 95);
 
                     // Check if GHOST
                     const archetype = reportData.label || 'GHOST';
@@ -513,10 +519,11 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
 
                     if (archetype === 'GHOST' || tier === 'GHOST') {
                         sendEvent('status', {
-                            message: `Analyzing ${analyzed}/${toAnalyze}... (${candidate.login} filtered)`,
+                            message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
                             progress,
                             analyzed,
-                            total: toAnalyze
+                            nonGhosts,
+                            total: TARGET_RESULTS
                         });
                         return null;
                     }
@@ -540,23 +547,17 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
 
                     sendEvent('candidate', result);
                     sendEvent('status', {
-                        message: `Analyzing ${analyzed}/${toAnalyze}...`,
-                        progress,
+                        message: `Found ${nonGhosts}/${TARGET_RESULTS} quality candidates...`,
+                        progress: 5 + Math.round((nonGhosts / TARGET_RESULTS) * 95),
                         analyzed,
                         nonGhosts,
-                        total: toAnalyze
+                        total: TARGET_RESULTS
                     });
 
                     return result;
                 } catch (err: any) {
                     console.error(`[Chekklist] Failed to analyze ${candidate.login}:`, err.message);
                     analyzed++;
-                    sendEvent('status', {
-                        message: `Analyzing ${analyzed}/${toAnalyze}... (${candidate.login} error)`,
-                        progress: 5 + Math.round((analyzed / toAnalyze) * 95),
-                        analyzed,
-                        total: toAnalyze
-                    });
                     return null;
                 }
             });
@@ -565,14 +566,15 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
             await Promise.all(batchPromises);
 
             // Small delay between batches to avoid rate limits
-            if (i + BATCH_SIZE < candidates.length) {
-                await new Promise(r => setTimeout(r, 500));
+            if (nonGhosts < TARGET_RESULTS && currentIndex < candidates.length) {
+                await new Promise(r => setTimeout(r, 300));
             }
         }
 
         sendEvent('complete', {
-            message: `Analysis complete. ${nonGhosts} quality candidates found.`,
+            message: `Found ${nonGhosts} quality candidates (analyzed ${analyzed} from pool of ${totalPool}).`,
             total: nonGhosts,
+            analyzed,
             filtered: analyzed - nonGhosts
         });
 
