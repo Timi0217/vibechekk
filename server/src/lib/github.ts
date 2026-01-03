@@ -622,6 +622,7 @@ export const searchCandidates = async (token: string, criteria: any) => {
             ... on User {
               login
               name
+              email
               avatarUrl
               bio
               location
@@ -643,8 +644,9 @@ export const searchCandidates = async (token: string, criteria: any) => {
 
     try {
       const response: any = await octokit.graphql(query, { q });
-      const users = response.search.nodes.filter((n: any) => n && n.login);
-      console.log(`[Chekklist Search] Found ${users.length} users (total matching: ${response.search.userCount})`);
+      // Only include users with public email
+      const users = response.search.nodes.filter((n: any) => n && n.login && n.email);
+      console.log(`[Chekklist Search] Found ${users.length} users with email (${response.search.nodes.length} total)`);
       return users;
     } catch (error: any) {
       console.error(`[Chekklist Search] Query failed:`, error.message);

@@ -528,12 +528,77 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         return null;
                     }
 
+                    // Parse user's archetype/tier filter preferences
+                    const archetypeFilters: string[] = archetypes
+                        ? (Array.isArray(archetypes) ? archetypes.map(a => String(a)) : [String(archetypes)])
+                        : [];
+                    const tierFilters: string[] = tiers
+                        ? (Array.isArray(tiers) ? tiers.map(t => String(t)) : [String(tiers)])
+                        : [];
+
+                    // Apply archetype filter if user specified any
+                    if (archetypeFilters.length > 0) {
+                        const matchesArchetype = archetypeFilters.some(filter =>
+                            archetype.toUpperCase().includes(filter.toUpperCase())
+                        );
+                        if (!matchesArchetype) {
+                            sendEvent('status', {
+                                message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
+                                progress,
+                                analyzed,
+                                nonGhosts,
+                                total: TARGET_RESULTS
+                            });
+                            return null;
+                        }
+                    }
+
+                    // Apply tier filter if user specified any
+                    if (tierFilters.length > 0) {
+                        const matchesTier = tierFilters.some(filter =>
+                            tier.toUpperCase().includes(filter.toUpperCase())
+                        );
+                        if (!matchesTier) {
+                            sendEvent('status', {
+                                message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
+                                progress,
+                                analyzed,
+                                nonGhosts,
+                                total: TARGET_RESULTS
+                            });
+                            return null;
+                        }
+                    }
+
                     nonGhosts++;
+
+                    // Calculate warmth score (0-100) based on response likelihood signals
+                    let warmthScore = 50; // Base score
+                    const bioLower = (candidate.bio || '').toLowerCase();
+
+                    // Positive signals
+                    if (bioLower.includes('open to') || bioLower.includes('available') || bioLower.includes('looking for')) warmthScore += 25;
+                    if (bioLower.includes('freelance') || bioLower.includes('consultant') || bioLower.includes('contractor')) warmthScore += 15;
+                    if (bioLower.includes('hire me') || bioLower.includes('dm me') || bioLower.includes('contact')) warmthScore += 10;
+                    if ((candidate.followerCount || 0) < 500) warmthScore += 10; // More approachable
+                    if ((candidate.followerCount || 0) < 100) warmthScore += 5; // Even more approachable
+
+                    // Negative signals
+                    if (bioLower.includes('not looking') || bioLower.includes('happy at')) warmthScore -= 30;
+                    if (bioLower.includes('google') || bioLower.includes('meta') || bioLower.includes('amazon') || bioLower.includes('apple') || bioLower.includes('microsoft')) warmthScore -= 15;
+                    if ((candidate.followerCount || 0) > 5000) warmthScore -= 15; // Celebrity status
+
+                    // Clamp to 0-100
+                    warmthScore = Math.max(0, Math.min(100, warmthScore));
+
+                    // Warmth label
+                    const warmthLabel = warmthScore >= 80 ? 'HOT' : warmthScore >= 60 ? 'WARM' : warmthScore >= 40 ? 'NEUTRAL' : 'COLD';
 
                     // Send candidate result
                     const result = {
                         handle: candidate.login,
                         name: candidate.name || candidate.login,
+                        email: candidate.email,
                         avatar: candidate.avatarUrl,
                         bio: candidate.bio,
                         location: candidate.location || null,
@@ -542,7 +607,9 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         summary: reportData.recruiter_summary,
                         topRepo: candidate.repositories?.nodes?.[0]?.name || 'Unknown',
                         followers: candidate.followerCount || 0,
-                        totalStars: candidate.totalStars || 0
+                        totalStars: candidate.totalStars || 0,
+                        warmthScore,
+                        warmthLabel
                     };
 
                     sendEvent('candidate', result);
