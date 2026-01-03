@@ -664,16 +664,16 @@ export const searchCandidates = async (token: string, criteria: any) => {
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
   const dateStr = sixMonthsAgo.toISOString().split('T')[0];
 
-  // Strategy 1: Language + Recent activity + Some followers
+  // Strategy 1: Language + Recent activity + Good followers
   if (results.length === 0) {
-    const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>5`;
-    results = await runSearch(q1, "Primary language + recent activity + followers");
+    const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20`;
+    results = await runSearch(q1, "Primary language + recent activity + followers>20");
   }
 
-  // Strategy 2: Broaden - just language + any activity
+  // Strategy 2: Broaden - language + more repos
   if (results.length < 10 && languages && languages.length > 0) {
-    const q2 = `type:user language:${primaryLang} repos:>3`;
-    const moreResults = await runSearch(q2, "Primary language + has repos");
+    const q2 = `type:user language:${primaryLang} repos:>10 followers:>10`;
+    const moreResults = await runSearch(q2, "Primary language + repos>10 + followers>10");
 
     // Merge unique results
     const existingLogins = new Set(results.map(r => r.login));
@@ -695,7 +695,7 @@ export const searchCandidates = async (token: string, criteria: any) => {
       .join(' ');
 
     if (roleKeywords) {
-      const q3 = `type:user ${roleKeywords} repos:>2 followers:>3`;
+      const q3 = `type:user ${roleKeywords} repos:>5 followers:>15`;
       const keywordResults = await runSearch(q3, `Job title keywords: "${roleKeywords}"`);
 
       const existingLogins = new Set(results.map(r => r.login));
@@ -709,7 +709,7 @@ export const searchCandidates = async (token: string, criteria: any) => {
 
   // Strategy 4: Ultimate fallback - popular developers in any language
   if (results.length < 5) {
-    const q4 = `type:user followers:>50 repos:>5`;
+    const q4 = `type:user followers:>100 repos:>10`;
     const fallbackResults = await runSearch(q4, "Fallback: Popular developers");
 
     const existingLogins = new Set(results.map(r => r.login));
@@ -725,12 +725,21 @@ export const searchCandidates = async (token: string, criteria: any) => {
     .map(user => ({
       ...user,
       totalStars: (user.repositories?.nodes || []).reduce((sum: number, r: any) => sum + (r?.stargazerCount || 0), 0),
-      followerCount: user.followers?.totalCount || 0
+      followerCount: user.followers?.totalCount || 0,
+      hasRecentRepos: (user.repositories?.nodes || []).length > 0
     }))
+    // Filter out low-quality candidates that will likely be GHOSTs
+    .filter(user => {
+      // Must have at least some visible activity
+      if (user.totalStars === 0 && user.followerCount < 10) return false;
+      // Must have public repos
+      if (!user.hasRecentRepos) return false;
+      return true;
+    })
     .sort((a, b) => (b.followerCount + b.totalStars) - (a.followerCount + a.totalStars))
     .slice(0, 50);
 
-  console.log(`[Chekklist Search] Final results: ${results.length} candidates`);
+  console.log(`[Chekklist Search] Final results after quality filter: ${results.length} candidates`);
 
   return results;
 };
