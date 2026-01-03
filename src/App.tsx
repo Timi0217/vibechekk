@@ -2171,7 +2171,7 @@ function App() {
                               <button
                                 onClick={() => {
                                   // Trigger analysis for first 5 filtered results to avoid rate limits
-                                  const toProcess = filteredResults.slice(0, 5);
+                                  const toProcess = filteredResults;
                                   toProcess.forEach((c: any, index: number) => {
                                     // Stagger the requests slightly to avoid overwhelming
                                     setTimeout(() => {
