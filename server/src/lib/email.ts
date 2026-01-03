@@ -2,9 +2,18 @@ import { Resend } from 'resend';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Only initialize Resend if API key is provided (optional)
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 export async function sendProfileViewedEmail(candidateId: string, archetypeOverride?: string) {
+    // Skip if Resend is not configured
+    if (!resend) {
+        console.log('[Email] Resend not configured, skipping email');
+        return;
+    }
+
     try {
         const candidate = await prisma.candidate.findUnique({
             where: { id: candidateId },
