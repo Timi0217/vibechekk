@@ -573,26 +573,67 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                     nonGhosts++;
 
                     // Calculate warmth score (0-100) based on response likelihood signals
-                    let warmthScore = 50; // Base score
+                    let warmthScore = 40; // Base score
                     const bioLower = (candidate.bio || '').toLowerCase();
+                    const warmthReasons: string[] = [];
 
-                    // Positive signals
-                    if (bioLower.includes('open to') || bioLower.includes('available') || bioLower.includes('looking for')) warmthScore += 25;
-                    if (bioLower.includes('freelance') || bioLower.includes('consultant') || bioLower.includes('contractor')) warmthScore += 15;
-                    if (bioLower.includes('hire me') || bioLower.includes('dm me') || bioLower.includes('contact')) warmthScore += 10;
-                    if ((candidate.followerCount || 0) < 500) warmthScore += 10; // More approachable
-                    if ((candidate.followerCount || 0) < 100) warmthScore += 5; // Even more approachable
+                    // STRONGEST SIGNAL: Last commit date
+                    const lastRepoUpdate = candidate.repositories?.nodes?.[0]?.pushedAt;
+                    if (lastRepoUpdate) {
+                        const daysSinceCommit = Math.floor((Date.now() - new Date(lastRepoUpdate).getTime()) / (1000 * 60 * 60 * 24));
+                        if (daysSinceCommit <= 7) {
+                            warmthScore += 30;
+                            warmthReasons.push('Active in last 7 days');
+                        } else if (daysSinceCommit <= 30) {
+                            warmthScore += 20;
+                            warmthReasons.push('Active in last 30 days');
+                        } else if (daysSinceCommit <= 90) {
+                            warmthScore += 10;
+                            warmthReasons.push('Active in last 90 days');
+                        } else if (daysSinceCommit > 180) {
+                            warmthScore -= 15;
+                            warmthReasons.push('Inactive 6+ months');
+                        }
+                    }
+
+                    // Bio signals (positive)
+                    if (bioLower.includes('open to') || bioLower.includes('available') || bioLower.includes('looking for')) {
+                        warmthScore += 20;
+                        warmthReasons.push('Open to opportunities');
+                    }
+                    if (bioLower.includes('freelance') || bioLower.includes('consultant') || bioLower.includes('contractor')) {
+                        warmthScore += 15;
+                        warmthReasons.push('Freelancer/consultant');
+                    }
+                    if (bioLower.includes('hire me') || bioLower.includes('dm me') || bioLower.includes('contact')) {
+                        warmthScore += 10;
+                        warmthReasons.push('Welcomes contact');
+                    }
+
+                    // Approachability
+                    if ((candidate.followerCount || 0) < 500) {
+                        warmthScore += 5;
+                    }
 
                     // Negative signals
-                    if (bioLower.includes('not looking') || bioLower.includes('happy at')) warmthScore -= 30;
-                    if (bioLower.includes('google') || bioLower.includes('meta') || bioLower.includes('amazon') || bioLower.includes('apple') || bioLower.includes('microsoft')) warmthScore -= 15;
-                    if ((candidate.followerCount || 0) > 5000) warmthScore -= 15; // Celebrity status
+                    if (bioLower.includes('not looking') || bioLower.includes('happy at')) {
+                        warmthScore -= 25;
+                        warmthReasons.push('States not looking');
+                    }
+                    if (bioLower.includes('google') || bioLower.includes('meta') || bioLower.includes('amazon') || bioLower.includes('apple') || bioLower.includes('microsoft')) {
+                        warmthScore -= 10;
+                        warmthReasons.push('At major tech co');
+                    }
+                    if ((candidate.followerCount || 0) > 5000) {
+                        warmthScore -= 10;
+                        warmthReasons.push('High profile');
+                    }
 
                     // Clamp to 0-100
                     warmthScore = Math.max(0, Math.min(100, warmthScore));
 
                     // Warmth label
-                    const warmthLabel = warmthScore >= 80 ? 'HOT' : warmthScore >= 60 ? 'WARM' : warmthScore >= 40 ? 'NEUTRAL' : 'COLD';
+                    const warmthLabel = warmthScore >= 75 ? 'HOT' : warmthScore >= 55 ? 'WARM' : warmthScore >= 35 ? 'NEUTRAL' : 'COLD';
 
                     // Send candidate result
                     const result = {
@@ -606,10 +647,12 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         tier: tier,
                         summary: reportData.recruiter_summary,
                         topRepo: candidate.repositories?.nodes?.[0]?.name || 'Unknown',
+                        lastActive: candidate.repositories?.nodes?.[0]?.pushedAt || null,
                         followers: candidate.followerCount || 0,
                         totalStars: candidate.totalStars || 0,
                         warmthScore,
-                        warmthLabel
+                        warmthLabel,
+                        warmthReasons
                     };
 
                     sendEvent('candidate', result);

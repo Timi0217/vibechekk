@@ -627,11 +627,18 @@ export const searchCandidates = async (token: string, criteria: any) => {
               bio
               location
               url
+              updatedAt
               followers { totalCount }
-              repositories(first: 5, orderBy: {field: STARGAZERS, direction: DESC}, privacy: PUBLIC) {
+              contributionsCollection {
+                contributionCalendar {
+                  totalContributions
+                }
+              }
+              repositories(first: 5, orderBy: {field: PUSHED_AT, direction: DESC}, privacy: PUBLIC) {
                 nodes {
                   name
                   stargazerCount
+                  pushedAt
                   primaryLanguage { name }
                   description
                 }
