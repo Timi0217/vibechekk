@@ -2268,43 +2268,64 @@ function App() {
                                   }}>
                                     {c.name || c.handle}
                                   </div>
-                                  <button
-                                    onClick={() => triggerAnalysis(c.handle)}
-                                    style={{
-                                      padding: '5px 10px',
+                                  {pendingHandles.includes(c.handle) ? (
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      padding: '5px 12px',
                                       borderRadius: '5px',
-                                      background: 'var(--primary)',
-                                      border: 'none',
+                                      background: 'var(--accent)',
+                                      color: 'white',
                                       fontSize: '9px',
                                       fontWeight: 700,
-                                      color: 'white',
-                                      cursor: 'pointer',
-                                      flexShrink: 0,
                                       textTransform: 'uppercase',
                                       letterSpacing: '0.03em'
-                                    }}
-                                  >
-                                    Chekk
-                                  </button>
-                                  <a
-                                    href={`https://github.com/${c.handle}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={{
-                                      padding: '5px 8px',
-                                      borderRadius: '5px',
-                                      background: 'var(--bg-gray)',
-                                      fontSize: '9px',
-                                      fontWeight: 600,
-                                      color: 'var(--text-dim)',
-                                      textDecoration: 'none',
-                                      flexShrink: 0,
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.03em'
-                                    }}
-                                  >
-                                    View
-                                  </a>
+                                    }}>
+                                      <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                                      Analyzing
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => triggerAnalysis(c.handle)}
+                                        style={{
+                                          padding: '5px 10px',
+                                          borderRadius: '5px',
+                                          background: 'var(--primary)',
+                                          border: 'none',
+                                          fontSize: '9px',
+                                          fontWeight: 700,
+                                          color: 'white',
+                                          cursor: 'pointer',
+                                          flexShrink: 0,
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.03em'
+                                        }}
+                                      >
+                                        Chekk
+                                      </button>
+                                      <a
+                                        href={`https://github.com/${c.handle}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{
+                                          padding: '5px 8px',
+                                          borderRadius: '5px',
+                                          background: 'var(--bg-gray)',
+                                          fontSize: '9px',
+                                          fontWeight: 600,
+                                          color: 'var(--text-dim)',
+                                          textDecoration: 'none',
+                                          flexShrink: 0,
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.03em'
+                                        }}
+                                      >
+                                        View
+                                      </a>
+                                    </>
+                                  )}
                                 </div>
                               ))}
                               {filteredResults.length === 0 && (
