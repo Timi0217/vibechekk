@@ -2175,11 +2175,18 @@ function App() {
                         const uniqueLocations = [...new Set(s.results.map((c: any) => c.location).filter(Boolean))] as string[];
 
                         // Apply filters
-                        const filteredResults = s.results.filter((c: any) => {
-                          if (checklistFilters.location && c.location !== checklistFilters.location) return false;
-                          if (checklistFilters.minScore > 0 && (c.matchScore || 0) < checklistFilters.minScore) return false;
-                          return true;
-                        });
+                        const filteredResults = s.results
+                          .filter((c: any) => {
+                            if (checklistFilters.location && c.location !== checklistFilters.location) return false;
+                            if (checklistFilters.minScore > 0 && (c.matchScore || 0) < checklistFilters.minScore) return false;
+                            return true;
+                          })
+                          // Sort by most recently active first (hottest leads)
+                          .sort((a: any, b: any) => {
+                            const aDate = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+                            const bDate = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+                            return bDate - aDate;
+                          });
 
                         return (
                           <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
@@ -2302,8 +2309,8 @@ function App() {
                                     src={c.avatar}
                                     alt={c.name}
                                     style={{
-                                      width: '28px',
-                                      height: '28px',
+                                      width: '32px',
+                                      height: '32px',
                                       borderRadius: '6px',
                                       flexShrink: 0
                                     }}
@@ -2311,14 +2318,67 @@ function App() {
                                   <div style={{
                                     flex: 1,
                                     minWidth: 0,
-                                    fontSize: '11px',
-                                    fontWeight: 600,
-                                    color: 'var(--text-main)',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '2px'
                                   }}>
-                                    {c.name || c.handle}
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px'
+                                    }}>
+                                      <span style={{
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        color: 'var(--text-main)',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                      }}>
+                                        {c.name || c.handle}
+                                      </span>
+                                      {c.archetype && (
+                                        <span style={{
+                                          fontSize: '8px',
+                                          fontWeight: 700,
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          background: c.tier === 'LEGENDARY' ? '#fef3c7' : c.tier === 'ULTRA RARE' ? '#f3e8ff' : c.tier === 'RARE' ? '#dbeafe' : '#f0fdf4',
+                                          color: c.tier === 'LEGENDARY' ? '#b45309' : c.tier === 'ULTRA RARE' ? '#7c3aed' : c.tier === 'RARE' ? '#1d4ed8' : '#15803d',
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.02em',
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          {c.archetype.replace('THE ', '')}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '9px',
+                                      color: 'var(--text-dim)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px'
+                                    }}>
+                                      {c.lastActive && (
+                                        <span style={{
+                                          color: (() => {
+                                            const days = Math.floor((Date.now() - new Date(c.lastActive).getTime()) / (1000 * 60 * 60 * 24));
+                                            return days <= 7 ? '#16a34a' : days <= 30 ? '#ca8a04' : '#6b7280';
+                                          })()
+                                        }}>
+                                          Last seen: {(() => {
+                                            const days = Math.floor((Date.now() - new Date(c.lastActive).getTime()) / (1000 * 60 * 60 * 24));
+                                            if (days === 0) return 'Today';
+                                            if (days === 1) return 'Yesterday';
+                                            if (days < 7) return `${days} days ago`;
+                                            if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+                                            return `${Math.floor(days / 30)} months ago`;
+                                          })()}
+                                        </span>
+                                      )}
+                                      {c.email && <span>📧</span>}
+                                    </div>
                                   </div>
                                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                                     {pendingHandles.includes(c.handle) ? (
