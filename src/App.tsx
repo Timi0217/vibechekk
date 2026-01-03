@@ -2440,8 +2440,12 @@ function App() {
                                           color: c.tier === 'LEGENDARY' ? '#b45309' : c.tier === 'ULTRA RARE' ? '#7c3aed' : c.tier === 'RARE' ? '#1d4ed8' : '#15803d',
                                           textTransform: 'uppercase',
                                           letterSpacing: '0.02em',
-                                          whiteSpace: 'nowrap'
+                                          whiteSpace: 'nowrap',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
                                         }}>
+                                          {c.reachabilitySignal && <span title="Reachability">{c.reachabilitySignal}</span>}
                                           {c.archetype.replace('THE ', '')}
                                         </span>
                                       )}
@@ -3639,6 +3643,7 @@ function App() {
                         {/* Name and Tier */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div style={{ fontSize: '20px', fontWeight: 900, color: '#ffffff', lineHeight: 1.2 }}>
+                            {selectedReport.metadata?.reachability?.signal && <span style={{ marginRight: '8px' }} title={`Reachability: ${selectedReport.metadata.reachability.label}`}>{selectedReport.metadata.reachability.signal}</span>}
                             {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer'}
                           </div>
                           <EmailTooltip
@@ -4264,6 +4269,11 @@ function App() {
                               <span className="history-name">
                                 {(item.metadata?.userStats?.name ? item.metadata.userStats.name : handle) || 'Guest Profile'}
                               </span>
+                              {item.metadata?.reachability?.signal && (
+                                <span style={{ fontSize: '10px' }} title={`Reachability: ${item.metadata.reachability.label}`}>
+                                  {item.metadata.reachability.signal}
+                                </span>
+                              )}
                               <div style={{ fontSize: '9px', color: 'var(--text-dim)', marginTop: '1px' }}>
                                 {item.metadata?.lastActive && (
                                   <span style={{ color: getLastSeenColor(item.metadata.lastActive) }}>

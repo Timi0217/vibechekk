@@ -16,10 +16,24 @@ export const fetchUserStats = async (token: string, username: string) => {
         name
         email
         createdAt
+        updatedAt
+        pullRequests(first: 1) { totalCount }
+        issues(first: 1) { totalCount }
+        starredRepositories(first: 1) { totalCount }
         contributionsCollection {
           totalCommitContributions
           totalRepositoriesWithContributedCommits
           restrictedContributionsCount
+          contributionCalendar {
+            totalContributions
+            weeks {
+              contributionDays {
+                contributionCount
+                date
+                weekday
+              }
+            }
+          }
         }
         recentActivity: contributionsCollection(from: $from) {
           totalCommitContributions
@@ -31,6 +45,7 @@ export const fetchUserStats = async (token: string, username: string) => {
             stargazerCount
             isFork
             primaryLanguage { name }
+            pushedAt
           }
         }
       }
@@ -56,10 +71,19 @@ export const fetchUserStats = async (token: string, username: string) => {
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.totalCommitContributions,
       createdAt: response.user.createdAt,
+      updatedAt: response.user.updatedAt,
       name: response.user.name,
       email: response.user.email,
+      pullRequests: response.user.pullRequests.totalCount,
+      issues: response.user.issues.totalCount,
+      starredRepositories: response.user.starredRepositories.totalCount,
+      contributionCalendar: response.user.contributionsCollection.contributionCalendar,
       languages: [...new Set(repos.map((r: any) => r.primaryLanguage?.name).filter(Boolean))],
-      forkRatio: repos.length > 0 ? repos.filter((r: any) => r.isFork).length / repos.length : 0
+      forkRatio: repos.length > 0 ? repos.filter((r: any) => r.isFork).length / repos.length : 0,
+      lastPushedAt: repos.length > 0 ? repos.reduce((latest: string, r: any) => {
+        if (!r.pushedAt) return latest;
+        return !latest || new Date(r.pushedAt) > new Date(latest) ? r.pushedAt : latest;
+      }, '') : null
     };
   } catch (error) {
     console.error('[GitHub] fetchUserStats failed:', error);
@@ -392,6 +416,70 @@ export const generateTrajectoryNarrative = (trajectory: Record<string, any[]>): 
   return entries.join('\n');
 };
 
+export const calculateReachability = (stats: any) => {
+  // 1. Recency Score (50%)
+  let recencyScore = 0;
+  if (stats.lastPushedAt) {
+    const daysSinceLastCommit = Math.floor((Date.now() - new Date(stats.lastPushedAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceLastCommit < 7) recencyScore = 100;
+    else if (daysSinceLastCommit < 30) recencyScore = 80;
+    else if (daysSinceLastCommit < 90) recencyScore = 60;
+    else if (daysSinceLastCommit < 180) recencyScore = 40;
+    else recencyScore = 20;
+  }
+
+  // 2. Frequency Score (30%) - Activity Pattern over last 12 weeks
+  let frequencyScore = 0;
+  if (stats.contributionCalendar?.weeks) {
+    const weeks = stats.contributionCalendar.weeks;
+    const recentWeeks = weeks.slice(-12); // Last 12 weeks
+    const activeWeeks = recentWeeks.filter((w: any) =>
+      w.contributionDays.some((d: any) => d.contributionCount > 0)
+    ).length;
+
+    frequencyScore = Math.min(100, (activeWeeks / 12) * 100);
+  }
+
+  // 3. Engagement Score (20%) - PRs, Issues, Stars, Profile Freshness
+  let engagementScore = 0;
+  const prScore = Math.min(40, (stats.pullRequests || 0) * 4); // Max 40 if 10+ PRs
+  const issueScore = Math.min(20, (stats.issues || 0) * 2);    // Max 20 if 10+ Issues
+  const starScore = Math.min(20, (stats.starredRepositories || 0) * 0.2); // Max 20 if 100+ Stars
+
+  // Profile freshness
+  let profileScore = 0;
+  if (stats.updatedAt) {
+    const daysSinceUpdate = Math.floor((Date.now() - new Date(stats.updatedAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceUpdate < 30) profileScore = 20;
+    else if (daysSinceUpdate < 90) profileScore = 10;
+  }
+
+  engagementScore = prScore + issueScore + starScore + profileScore;
+
+  const totalScore = (recencyScore * 0.5) + (frequencyScore * 0.3) + (engagementScore * 0.2);
+
+  let signal = '🔴';
+  let label = 'LOW REACHABILITY';
+  if (totalScore >= 65) {
+    signal = '🟢';
+    label = 'HIGH REACHABILITY';
+  } else if (totalScore >= 35) {
+    signal = '🟡';
+    label = 'MEDIUM REACHABILITY';
+  }
+
+  return {
+    score: Math.round(totalScore),
+    signal,
+    label,
+    breakdown: {
+      recency: recencyScore,
+      frequency: Math.round(frequencyScore),
+      engagement: Math.round(engagementScore)
+    }
+  };
+};
+
 export const analyzeGlobalTrajectory = (repos: any[]) => {
   const years: Record<string, any[]> = {};
 
@@ -545,10 +633,16 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     externalContributions: 0,
     last90DaysCommits: 0,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     name: '',
     email: null,
+    pullRequests: 0,
+    issues: 0,
+    starredRepositories: 0,
+    contributionCalendar: null,
     languages: [],
-    forkRatio: 0
+    forkRatio: 0,
+    lastPushedAt: null
   };
 
   // Sync operations (no API calls)
@@ -592,20 +686,15 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
   distribution.highest_single_repo = Math.max(distribution.highest_single_repo, topRepos[0]?.stars || 0);
 
   const trajectoryData = analyzeGlobalTrajectory(topRepos);
+  const reachability = calculateReachability(stats);
 
   console.log(`[GitHub] Total analysis time: ${Date.now() - startTime}ms`);
-
-  const lastActive = topRepos.length > 0
-    ? topRepos.reduce((latest, repo) => {
-      const repoDate = new Date(repo.pushedAt || repo.updatedAt).getTime();
-      return repoDate > latest ? repoDate : latest;
-    }, 0)
-    : null;
 
   return {
     userStats: stats,
     email: stats.email,
-    lastActive: lastActive ? new Date(lastActive).toISOString() : null,
+    reachability,
+    lastActive: stats.lastPushedAt || (topRepos.length > 0 ? topRepos[0].pushedAt : null),
     topRepos,
     qualitySignals: qualitySignals.filter(Boolean),
     starDistribution: distribution,
@@ -643,9 +732,18 @@ export const searchCandidates = async (token: string, criteria: any) => {
               url
               updatedAt
               followers { totalCount }
+              pullRequests(first: 1) { totalCount }
+              issues(first: 1) { totalCount }
+              starredRepositories(first: 1) { totalCount }
               contributionsCollection {
+                totalCommitContributions
                 contributionCalendar {
                   totalContributions
+                  weeks {
+                    contributionDays {
+                      contributionCount
+                    }
+                  }
                 }
               }
               repositories(first: 5, orderBy: {field: PUSHED_AT, direction: DESC}, privacy: PUBLIC) {
