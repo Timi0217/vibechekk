@@ -14,6 +14,7 @@ export const fetchUserStats = async (token: string, username: string) => {
       }
       user(login: $username) {
         name
+        email
         createdAt
         contributionsCollection {
           totalCommitContributions
@@ -56,6 +57,7 @@ export const fetchUserStats = async (token: string, username: string) => {
       last90DaysCommits: response.user.recentActivity.totalCommitContributions,
       createdAt: response.user.createdAt,
       name: response.user.name,
+      email: response.user.email,
       languages: [...new Set(repos.map((r: any) => r.primaryLanguage?.name).filter(Boolean))],
       forkRatio: repos.length > 0 ? repos.filter((r: any) => r.isFork).length / repos.length : 0
     };
@@ -436,6 +438,7 @@ export const findTopRepos = async (token: string, username: string) => {
             isFork
             description
             updatedAt
+            pushedAt
             primaryLanguage { name }
             stargazerCount
             forkCount
@@ -508,6 +511,7 @@ export const findTopRepos = async (token: string, username: string) => {
       stars: repo.stargazerCount,
       forks: repo.forkCount,
       updatedAt: repo.updatedAt,
+      pushedAt: repo.pushedAt,
       isFork: repo.isFork,
       isMaintainer: false, // Will be updated in analyzeGitHubProfile
       totalCommits: repo.defaultBranchRef?.target?.history?.totalCount || 0,
@@ -542,6 +546,7 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     last90DaysCommits: 0,
     createdAt: new Date().toISOString(),
     name: '',
+    email: null,
     languages: [],
     forkRatio: 0
   };
@@ -590,8 +595,17 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
 
   console.log(`[GitHub] Total analysis time: ${Date.now() - startTime}ms`);
 
+  const lastActive = topRepos.length > 0
+    ? topRepos.reduce((latest, repo) => {
+      const repoDate = new Date(repo.pushedAt || repo.updatedAt).getTime();
+      return repoDate > latest ? repoDate : latest;
+    }, 0)
+    : null;
+
   return {
     userStats: stats,
+    email: stats.email,
+    lastActive: lastActive ? new Date(lastActive).toISOString() : null,
     topRepos,
     qualitySignals: qualitySignals.filter(Boolean),
     starDistribution: distribution,

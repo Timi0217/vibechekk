@@ -401,6 +401,8 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 repoName: primaryRepo,
                 metadata: {
                     userStats: profileData.userStats,
+                    email: profileData.email,
+                    lastActive: profileData.lastActive,
                     starDistribution: profileData.starDistribution,
                     qualitySignals: profileData.qualitySignals,
                     qualityScore,
