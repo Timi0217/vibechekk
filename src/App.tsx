@@ -3428,7 +3428,7 @@ function App() {
                               <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
                             )}
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity || getRarityFromLabel(selectedReport.label)} size={14} />
                             <div className="archetype-tooltip-wrapper">
                               <div className={`archetype-badge ${getRarityClass(selectedReport.rarity || getRarityFromLabel(selectedReport.label))}`}>
@@ -3460,23 +3460,6 @@ function App() {
                                 </div>
                               </div>
                             </div>
-                            {selectedReport.rarity_percentile && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, opacity: 0.8 }}>
-                                • {selectedReport.rarity_percentile.toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
-                            {selectedReport.seniority && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.2px', opacity: 0.8 }}>
-                                {selectedReport.seniority.toUpperCase()}
-                              </span>
-                            )}
-                            {selectedReport.star_count !== undefined && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
-                                <Star size={10} fill="currentColor" /> {selectedReport.star_count} STARS
-                              </div>
-                            )}
                             {selectedReport.metadata?.lastActive && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
                                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: getLastSeenColor(selectedReport.metadata.lastActive) }} />
