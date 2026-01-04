@@ -4415,11 +4415,6 @@ function App() {
                                 {item.metadata?.userStats?.name || item.candidate?.name || handle || 'Guest Profile'}
                                 {item.metadata?.claimed && <BadgeCheck size={12} color="#059669" fill="#d1fae5" />}
                               </span>
-                              {item.metadata?.reachability?.signal && (
-                                <span style={{ fontSize: '10px' }} title={`Reachability: ${item.metadata.reachability.label}`}>
-                                  {item.metadata.reachability.signal}
-                                </span>
-                              )}
                               <EmailTooltip
                                 email={item.metadata?.email}
                                 handle={handle}
