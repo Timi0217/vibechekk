@@ -296,6 +296,7 @@ function App() {
   const [bulkProcessing, setBulkProcessing] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, status: '' })
   const [bulkResults, setBulkResults] = useState<any[]>([])
+  const [enriching, setEnriching] = useState(false)
   const [checklistTab, setChecklistTab] = useState<'configure' | 'active'>('configure')
   const [checklistForm, setChecklistForm] = useState({
     jobTitle: '',
@@ -510,6 +511,55 @@ function App() {
       if (data.success) setHistory(data.data)
     } catch (e) {
       console.warn('Backend not reachable')
+    }
+  }
+
+  // Enrich a candidate with Apollo.io data (LinkedIn, company, etc.)
+  const enrichCandidate = async (candidateId: string, email?: string, name?: string) => {
+    if (!user || user.tier !== 'PRO') {
+      setProFeaturePaywallOpen('Candidate Enrichment');
+      return;
+    }
+
+    setEnriching(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/enrich/candidate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        },
+        body: JSON.stringify({ candidateId, email, name })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // Update the selected report with enrichment data
+        setSelectedReport((prev: any) => ({
+          ...prev,
+          candidate: {
+            ...prev.candidate,
+            linkedinUrl: data.data.linkedinUrl,
+            currentTitle: data.data.currentRole,
+            currentCompany: data.data.currentCompany,
+            companyLogoUrl: data.data.companyLogo,
+            seniority: data.data.seniority,
+            twitterUrl: data.data.socialLinks?.twitter,
+            location: data.data.location || prev.candidate?.location
+          }
+        }));
+        // Refresh history to persist
+        fetchHistory();
+      } else if (data.code === 'NO_MATCH') {
+        console.log('No enrichment data found for this candidate');
+      } else if (data.code === 'PRO_REQUIRED') {
+        setProFeaturePaywallOpen('Candidate Enrichment');
+      }
+    } catch (e) {
+      console.error('Enrichment failed:', e);
+    } finally {
+      setEnriching(false);
     }
   }
 
@@ -3658,6 +3708,50 @@ function App() {
                     );
                   })()}
                 </div>
+
+                {/* Enrich Button - shows when no LinkedIn data */}
+                {user?.tier === 'PRO' && !selectedReport.candidate?.linkedinUrl && (
+                  <button
+                    onClick={() => enrichCandidate(
+                      selectedReport.candidate?.id,
+                      selectedReport.candidate?.email || selectedReport.metadata?.email,
+                      selectedReport.candidate?.name || selectedReport.metadata?.userStats?.name
+                    )}
+                    disabled={enriching}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '8px 16px',
+                      marginBottom: '16px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #0077b5 0%, #00a0dc 100%)',
+                      border: 'none',
+                      color: 'white',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: enriching ? 'wait' : 'pointer',
+                      opacity: enriching ? 0.7 : 1,
+                      transition: 'all 0.2s ease',
+                      width: '100%'
+                    }}
+                  >
+                    {enriching ? (
+                      <>
+                        <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                        Enriching...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                        </svg>
+                        Enrich with LinkedIn & Company Data
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="detail-section">
