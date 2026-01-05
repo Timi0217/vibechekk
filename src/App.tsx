@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
 import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
@@ -297,6 +297,7 @@ function App() {
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, status: '' })
   const [bulkResults, setBulkResults] = useState<any[]>([])
   const [enriching, setEnriching] = useState(false)
+  const [enrichmentStatus, setEnrichmentStatus] = useState<'idle' | 'success' | 'no_match' | 'error'>('idle')
   const [checklistTab, setChecklistTab] = useState<'configure' | 'active'>('configure')
   const [checklistForm, setChecklistForm] = useState({
     jobTitle: '',
@@ -521,7 +522,10 @@ function App() {
       return;
     }
 
+    console.log('[Enrich] Starting enrichment for:', { candidateId, email, name });
     setEnriching(true);
+    setEnrichmentStatus('idle');
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/enrich/candidate`, {
         method: 'POST',
@@ -533,8 +537,10 @@ function App() {
       });
 
       const data = await response.json();
+      console.log('[Enrich] API response:', data);
 
       if (data.success && data.data) {
+        console.log('[Enrich] Success! Updating UI with:', data.data);
         // Update the selected report with enrichment data
         setSelectedReport((prev: any) => ({
           ...prev,
@@ -549,17 +555,25 @@ function App() {
             location: data.data.location || prev.candidate?.location
           }
         }));
+        setEnrichmentStatus('success');
         // Refresh history to persist
         fetchHistory();
-      } else if (data.code === 'NO_MATCH') {
-        console.log('No enrichment data found for this candidate');
+      } else if (data.code === 'NO_MATCH' || data.error?.includes('No enrichment') || data.error?.includes('No matching')) {
+        console.log('[Enrich] No match found in Apollo database');
+        setEnrichmentStatus('no_match');
       } else if (data.code === 'PRO_REQUIRED') {
         setProFeaturePaywallOpen('Candidate Enrichment');
+      } else {
+        console.log('[Enrich] Unknown response:', data);
+        setEnrichmentStatus('error');
       }
     } catch (e) {
-      console.error('Enrichment failed:', e);
+      console.error('[Enrich] Failed:', e);
+      setEnrichmentStatus('error');
     } finally {
       setEnriching(false);
+      // Reset status after 5 seconds
+      setTimeout(() => setEnrichmentStatus('idle'), 5000);
     }
   }
 
@@ -3711,46 +3725,66 @@ function App() {
 
                 {/* Enrich Button - shows when no LinkedIn data */}
                 {user?.tier === 'PRO' && !selectedReport.candidate?.linkedinUrl && (
-                  <button
-                    onClick={() => enrichCandidate(
-                      selectedReport.candidate?.id,
-                      selectedReport.candidate?.email || selectedReport.metadata?.email,
-                      selectedReport.candidate?.name || selectedReport.metadata?.userStats?.name
+                  <div style={{ marginBottom: '16px' }}>
+                    <button
+                      onClick={() => enrichCandidate(
+                        selectedReport.candidate?.id,
+                        selectedReport.candidate?.email || selectedReport.metadata?.email,
+                        selectedReport.candidate?.name || selectedReport.metadata?.userStats?.name
+                      )}
+                      disabled={enriching}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        padding: '10px 16px',
+                        borderRadius: '8px',
+                        background: enrichmentStatus === 'no_match'
+                          ? '#f59e0b'
+                          : enrichmentStatus === 'error'
+                            ? '#ef4444'
+                            : 'linear-gradient(135deg, #0077b5 0%, #00a0dc 100%)',
+                        border: 'none',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: enriching ? 'wait' : 'pointer',
+                        opacity: enriching ? 0.7 : 1,
+                        transition: 'all 0.2s ease',
+                        width: '100%'
+                      }}
+                    >
+                      {enriching ? (
+                        <>
+                          <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                          Searching Apollo database...
+                        </>
+                      ) : enrichmentStatus === 'no_match' ? (
+                        <>
+                          <AlertCircle size={14} />
+                          No LinkedIn profile found for this person
+                        </>
+                      ) : enrichmentStatus === 'error' ? (
+                        <>
+                          <AlertCircle size={14} />
+                          Enrichment failed - try again
+                        </>
+                      ) : (
+                        <>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                          </svg>
+                          Enrich with LinkedIn & Company Data
+                        </>
+                      )}
+                    </button>
+                    {enrichmentStatus === 'no_match' && (
+                      <p style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '6px', textAlign: 'center' }}>
+                        This person wasn't found in Apollo's database. They may not have a public professional profile.
+                      </p>
                     )}
-                    disabled={enriching}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      padding: '8px 16px',
-                      marginBottom: '16px',
-                      borderRadius: '8px',
-                      background: 'linear-gradient(135deg, #0077b5 0%, #00a0dc 100%)',
-                      border: 'none',
-                      color: 'white',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: enriching ? 'wait' : 'pointer',
-                      opacity: enriching ? 0.7 : 1,
-                      transition: 'all 0.2s ease',
-                      width: '100%'
-                    }}
-                  >
-                    {enriching ? (
-                      <>
-                        <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                        Enriching...
-                      </>
-                    ) : (
-                      <>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                        </svg>
-                        Enrich with LinkedIn & Company Data
-                      </>
-                    )}
-                  </button>
+                  </div>
                 )}
               </div>
 
