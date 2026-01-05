@@ -247,9 +247,16 @@ function scanForGitHubProfile() {
       const handle = profileMatch[1];
       const fullUrl = `https://github.com/${handle}`;
 
-      // Reserved words to ignore
-      const ignored = ['settings', 'explore', 'topics', 'trending', 'collections', 'events', 'sponsors', 'orgs', 'search'];
-      if (ignored.includes(handle)) return;
+      // Reserved words to ignore - comprehensive list of GitHub system routes
+      const ignored = [
+        'settings', 'explore', 'topics', 'trending', 'collections', 'events', 'sponsors',
+        'orgs', 'search', 'features', 'marketplace', 'pricing', 'enterprise', 'team',
+        'notifications', 'pulls', 'issues', 'codespaces', 'copilot', 'security',
+        'login', 'logout', 'join', 'signup', 'password_reset', 'sessions', 'about',
+        'contact', 'support', 'status', 'blog', 'resources', 'readme', 'customer-stories',
+        'new', 'organizations', 'apps', 'account', 'dashboard', 'watching', 'stars'
+      ];
+      if (ignored.includes(handle.toLowerCase())) return;
 
       if (!scannedProfiles.has(handle)) {
         // Extra time-based debounce to prevent rapid duplicates
@@ -379,7 +386,8 @@ function scanForEmails() {
 
 // Initialize State
 chrome.storage.local.get(['auto_chekk_enabled'], (res) => {
-  isAutochekkEnabled = res.auto_chekk_enabled !== undefined ? res.auto_chekk_enabled : true;
+  // Default to false - AutoChekk is PRO-only, backend enforces this
+  isAutochekkEnabled = res.auto_chekk_enabled === true;
   if (isAutochekkEnabled) {
     console.log('[Vibechekk] Autochekk Enabled - Scanner Active');
     scanForGitHubProfile();
@@ -389,7 +397,7 @@ chrome.storage.local.get(['auto_chekk_enabled'], (res) => {
 // Detect State Changes
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.auto_chekk_enabled) {
-    isAutochekkEnabled = changes.auto_chekk_enabled.newValue;
+    isAutochekkEnabled = changes.auto_chekk_enabled.newValue === true;
     if (isAutochekkEnabled) {
       console.log('[Vibechekk] Autochekk Activated');
       scanForEmails(); // Trigger immediate scan

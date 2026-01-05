@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { sendProfileViewedEmail } from './lib/email.js';
 import { analyzeGitHubProfile, calculateReachability } from './lib/github.js';
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
+import { enrichPerson, formatEnrichedProfile } from './lib/apollo.js';
 import Stripe from 'stripe';
 
 dotenv.config();
@@ -35,6 +36,7 @@ const SECURE_JWT_SECRET = JWT_SECRET || 'dev-only-insecure-secret-do-not-use-in-
 const GITHUB_TOKEN = process.env.GITHUB_API_TOKEN;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const APOLLO_API_KEY = process.env.APOLLO_API_KEY;
 
 // Validate critical API keys
 if (!GITHUB_TOKEN) {
@@ -42,6 +44,9 @@ if (!GITHUB_TOKEN) {
 }
 if (!DEEPSEEK_KEY) {
     console.warn('⚠️  WARNING: DEEPSEEK_API_KEY not set. AI analysis will fail.');
+}
+if (!APOLLO_API_KEY) {
+    console.warn('⚠️  WARNING: APOLLO_API_KEY not set. Candidate enrichment disabled.');
 }
 
 // Initialize Stripe
@@ -146,9 +151,14 @@ const verifyAtsToken = async (token: string, type: 'ashby' | 'greenhouse') => {
 // ═══════════════════════════════════════════════════════════════════════════
 const checkTierLimit = async (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization;
+    // Also check query param for SSE (EventSource doesn't support custom headers)
+    const queryToken = req.query.token as string | undefined;
     const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown-ip';
 
-    if (!authHeader) {
+    // Get token from header or query param
+    const token = authHeader?.split(' ')[1] || queryToken;
+
+    if (!token) {
         // Enforce Guest Limit (2 per IP)
         try {
             const guestCount = await prisma.vibeReport.count({
@@ -171,7 +181,6 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
         }
     }
 
-    const token = authHeader.split(' ')[1];
     try {
         const decoded: any = jwt.verify(token, SECURE_JWT_SECRET);
         const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
@@ -733,6 +742,49 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         if (savedCandidate.email && !savedCandidate.claimed) {
                             sendProfileViewedEmail(savedCandidate.id, result.archetype).catch(e => console.error('[GrowthLoop] email failed:', e));
                         }
+
+                        // AUTO-ENRICHMENT: Enrich candidate with Apollo.io data (async, non-blocking)
+                        if (APOLLO_API_KEY && (savedCandidate.email || savedCandidate.name)) {
+                            enrichPerson(APOLLO_API_KEY, {
+                                email: savedCandidate.email || undefined,
+                                name: savedCandidate.name || undefined
+                            }).then(async (enrichResult) => {
+                                if (enrichResult.success && enrichResult.person) {
+                                    const formatted = formatEnrichedProfile(enrichResult.person);
+                                    // Update candidate with enrichment data
+                                    await prisma.candidate.update({
+                                        where: { id: savedCandidate.id },
+                                        data: {
+                                            linkedinUrl: enrichResult.person.linkedin_url,
+                                            photoUrl: enrichResult.person.photo_url,
+                                            currentTitle: enrichResult.person.title,
+                                            currentCompany: enrichResult.person.organization?.name,
+                                            companyLogoUrl: enrichResult.person.organization?.logo_url,
+                                            companyLinkedin: enrichResult.person.organization?.linkedin_url,
+                                            companyIndustry: enrichResult.person.organization?.industry,
+                                            companySize: enrichResult.person.organization?.estimated_num_employees,
+                                            location: formatted.location || savedCandidate.location as any,
+                                            seniority: enrichResult.person.seniority,
+                                            twitterUrl: enrichResult.person.twitter_url,
+                                            workEmail: enrichResult.person.work_email,
+                                            enrichedAt: new Date(),
+                                            enrichmentData: enrichResult.person as any
+                                        }
+                                    }).catch(err => console.log('[Enrich] Update failed:', err.message));
+
+                                    // Send enrichment update to client
+                                    sendEvent('enrichment', {
+                                        handle: candidate.login,
+                                        linkedinUrl: enrichResult.person.linkedin_url,
+                                        currentTitle: enrichResult.person.title,
+                                        currentCompany: enrichResult.person.organization?.name,
+                                        companyLogoUrl: enrichResult.person.organization?.logo_url,
+                                        seniority: enrichResult.person.seniority,
+                                        location: formatted.location
+                                    });
+                                }
+                            }).catch(err => console.log('[Enrich] Apollo call failed:', err.message));
+                        }
                     } catch (dbErr) {
                         console.error('[GrowthLoop] database error:', dbErr);
                     }
@@ -1115,6 +1167,198 @@ app.post('/api/lookup/email', async (req, res) => {
         }
     } catch (e: any) {
         console.error('[Email Lookup Error]', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANDIDATE ENRICHMENT: Apollo.io integration for LinkedIn & professional data
+// ═══════════════════════════════════════════════════════════════════════════
+app.post('/api/enrich/candidate', checkTierLimit, async (req, res) => {
+    const { candidateId, githubHandle, email, name } = req.body;
+    const user = (req as any).user;
+
+    if (!candidateId && !githubHandle && !email) {
+        return res.status(400).json({ success: false, error: 'candidateId, githubHandle, or email required' });
+    }
+
+    if (!APOLLO_API_KEY) {
+        return res.status(503).json({ success: false, error: 'Enrichment service not configured' });
+    }
+
+    // Only PRO users can enrich candidates
+    if (!user || user.tier !== 'PRO') {
+        return res.status(403).json({
+            success: false,
+            error: 'Candidate enrichment is a PRO feature',
+            code: 'PRO_REQUIRED'
+        });
+    }
+
+    try {
+        // Find the candidate
+        let candidate;
+        if (candidateId) {
+            candidate = await prisma.candidate.findUnique({ where: { id: candidateId } });
+        } else if (githubHandle) {
+            candidate = await prisma.candidate.findFirst({
+                where: { githubHandle: { equals: githubHandle, mode: 'insensitive' } }
+            });
+        }
+
+        // Check if already enriched recently (within 30 days)
+        if (candidate?.enrichedAt) {
+            const daysSinceEnriched = Math.floor((Date.now() - new Date(candidate.enrichedAt).getTime()) / (1000 * 60 * 60 * 24));
+            if (daysSinceEnriched < 30 && candidate.linkedinUrl) {
+                console.log(`[Enrich] Returning cached enrichment for ${candidate.githubHandle} (${daysSinceEnriched} days old)`);
+                return res.json({
+                    success: true,
+                    cached: true,
+                    data: {
+                        linkedinUrl: candidate.linkedinUrl,
+                        currentTitle: candidate.currentTitle,
+                        currentCompany: candidate.currentCompany,
+                        companyLogoUrl: candidate.companyLogoUrl,
+                        location: candidate.location,
+                        seniority: candidate.seniority,
+                        twitterUrl: candidate.twitterUrl,
+                        enrichmentData: candidate.enrichmentData
+                    }
+                });
+            }
+        }
+
+        // Call Apollo API
+        const enrichmentParams: any = {};
+        if (email || candidate?.email) {
+            enrichmentParams.email = email || candidate?.email;
+        }
+        if (name || candidate?.name) {
+            enrichmentParams.name = name || candidate?.name;
+        }
+
+        console.log(`[Enrich] Calling Apollo API for: ${enrichmentParams.email || enrichmentParams.name || githubHandle}`);
+        const enrichResult = await enrichPerson(APOLLO_API_KEY, enrichmentParams);
+
+        if (!enrichResult.success || !enrichResult.person) {
+            console.log(`[Enrich] Apollo returned no match for ${githubHandle || email}`);
+            return res.json({
+                success: false,
+                error: enrichResult.error || 'No enrichment data found',
+                code: 'NO_MATCH'
+            });
+        }
+
+        const formatted = formatEnrichedProfile(enrichResult.person);
+
+        // Save enrichment data to candidate if we have one
+        if (candidate) {
+            await prisma.candidate.update({
+                where: { id: candidate.id },
+                data: {
+                    linkedinUrl: enrichResult.person.linkedin_url,
+                    photoUrl: enrichResult.person.photo_url,
+                    currentTitle: enrichResult.person.title,
+                    currentCompany: enrichResult.person.organization?.name,
+                    companyLogoUrl: enrichResult.person.organization?.logo_url,
+                    companyLinkedin: enrichResult.person.organization?.linkedin_url,
+                    companyIndustry: enrichResult.person.organization?.industry,
+                    companySize: enrichResult.person.organization?.estimated_num_employees,
+                    location: formatted.location,
+                    seniority: enrichResult.person.seniority,
+                    twitterUrl: enrichResult.person.twitter_url,
+                    workEmail: enrichResult.person.work_email,
+                    enrichedAt: new Date(),
+                    enrichmentData: enrichResult.person as any
+                }
+            });
+            console.log(`[Enrich] Saved enrichment data for ${candidate.githubHandle}`);
+        }
+
+        res.json({
+            success: true,
+            data: {
+                ...formatted,
+                rawPerson: enrichResult.person
+            }
+        });
+
+    } catch (e: any) {
+        console.error('[Enrich Error]', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Bulk enrichment endpoint (up to 10 candidates)
+app.post('/api/enrich/bulk', checkTierLimit, async (req, res) => {
+    const { candidates } = req.body; // Array of { candidateId?, email?, name? }
+    const user = (req as any).user;
+
+    if (!candidates || !Array.isArray(candidates) || candidates.length === 0) {
+        return res.status(400).json({ success: false, error: 'candidates array required' });
+    }
+
+    if (!APOLLO_API_KEY) {
+        return res.status(503).json({ success: false, error: 'Enrichment service not configured' });
+    }
+
+    if (!user || user.tier !== 'PRO') {
+        return res.status(403).json({
+            success: false,
+            error: 'Bulk enrichment is a PRO feature',
+            code: 'PRO_REQUIRED'
+        });
+    }
+
+    // Limit to 10
+    const toEnrich = candidates.slice(0, 10);
+
+    try {
+        const { bulkEnrichPeople } = await import('./lib/apollo.js');
+
+        const enrichParams = toEnrich.map((c: any) => ({
+            email: c.email,
+            first_name: c.name?.split(' ')[0],
+            last_name: c.name?.split(' ').slice(1).join(' ')
+        }));
+
+        const results = await bulkEnrichPeople(APOLLO_API_KEY, enrichParams);
+
+        // Update candidates in database
+        for (let i = 0; i < toEnrich.length; i++) {
+            const candidate = toEnrich[i];
+            const result = results[i];
+
+            if (result.success && result.person && candidate.candidateId) {
+                const formatted = formatEnrichedProfile(result.person);
+                await prisma.candidate.update({
+                    where: { id: candidate.candidateId },
+                    data: {
+                        linkedinUrl: result.person.linkedin_url,
+                        currentTitle: result.person.title,
+                        currentCompany: result.person.organization?.name,
+                        companyLogoUrl: result.person.organization?.logo_url,
+                        location: formatted.location,
+                        seniority: result.person.seniority,
+                        enrichedAt: new Date(),
+                        enrichmentData: result.person as any
+                    }
+                }).catch(() => { }); // Ignore if candidate doesn't exist
+            }
+        }
+
+        res.json({
+            success: true,
+            results: results.map((r, i) => ({
+                index: i,
+                success: r.success,
+                error: r.error,
+                data: r.success ? formatEnrichedProfile(r.person) : null
+            }))
+        });
+
+    } catch (e: any) {
+        console.error('[Bulk Enrich Error]', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });

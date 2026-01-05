@@ -341,7 +341,13 @@ function App() {
         setAutochekkLogs(res.autochekk_logs as any[])
       }
       if (res.active_searches) {
-        setActiveSearches(res.active_searches as any[])
+        // Mark any 'running' searches as 'interrupted' since connection was lost on reload
+        const searches = (res.active_searches as any[]).map((s: any) =>
+          s.status === 'running'
+            ? { ...s, status: 'interrupted', error: 'Search interrupted - extension was reloaded' }
+            : s
+        );
+        setActiveSearches(searches);
       }
       if (res.bulk_history) {
         setBulkHistory(res.bulk_history as any[])
@@ -597,11 +603,15 @@ function App() {
             let dataRows = rows;
             let targetColIndex = 0;
 
-            // Simple heuristic to detect if first row is a header
+            // Expanded heuristic to detect if first row is a header
+            // Covers common recruiter spreadsheet column names
             const firstRow = rows[0].map(c => c.toLowerCase().trim());
             const potentialHeaderIndex = firstRow.findIndex(c =>
               c.includes('username') || c.includes('handle') || c.includes('github') ||
-              c.includes('user') || c.includes('email') || c.includes('url')
+              c.includes('user') || c.includes('email') || c.includes('url') ||
+              c.includes('candidate') || c.includes('developer') || c.includes('applicant') ||
+              c.includes('profile') || c.includes('link') || c.includes('contact') ||
+              c.includes('name') || c.includes('person') || c.includes('engineer')
             );
 
             if (potentialHeaderIndex >= 0) {
@@ -677,9 +687,13 @@ function App() {
   // Lookup GitHub username from email via backend API
   const lookupEmailToHandle = async (email: string): Promise<string | null> => {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (tokens.vibeToken) {
+        headers['Authorization'] = `Bearer ${tokens.vibeToken}`;
+      }
       const response = await fetch(`${BACKEND_URL}/api/lookup/email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ email })
       })
       const data = await response.json()
@@ -2415,7 +2429,8 @@ function App() {
                                       color: 'var(--text-dim)',
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: '8px'
+                                      gap: '8px',
+                                      flexWrap: 'wrap'
                                     }}>
                                       <EmailTooltip
                                         email={c.email}
@@ -2423,6 +2438,70 @@ function App() {
                                         activeTooltip={emailTooltip}
                                         setActiveTooltip={setEmailTooltip}
                                       />
+                                      {/* LinkedIn badge from Apollo enrichment */}
+                                      {c.linkedinUrl && (
+                                        <a
+                                          href={c.linkedinUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '3px',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            background: '#0077b5',
+                                            color: 'white',
+                                            textDecoration: 'none',
+                                            fontSize: '8px',
+                                            fontWeight: 600
+                                          }}
+                                        >
+                                          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                                          </svg>
+                                          LinkedIn
+                                        </a>
+                                      )}
+                                      {/* Company & title from enrichment */}
+                                      {c.currentCompany && (
+                                        <span style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          color: 'var(--text-secondary)'
+                                        }}>
+                                          {c.companyLogoUrl && (
+                                            <img
+                                              src={c.companyLogoUrl}
+                                              alt=""
+                                              style={{ width: '12px', height: '12px', borderRadius: '2px', objectFit: 'contain' }}
+                                            />
+                                          )}
+                                          <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {c.currentTitle ? `${c.currentTitle} @ ${c.currentCompany}` : c.currentCompany}
+                                          </span>
+                                        </span>
+                                      )}
+                                      {/* Seniority badge */}
+                                      {c.seniority && (
+                                        <span style={{
+                                          fontSize: '7px',
+                                          padding: '1px 4px',
+                                          borderRadius: '3px',
+                                          background: c.seniority.toLowerCase().includes('senior') || c.seniority.toLowerCase().includes('director') || c.seniority.toLowerCase().includes('vp')
+                                            ? '#fef3c7'
+                                            : 'var(--bg-tertiary)',
+                                          color: c.seniority.toLowerCase().includes('senior') || c.seniority.toLowerCase().includes('director') || c.seniority.toLowerCase().includes('vp')
+                                            ? '#b45309'
+                                            : 'var(--text-dim)',
+                                          fontWeight: 600,
+                                          textTransform: 'uppercase'
+                                        }}>
+                                          {c.seniority}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
@@ -2562,6 +2641,11 @@ function App() {
                       location: (checklistForm as any).location || ''
                     });
 
+                    // Add auth token (EventSource doesn't support headers)
+                    if (token) {
+                      params.append('token', token);
+                    }
+
                     // Add languages as separate params
                     checklistForm.languages.forEach(lang => params.append('languages', lang));
                     checklistForm.archetypes.forEach(arch => params.append('archetypes', arch));
@@ -2597,6 +2681,21 @@ function App() {
                       ));
                     });
 
+                    // Listen for enrichment updates (LinkedIn, company data from Apollo)
+                    eventSource.addEventListener('enrichment', (e) => {
+                      const enrichData = JSON.parse(e.data);
+                      setActiveSearches(prev => prev.map(s => {
+                        if (s.id !== searchId) return s;
+                        // Update the matching candidate with enrichment data
+                        const updatedResults = (s.results || []).map((c: any) =>
+                          c.handle === enrichData.handle
+                            ? { ...c, ...enrichData, enriched: true }
+                            : c
+                        );
+                        return { ...s, results: updatedResults };
+                      }));
+                    });
+
                     eventSource.addEventListener('complete', (e) => {
                       const data = JSON.parse(e.data);
                       eventSource.close();
@@ -2613,16 +2712,7 @@ function App() {
                       setChecklistForm(prev => ({ ...prev, loading: false }));
                     });
 
-                    eventSource.addEventListener('error', (e) => {
-                      eventSource.close();
-                      setActiveSearches(prev => prev.map(s =>
-                        s.id === searchId
-                          ? { ...s, status: 'completed', results: [], error: 'Analysis failed' }
-                          : s
-                      ));
-                      setChecklistForm(prev => ({ ...prev, loading: false }));
-                    });
-
+                    // Single error handler - preserves results if connection lost after receiving candidates
                     eventSource.onerror = () => {
                       eventSource.close();
                       setActiveSearches(prev => prev.map(s =>

@@ -46,6 +46,22 @@ model Candidate {
   lastEmailedAt DateTime?
   lastCheckedAt DateTime     @default(now())
   reports       VibeReport[]
+  
+  // Apollo Enrichment Data
+  linkedinUrl       String?
+  photoUrl          String?
+  currentTitle      String?
+  currentCompany    String?
+  companyLogoUrl    String?
+  companyLinkedin   String?
+  companyIndustry   String?
+  companySize       Int?
+  location          String?
+  seniority         String?
+  twitterUrl        String?
+  workEmail         String?
+  enrichedAt        DateTime?
+  enrichmentData    Json?      // Full Apollo response stored for reference
 
   @@index([githubHandle])
   @@index([email])
