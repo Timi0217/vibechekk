@@ -5,9 +5,10 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { sendProfileViewedEmail } from './lib/email.js';
-import { analyzeGitHubProfile, calculateReachability } from './lib/github.js';
+import { analyzeGitHubProfile, calculateReachability, resolveGitHubEmail } from './lib/github.js';
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
-import { enrichPerson, formatEnrichedProfile } from './lib/apollo.js';
+import { enrichByEmail as pdlEnrichByEmail } from './lib/pdl.js';
+import { findLinkedInProfile as exaFindLinkedIn, buildSearchContext as exaBuildContext } from './lib/exa.js';
 import Stripe from 'stripe';
 
 dotenv.config();
@@ -36,7 +37,8 @@ const SECURE_JWT_SECRET = JWT_SECRET || 'dev-only-insecure-secret-do-not-use-in-
 const GITHUB_TOKEN = process.env.GITHUB_API_TOKEN;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-const APOLLO_API_KEY = process.env.APOLLO_API_KEY;
+const PDL_API_KEY = process.env.PDL_API_KEY;
+const EXA_API_KEY = process.env.EXA_API_KEY;
 
 // Validate critical API keys
 if (!GITHUB_TOKEN) {
@@ -45,9 +47,10 @@ if (!GITHUB_TOKEN) {
 if (!DEEPSEEK_KEY) {
     console.warn('⚠️  WARNING: DEEPSEEK_API_KEY not set. AI analysis will fail.');
 }
-if (!APOLLO_API_KEY) {
-    console.warn('⚠️  WARNING: APOLLO_API_KEY not set. Candidate enrichment disabled.');
+if (!PDL_API_KEY) {
+    console.warn('⚠️  WARNING: PDL_API_KEY not set. Candidate enrichment disabled.');
 }
+
 
 // Initialize Stripe
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
@@ -743,47 +746,82 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                             sendProfileViewedEmail(savedCandidate.id, result.archetype).catch(e => console.error('[GrowthLoop] email failed:', e));
                         }
 
-                        // AUTO-ENRICHMENT: Enrich candidate with Apollo.io data (async, non-blocking)
-                        if (APOLLO_API_KEY && (savedCandidate.email || savedCandidate.name)) {
-                            enrichPerson(APOLLO_API_KEY, {
-                                email: savedCandidate.email || undefined,
-                                name: savedCandidate.name || undefined
-                            }).then(async (enrichResult) => {
-                                if (enrichResult.success && enrichResult.person) {
-                                    const formatted = formatEnrichedProfile(enrichResult.person);
+                        // AUTO-ENRICHMENT: Enrich candidate with PDL data (async, non-blocking)
+                        if (PDL_API_KEY) {
+                            (async () => {
+                                let enrichEmail = savedCandidate.email;
+
+                                // If no email, try to resolve from GitHub
+                                if (!enrichEmail && GITHUB_TOKEN) {
+                                    console.log(`[Enrich] No email for ${candidate.login}, resolving from GitHub...`);
+                                    enrichEmail = await resolveGitHubEmail(GITHUB_TOKEN, candidate.login);
+                                    if (enrichEmail) {
+                                        // Save the resolved email
+                                        await prisma.candidate.update({
+                                            where: { id: savedCandidate.id },
+                                            data: { email: enrichEmail }
+                                        }).catch(() => { });
+                                        console.log(`[Enrich] Resolved email for ${candidate.login}: ${enrichEmail}`);
+                                    }
+                                }
+
+                                if (!enrichEmail) {
+                                    console.log(`[Enrich] Could not resolve email for ${candidate.login}`);
+                                    return;
+                                }
+
+                                const pdlResult = await pdlEnrichByEmail(PDL_API_KEY, enrichEmail);
+                                if (pdlResult.success && pdlResult.linkedin_url) {
                                     // Update candidate with enrichment data
                                     await prisma.candidate.update({
                                         where: { id: savedCandidate.id },
                                         data: {
-                                            linkedinUrl: enrichResult.person.linkedin_url,
-                                            photoUrl: enrichResult.person.photo_url,
-                                            currentTitle: enrichResult.person.title,
-                                            currentCompany: enrichResult.person.organization?.name,
-                                            companyLogoUrl: enrichResult.person.organization?.logo_url,
-                                            companyLinkedin: enrichResult.person.organization?.linkedin_url,
-                                            companyIndustry: enrichResult.person.organization?.industry,
-                                            companySize: enrichResult.person.organization?.estimated_num_employees,
-                                            location: formatted.location || savedCandidate.location as any,
-                                            seniority: enrichResult.person.seniority,
-                                            twitterUrl: enrichResult.person.twitter_url,
-                                            workEmail: enrichResult.person.work_email,
+                                            linkedinUrl: pdlResult.linkedin_url,
+                                            currentTitle: pdlResult.title,
+                                            currentCompany: pdlResult.company,
+                                            location: pdlResult.location || savedCandidate.location as any,
                                             enrichedAt: new Date(),
-                                            enrichmentData: enrichResult.person as any
+                                            enrichmentData: pdlResult.raw as any
                                         }
-                                    }).catch(err => console.log('[Enrich] Update failed:', err.message));
+                                    }).catch((err: Error) => console.log('[Enrich] Update failed:', err.message));
 
                                     // Send enrichment update to client
                                     sendEvent('enrichment', {
                                         handle: candidate.login,
-                                        linkedinUrl: enrichResult.person.linkedin_url,
-                                        currentTitle: enrichResult.person.title,
-                                        currentCompany: enrichResult.person.organization?.name,
-                                        companyLogoUrl: enrichResult.person.organization?.logo_url,
-                                        seniority: enrichResult.person.seniority,
-                                        location: formatted.location
+                                        linkedinUrl: pdlResult.linkedin_url,
+                                        currentTitle: pdlResult.title,
+                                        currentCompany: pdlResult.company,
+                                        location: pdlResult.location
                                     });
+                                    return; // Success with PDL
                                 }
-                            }).catch(err => console.log('[Enrich] Apollo call failed:', err.message));
+
+                                // PDL failed, try Exa semantic search
+                                if (EXA_API_KEY) {
+                                    const candidateName = savedCandidate.name || candidate.login;
+                                    const context = exaBuildContext({
+                                        location: savedCandidate.location || undefined,
+                                    });
+
+                                    console.log(`[Enrich] Trying Exa for ${candidate.login}...`);
+                                    const exaResult = await exaFindLinkedIn(EXA_API_KEY, candidateName, context);
+
+                                    if (exaResult.success && exaResult.linkedinUrl) {
+                                        await prisma.candidate.update({
+                                            where: { id: savedCandidate.id },
+                                            data: {
+                                                linkedinUrl: exaResult.linkedinUrl,
+                                                enrichedAt: new Date(),
+                                            }
+                                        }).catch((err: Error) => console.log('[Enrich] Exa update failed:', err.message));
+
+                                        sendEvent('enrichment', {
+                                            handle: candidate.login,
+                                            linkedinUrl: exaResult.linkedinUrl,
+                                        });
+                                    }
+                                }
+                            })().catch((err: Error) => console.log('[Enrich] Auto-enrich failed:', err.message));
                         }
                     } catch (dbErr) {
                         console.error('[GrowthLoop] database error:', dbErr);
@@ -1172,7 +1210,7 @@ app.post('/api/lookup/email', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CANDIDATE ENRICHMENT: Apollo.io integration for LinkedIn & professional data
+// CANDIDATE ENRICHMENT: Clearout.io for LinkedIn & professional data
 // ═══════════════════════════════════════════════════════════════════════════
 app.post('/api/enrich/candidate', checkTierLimit, async (req, res) => {
     const { candidateId, githubHandle, email, name } = req.body;
@@ -1182,7 +1220,7 @@ app.post('/api/enrich/candidate', checkTierLimit, async (req, res) => {
         return res.status(400).json({ success: false, error: 'candidateId, githubHandle, or email required' });
     }
 
-    if (!APOLLO_API_KEY) {
+    if (!PDL_API_KEY) {
         return res.status(503).json({ success: false, error: 'Enrichment service not configured' });
     }
 
@@ -1228,59 +1266,112 @@ app.post('/api/enrich/candidate', checkTierLimit, async (req, res) => {
             }
         }
 
-        // Call Apollo API
-        const enrichmentParams: any = {};
-        if (email || candidate?.email) {
-            enrichmentParams.email = email || candidate?.email;
-        }
-        if (name || candidate?.name) {
-            enrichmentParams.name = name || candidate?.name;
+        // Get the email to use for lookup
+        let lookupEmail = email || candidate?.email;
+
+        // If no email, try to resolve it from GitHub
+        if (!lookupEmail && candidate?.githubHandle && GITHUB_TOKEN) {
+            console.log(`[Enrich] No email found, resolving from GitHub for ${candidate.githubHandle}...`);
+            const resolvedEmail = await resolveGitHubEmail(GITHUB_TOKEN, candidate.githubHandle);
+            if (resolvedEmail) {
+                lookupEmail = resolvedEmail;
+                // Save the resolved email to the candidate record
+                await prisma.candidate.update({
+                    where: { id: candidate.id },
+                    data: { email: resolvedEmail }
+                }).catch(e => console.warn('[Enrich] Failed to save resolved email:', e));
+                console.log(`[Enrich] Resolved email from GitHub: ${resolvedEmail}`);
+            }
         }
 
-        console.log(`[Enrich] Calling Apollo API for: ${enrichmentParams.email || enrichmentParams.name || githubHandle}`);
-        const enrichResult = await enrichPerson(APOLLO_API_KEY, enrichmentParams);
-
-        if (!enrichResult.success || !enrichResult.person) {
-            console.log(`[Enrich] Apollo returned no match for ${githubHandle || email}`);
+        if (!lookupEmail) {
             return res.json({
                 success: false,
-                error: enrichResult.error || 'No enrichment data found',
-                code: 'NO_MATCH'
+                error: 'Could not find email for this user',
+                code: 'NO_EMAIL'
             });
         }
 
-        const formatted = formatEnrichedProfile(enrichResult.person);
+        // Try People Data Labs first (fastest, most comprehensive)
+        if (PDL_API_KEY) {
+            console.log(`[Enrich] Calling PDL API for: ${lookupEmail}`);
+            const pdlResult = await pdlEnrichByEmail(PDL_API_KEY, lookupEmail);
 
-        // Save enrichment data to candidate if we have one
-        if (candidate) {
-            await prisma.candidate.update({
-                where: { id: candidate.id },
-                data: {
-                    linkedinUrl: enrichResult.person.linkedin_url,
-                    photoUrl: enrichResult.person.photo_url,
-                    currentTitle: enrichResult.person.title,
-                    currentCompany: enrichResult.person.organization?.name,
-                    companyLogoUrl: enrichResult.person.organization?.logo_url,
-                    companyLinkedin: enrichResult.person.organization?.linkedin_url,
-                    companyIndustry: enrichResult.person.organization?.industry,
-                    companySize: enrichResult.person.organization?.estimated_num_employees,
-                    location: formatted.location,
-                    seniority: enrichResult.person.seniority,
-                    twitterUrl: enrichResult.person.twitter_url,
-                    workEmail: enrichResult.person.work_email,
-                    enrichedAt: new Date(),
-                    enrichmentData: enrichResult.person as any
+            if (pdlResult.success && pdlResult.linkedin_url) {
+                // Save enrichment data to candidate if we have one
+                if (candidate) {
+                    await prisma.candidate.update({
+                        where: { id: candidate.id },
+                        data: {
+                            linkedinUrl: pdlResult.linkedin_url,
+                            currentTitle: pdlResult.title,
+                            currentCompany: pdlResult.company,
+                            location: pdlResult.location,
+                            enrichedAt: new Date(),
+                            enrichmentData: pdlResult.raw as any
+                        }
+                    });
+                    console.log(`[Enrich] Saved PDL enrichment for ${candidate.githubHandle}`);
                 }
-            });
-            console.log(`[Enrich] Saved enrichment data for ${candidate.githubHandle}`);
+
+                return res.json({
+                    success: true,
+                    source: 'pdl',
+                    data: {
+                        linkedinUrl: pdlResult.linkedin_url,
+                        name: pdlResult.name,
+                        currentTitle: pdlResult.title,
+                        currentCompany: pdlResult.company,
+                        location: pdlResult.location,
+                        skills: pdlResult.skills
+                    }
+                });
+            }
+
+            console.log(`[Enrich] PDL returned no LinkedIn for ${lookupEmail}: ${pdlResult.error}`);
         }
 
-        res.json({
-            success: true,
-            data: {
-                ...formatted,
-                rawPerson: enrichResult.person
+        // Fallback: Try Exa semantic search using name + context
+        if (EXA_API_KEY && candidate) {
+            const candidateName = candidate.name || candidate.githubHandle;
+            const context = exaBuildContext({
+                location: candidate.location || undefined,
+            });
+
+            console.log(`[Enrich] Trying Exa search for: ${candidateName}`);
+            const exaResult = await exaFindLinkedIn(EXA_API_KEY, candidateName, context);
+
+            if (exaResult.success && exaResult.linkedinUrl) {
+                // Save enrichment data to candidate
+                await prisma.candidate.update({
+                    where: { id: candidate.id },
+                    data: {
+                        linkedinUrl: exaResult.linkedinUrl,
+                        enrichedAt: new Date(),
+                    }
+                });
+                console.log(`[Enrich] Saved Exa LinkedIn for ${candidate.githubHandle}: ${exaResult.linkedinUrl}`);
+
+                return res.json({
+                    success: true,
+                    source: 'exa',
+                    data: {
+                        linkedinUrl: exaResult.linkedinUrl,
+                        name: candidateName,
+                        // Title from Exa sometimes includes role info
+                        currentTitle: exaResult.title?.split(' - ')[1] || undefined,
+                    }
+                });
             }
+
+            console.log(`[Enrich] Exa also returned no LinkedIn for ${candidateName}: ${exaResult.error}`);
+        }
+
+        // No match from any provider
+        return res.json({
+            success: false,
+            error: 'No enrichment data found',
+            code: 'NO_MATCH'
         });
 
     } catch (e: any) {
@@ -1298,7 +1389,7 @@ app.post('/api/enrich/bulk', checkTierLimit, async (req, res) => {
         return res.status(400).json({ success: false, error: 'candidates array required' });
     }
 
-    if (!APOLLO_API_KEY) {
+    if (!PDL_API_KEY) {
         return res.status(503).json({ success: false, error: 'Enrichment service not configured' });
     }
 
@@ -1314,46 +1405,48 @@ app.post('/api/enrich/bulk', checkTierLimit, async (req, res) => {
     const toEnrich = candidates.slice(0, 10);
 
     try {
-        const { bulkEnrichPeople } = await import('./lib/apollo.js');
+        const results = [];
 
-        const enrichParams = toEnrich.map((c: any) => ({
-            email: c.email,
-            first_name: c.name?.split(' ')[0],
-            last_name: c.name?.split(' ').slice(1).join(' ')
-        }));
+        for (const candidate of toEnrich) {
+            if (!candidate.email) {
+                results.push({ success: false, error: 'No email provided' });
+                continue;
+            }
 
-        const results = await bulkEnrichPeople(APOLLO_API_KEY, enrichParams);
+            const pdlResult = await pdlEnrichByEmail(PDL_API_KEY, candidate.email);
 
-        // Update candidates in database
-        for (let i = 0; i < toEnrich.length; i++) {
-            const candidate = toEnrich[i];
-            const result = results[i];
-
-            if (result.success && result.person && candidate.candidateId) {
-                const formatted = formatEnrichedProfile(result.person);
+            if (pdlResult.success && pdlResult.linkedin_url && candidate.candidateId) {
                 await prisma.candidate.update({
                     where: { id: candidate.candidateId },
                     data: {
-                        linkedinUrl: result.person.linkedin_url,
-                        currentTitle: result.person.title,
-                        currentCompany: result.person.organization?.name,
-                        companyLogoUrl: result.person.organization?.logo_url,
-                        location: formatted.location,
-                        seniority: result.person.seniority,
+                        linkedinUrl: pdlResult.linkedin_url,
+                        currentTitle: pdlResult.title,
+                        currentCompany: pdlResult.company,
+                        location: pdlResult.location,
                         enrichedAt: new Date(),
-                        enrichmentData: result.person as any
+                        enrichmentData: pdlResult.raw as any
                     }
                 }).catch(() => { }); // Ignore if candidate doesn't exist
             }
+
+            results.push({
+                success: pdlResult.success,
+                error: pdlResult.error,
+                data: pdlResult.success ? {
+                    linkedinUrl: pdlResult.linkedin_url,
+                    name: pdlResult.name,
+                    currentTitle: pdlResult.title,
+                    currentCompany: pdlResult.company,
+                    location: pdlResult.location
+                } : null
+            });
         }
 
         res.json({
             success: true,
             results: results.map((r, i) => ({
                 index: i,
-                success: r.success,
-                error: r.error,
-                data: r.success ? formatEnrichedProfile(r.person) : null
+                ...r
             }))
         });
 
@@ -1395,6 +1488,89 @@ app.get('/api/history/check/:handle', async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GITHUB STATS ENDPOINT - Authenticated GitHub API calls for accurate stats
+// ═══════════════════════════════════════════════════════════════════════════
+app.get('/api/github/stats/:handle', async (req, res) => {
+    const { handle } = req.params;
+
+    if (!handle) {
+        return res.status(400).json({ success: false, error: 'Handle is required' });
+    }
+
+    const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Vibechekk/1.0'
+    };
+
+    // Use authenticated requests if token is available (5000/hour vs 60/hour)
+    if (GITHUB_TOKEN) {
+        headers['Authorization'] = `token ${GITHUB_TOKEN}`;
+    }
+
+    try {
+        // Fetch profile, repos, and commits in parallel
+        const [profileRes, reposRes, commitsRes] = await Promise.all([
+            fetch(`https://api.github.com/users/${handle}`, { headers }),
+            fetch(`https://api.github.com/users/${handle}/repos?per_page=100&sort=updated`, { headers }),
+            fetch(`https://api.github.com/search/commits?q=author:${handle}`, {
+                headers: { ...headers, 'Accept': 'application/vnd.github.cloak-preview' }
+            })
+        ]);
+
+        // Check if profile fetch succeeded
+        if (!profileRes.ok) {
+            console.log(`[GitHub Stats] Profile fetch failed for ${handle}: ${profileRes.status}`);
+            return res.status(profileRes.status).json({
+                success: false,
+                error: profileRes.status === 404 ? 'User not found' : 'GitHub API error'
+            });
+        }
+
+        const profile = await profileRes.json();
+        const repos = reposRes.ok ? await reposRes.json() : [];
+        const commits = commitsRes.ok ? await commitsRes.json() : { total_count: 0 };
+
+        // Calculate stats
+        const totalStars = Array.isArray(repos)
+            ? repos.reduce((acc: number, r: any) => acc + (r.stargazers_count || 0), 0)
+            : 0;
+
+        const languages = Array.isArray(repos)
+            ? [...new Set(repos.map((r: any) => r.language).filter((l: any) => l))]
+            : [];
+
+        // Get last activity date from repos
+        const lastActive = Array.isArray(repos) && repos.length > 0
+            ? repos[0].pushed_at || repos[0].updated_at
+            : profile.updated_at;
+
+        const stats = {
+            name: profile.name || handle,
+            login: profile.login,
+            avatar_url: profile.avatar_url,
+            bio: profile.bio,
+            location: profile.location,
+            blog: profile.blog,
+            public_repos: profile.public_repos || 0,
+            followers: profile.followers || 0,
+            following: profile.following || 0,
+            totalStars,
+            totalCommits: commits.total_count || 0,
+            languages: languages.length,
+            languagesList: languages,
+            lastActive,
+            created_at: profile.created_at
+        };
+
+        console.log(`[GitHub Stats] Fetched stats for ${handle}: ${stats.public_repos} repos, ${stats.totalStars} stars, ${stats.totalCommits} commits`);
+
+        res.json({ success: true, data: stats });
+    } catch (error: any) {
+        console.error(`[GitHub Stats] Error fetching stats for ${handle}:`, error.message);
+        res.status(500).json({ success: false, error: error.message || 'Failed to fetch GitHub stats' });
+    }
+});
 app.get('/api/analytics', async (req, res) => {
     try {
         const tierFilter = req.query.tier as string | undefined;
