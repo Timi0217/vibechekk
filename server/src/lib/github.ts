@@ -897,3 +897,121 @@ export const searchUserByEmail = async (token: string, email: string): Promise<s
     return null;
   }
 };
+
+/**
+ * Resolve a GitHub username to an email address using multiple strategies:
+ * 1. Check public profile email (already fetched in userStats)
+ * 2. Fetch user's public events and extract email from push events
+ * 3. Fetch a commit patch to extract author email
+ */
+export const resolveGitHubEmail = async (token: string, username: string): Promise<string | null> => {
+  const octokit = new Octokit({ auth: token });
+
+  console.log(`[GitHub] Resolving email for ${username}...`);
+
+  // Strategy 1: Try events API first (fast, gets commit emails)
+  try {
+    const eventsUrl = `https://api.github.com/users/${username}/events/public`;
+    const eventsResponse = await fetch(eventsUrl, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': `token ${token}`,
+        'User-Agent': 'Vibechekk'
+      }
+    });
+
+    if (eventsResponse.ok) {
+      const events = await eventsResponse.json();
+
+      // Look for PushEvent which contains commit author emails
+      for (const event of events) {
+        if (event.type === 'PushEvent' && event.payload?.commits) {
+          for (const commit of event.payload.commits) {
+            if (commit.author?.email) {
+              const email = commit.author.email;
+              // Skip noreply emails
+              if (!email.includes('noreply.github.com') && !email.includes('@users.noreply')) {
+                console.log(`[GitHub] Found email via events API: ${email}`);
+                return email;
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`[GitHub] Events API failed for ${username}:`, error);
+  }
+
+  // Strategy 2: Get a recent commit and fetch its .patch file
+  try {
+    const { data: repos } = await octokit.rest.repos.listForUser({
+      username,
+      sort: 'pushed',
+      per_page: 5
+    });
+
+    for (const repo of repos) {
+      if (repo.fork) continue; // Skip forks
+
+      try {
+        const { data: commits } = await octokit.rest.repos.listCommits({
+          owner: username,
+          repo: repo.name,
+          author: username,
+          per_page: 1
+        });
+
+        if (commits.length > 0) {
+          const commitSha = commits[0].sha;
+
+          // Fetch the patch format
+          const patchUrl = `https://github.com/${username}/${repo.name}/commit/${commitSha}.patch`;
+          const patchResponse = await fetch(patchUrl, {
+            headers: { 'User-Agent': 'Vibechekk' }
+          });
+
+          if (patchResponse.ok) {
+            const patchText = await patchResponse.text();
+
+            // Extract email from "From: Name <email>" line in patch
+            const fromMatch = patchText.match(/From:\s*(?:[^<]*<)?([^>@\s]+@[^>\s]+)/i);
+            if (fromMatch && fromMatch[1]) {
+              const email = fromMatch[1];
+              // Skip noreply emails
+              if (!email.includes('noreply.github.com') && !email.includes('@users.noreply')) {
+                console.log(`[GitHub] Found email via commit patch: ${email}`);
+                return email;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Continue to next repo
+      }
+    }
+  } catch (error) {
+    console.warn(`[GitHub] Commit patch strategy failed for ${username}:`, error);
+  }
+
+  // Strategy 3: Try the GraphQL API one more time with a fresh query
+  try {
+    const query = `
+      query($login: String!) {
+        user(login: $login) {
+          email
+        }
+      }
+    `;
+    const response: any = await octokit.graphql(query, { login: username });
+    if (response.user?.email) {
+      console.log(`[GitHub] Found email via GraphQL: ${response.user.email}`);
+      return response.user.email;
+    }
+  } catch (error) {
+    console.warn(`[GitHub] GraphQL email query failed for ${username}:`, error);
+  }
+
+  console.log(`[GitHub] Could not resolve email for ${username}`);
+  return null;
+};
