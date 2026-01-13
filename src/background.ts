@@ -192,22 +192,25 @@ async function logActivity(type: 'discovery' | 'resolution' | 'analysis', messag
 async function handleEmailDiscovery(emails: string[], tabId?: number) {
     if (!tabId) return;
 
-    for (const email of emails) {
-        if (processedEmails.has(email)) continue;
-        processedEmails.add(email);
+    // Process discovery in parallel to avoid bottlenecks
+    const unprocessed = emails.filter(e => !processedEmails.has(e));
 
-        // Global History Check
+    // Quick add to set to prevent race conditions during the async loop
+    unprocessed.forEach(e => processedEmails.add(e));
+
+    const processEmail = async (email: string) => {
+        // Global History Check (Persistent)
         if (await isDuplicate('discovery', email)) {
             console.log(`[Autochekk] Skipping known email: ${email}`);
-            continue;
+            return;
         }
 
-        logActivity('discovery', `Detected email: ${email}`, { email });
+        await logActivity('discovery', `Detected email: ${email}`, { email });
         // Add to persistent cache
         await addToDedupCache('discovery', email);
 
         try {
-            // Search GitHub for this email via backend (uses authenticated API)
+            // Search GitHub for this email via backend
             const res = await fetch(`${BACKEND_URL}/api/lookup/email`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -216,66 +219,81 @@ async function handleEmailDiscovery(emails: string[], tabId?: number) {
 
             if (!res.ok) {
                 console.warn('[Autochekk] Email lookup failed:', res.status);
-                logActivity('resolution', `Lookup failed for ${email}`, { email, error: `HTTP ${res.status}` });
-                continue;
+                await logActivity('resolution', `Lookup failed for ${email}`, { email, error: `HTTP ${res.status}` });
+                return;
             }
 
             const data = await res.json();
 
             if (data.success && data.username) {
-                const user = { login: data.username, avatar_url: '' };
-                const githubUrl = `https://github.com/${user.login}`;
+                const username = data.username;
+                const githubUrl = `https://github.com/${username}`;
                 console.log(`[Autochekk] Resolved ${email} -> ${githubUrl}`);
 
-                // SERVER IS SOURCE OF TRUTH - check if already analyzed
-                const inServerHistory = await isInServerHistory(user.login);
-                if (inServerHistory) {
-                    console.log(`[Autochekk] Skipping (Server History): ${user.login}`);
-                    processedHandles.add(user.login.toLowerCase());
-                    continue;
-                }
-
                 // Check session cache to prevent duplicate processing in same session
-                if (processedHandles.has(user.login.toLowerCase())) {
-                    console.log(`[Autochekk] Skipping (Session Cache): ${user.login}`);
-                    continue;
+                if (processedHandles.has(username.toLowerCase())) {
+                    console.log(`[Autochekk] Skipping (Session Cache): ${username}`);
+                    return;
                 }
-                processedHandles.add(user.login.toLowerCase());
 
-                await logActivity('resolution', `Matched ${email} to ${user.login}`, { email, githubHandle: user.login, avatar: user.avatar_url });
+                // SERVER IS SOURCE OF TRUTH - check if already analyzed
+                const inHistory = await isInServerHistory(username);
+                if (inHistory) {
+                    console.log(`[Autochekk] Skipping (Server History): ${username}`);
+                    processedHandles.add(username.toLowerCase());
+                    return;
+                }
 
-                // Log "Analyzing..." for skeleton card
-                await logActivity('analysis', `Analyzing ${user.login}...`, { githubHandle: user.login, analyzing: true });
+                processedHandles.add(username.toLowerCase());
 
-                // Analyze this user
+                await logActivity('resolution', `Matched ${email} to ${username}`, {
+                    email,
+                    githubHandle: username,
+                    avatar: `https://github.com/${username}.png`
+                });
+
+                // Log "Analyzing..."
+                await logActivity('analysis', `Analyzing ${username}...`, {
+                    githubHandle: username,
+                    analyzing: true
+                });
+
+                // Start analysis
                 const analysisResult = await handleVibeCheck(githubUrl);
 
                 if (analysisResult.success) {
-                    // Log archetype discovery
                     const archetype = analysisResult.data?.archetype || analysisResult.data?.label || 'Profile';
                     await logActivity('analysis', `${archetype.replace(/^THE\s+/i, '')} Discovered`, {
-                        githubHandle: user.login,
+                        githubHandle: username,
                         archetype: archetype,
-                        avatar: user.avatar_url
+                        avatar: `https://github.com/${username}.png`,
+                        name: analysisResult.data?.candidate?.name
                     });
 
-                    // Send result back to tab to display
+                    // Send result back to tab
                     chrome.tabs.sendMessage(tabId, {
                         type: 'SHOW_AUTOSCAN_RESULT',
                         data: analysisResult.data
                     });
                 } else {
-                    console.warn(`[Autochekk] Analysis failed for ${user.login}:`, analysisResult.error);
-                    logActivity('analysis', `Analysis Failed: ${user.login}`, { error: analysisResult.error, githubHandle: user.login });
+                    console.warn(`[Autochekk] Analysis failed for ${username}:`, analysisResult.error);
+                    await logActivity('analysis', `Analysis Failed: ${username}`, {
+                        error: analysisResult.error,
+                        githubHandle: username
+                    });
                 }
             } else {
-                // Log failure to resolve so user knows why it stopped
-                logActivity('resolution', `No GitHub linked to ${email}`, { email, success: false });
+                await logActivity('resolution', `No GitHub linked to ${email}`, { email, success: false });
             }
         } catch (e: any) {
             console.error(`[Autochekk] Failed to resolve ${email}:`, e);
         }
-    }
+    };
+
+    // Run in parallel to avoid the single-file bottleneck
+    unprocessed.forEach(email => {
+        processEmail(email);
+    });
 }
 
 async function handleVibeCheck(url: string) {

@@ -538,6 +538,104 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
             return;
         }
 
+        // NEW: Quick mode - return profiles immediately without AI analysis
+        // Filter for recent activity (pushed in last 6 months) to remove inactive devs
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const activeCandidates = candidates.filter((c: any) => {
+            const lastPush = c.repositories?.nodes?.[0]?.pushedAt;
+            if (!lastPush) return false;
+            return new Date(lastPush) > sixMonthsAgo;
+        });
+
+        console.log(`[Chekklist] Filtered to ${activeCandidates.length} active developers (pushed in last 6 months)`);
+
+        sendEvent('status', {
+            message: `✓ Found ${activeCandidates.length} active developers. Sending results...`,
+            progress: 50,
+            total: TARGET_RESULTS
+        });
+
+        // Send up to 50 candidates immediately (no AI analysis)
+        const resultsToSend = activeCandidates.slice(0, TARGET_RESULTS);
+        let sent = 0;
+
+        for (const candidate of resultsToSend) {
+            sent++;
+
+            // Calculate basic reachability without full profile fetch
+            const reachStats = {
+                lastPushedAt: candidate.repositories?.nodes?.[0]?.pushedAt,
+                contributionCalendar: candidate.contributionsCollection?.contributionCalendar,
+                pullRequests: candidate.pullRequests?.totalCount,
+                issues: candidate.issues?.totalCount,
+                starredRepositories: candidate.starredRepositories?.totalCount,
+                updatedAt: candidate.updatedAt
+            };
+            const reachability = calculateReachability(reachStats);
+
+            // Quick bio-based warmth calculation
+            const bioLower = (candidate.bio || '').toLowerCase();
+            let warmthScore = reachability.score;
+            const warmthReasons: string[] = [];
+
+            if (bioLower.includes('open to') || bioLower.includes('hiring') || bioLower.includes('looking for')) {
+                warmthScore = Math.min(100, warmthScore + 10);
+                warmthReasons.push('Bio signals openness');
+            }
+            if (bioLower.includes('not looking') || bioLower.includes('happy at')) {
+                warmthScore -= 25;
+                warmthReasons.push('States not looking');
+            }
+            if ((candidate.followers?.totalCount || 0) > 5000) {
+                warmthScore -= 10;
+                warmthReasons.push('High profile');
+            }
+
+            warmthScore = Math.max(0, Math.min(100, warmthScore));
+            const warmthLabel = warmthScore >= 75 ? 'HOT' : warmthScore >= 55 ? 'WARM' : warmthScore >= 35 ? 'NEUTRAL' : 'COLD';
+            const reachabilitySignal = warmthScore >= 75 ? '🟢' : warmthScore >= 45 ? '🟡' : '🔴';
+
+            // Send candidate without archetype/tier (user clicks CHECK to analyze)
+            const result = {
+                handle: candidate.login,
+                name: candidate.name || candidate.login,
+                email: candidate.email,
+                avatar: candidate.avatarUrl,
+                bio: candidate.bio,
+                location: candidate.location || null,
+                archetype: null, // Not analyzed yet
+                tier: null, // Not analyzed yet
+                summary: null, // Not analyzed yet
+                topRepo: candidate.repositories?.nodes?.[0]?.name || 'Unknown',
+                lastActive: candidate.repositories?.nodes?.[0]?.pushedAt || null,
+                followers: candidate.followers?.totalCount || 0,
+                totalStars: candidate.repositories?.nodes?.reduce((sum: number, r: any) => sum + (r.stargazerCount || 0), 0) || 0,
+                warmthScore,
+                warmthLabel,
+                reachabilitySignal,
+                warmthReasons,
+                requiresAnalysis: true // Flag that CHECK button should analyze
+            };
+
+            sendEvent('candidate', result);
+
+            sendEvent('status', {
+                message: `📤 Sent ${sent}/${resultsToSend.length} candidates`,
+                progress: 50 + Math.round((sent / resultsToSend.length) * 50)
+            });
+        }
+
+        sendEvent('complete', {
+            message: `✅ Found ${sent} active developers. Click CHECK to analyze each profile.`,
+            total: sent
+        });
+        res.end();
+        return;
+
+        // OLD AI ANALYSIS PATH (commented out but kept for reference)
+        /*
         sendEvent('status', {
             message: `✓ Found ${totalPool} GitHub profiles. Now analyzing with AI...`,
             progress: 5,
@@ -883,13 +981,12 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
             analyzed,
             filtered: analyzed - nonGhosts
         });
+        */
 
     } catch (e: any) {
         console.error('[Chekklist SSE Error]', e);
         sendEvent('error', { message: e.message });
     }
-
-    res.end();
 });
 
 // Legacy endpoint (keep for backwards compatibility)
