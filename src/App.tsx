@@ -4191,12 +4191,16 @@ function App() {
                     }))].filter(n => n);
                   }
 
-                  const candidateName = userStats.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer';
+                  // Get candidate name - if name equals handle (username), prefer the handle for display
+                  const rawName = userStats.name || selectedReport.candidate?.name || '';
                   const handle = selectedReport.candidate?.githubHandle || '';
+                  // If name is empty or equals the handle, just use handle; otherwise use real name
+                  const candidateName = (rawName && rawName.toLowerCase() !== handle.toLowerCase()) ? rawName : (handle || 'Developer');
                   const avatar = selectedReport.candidate?.avatar || `https://github.com/${handle}.png?size=400`;
 
-                  const archetypeRaw = selectedReport.label || selectedReport.archetype;
-                  const displayArchetype = (archetypeRaw && archetypeRaw.trim() ? archetypeRaw : 'Developer').replace(/^THE\s+/i, '');
+                  // Get archetype from multiple sources for reliability
+                  const archetypeRaw = selectedReport.label || selectedReport.archetype || selectedReport.metadata?.label || selectedReport.metadata?.archetype;
+                  const displayArchetype = (archetypeRaw && archetypeRaw.trim() ? archetypeRaw : 'Profile').replace(/^THE\s+/i, '');
 
                   const linkedinUrl = selectedReport.candidate?.linkedinUrl;
                   const email = selectedReport.metadata?.email;
@@ -4271,13 +4275,13 @@ function App() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '16px', fontSize: '13px', color: colors.slate500 }}>
                               {handle && <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>GitHub</a>}
                               {linkedinUrl && <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>LinkedIn</a>}
-                              {email && <span style={{ color: colors.slate500 }}>{email}</span>}
+                              {/* Email removed from PDF for cleaner display */}
                             </div>
                           </div>
 
                           {/* Vibechekk Branding */}
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <div style={{ fontSize: '14px', fontWeight: 700, color: colors.slate400 }}>Vibechekk</div>
+                          <div style={{ textAlign: 'right', flexShrink: 0, minWidth: '100px' }}>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: colors.slate400, whiteSpace: 'nowrap' }}>Vibechekk</div>
                             <div style={{ fontSize: '11px', color: colors.slate400, marginTop: '2px' }}>Technical Assessment</div>
                           </div>
                         </div>

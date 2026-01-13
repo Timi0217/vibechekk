@@ -47,7 +47,7 @@ export async function findLinkedInProfile(
             },
             body: JSON.stringify({
                 query,
-                numResults: 1,
+                numResults: 5, // Request more results to find a valid /in/ profile
                 includeDomains: ['linkedin.com'],
             }),
         });
@@ -71,23 +71,28 @@ export async function findLinkedInProfile(
             };
         }
 
-        const topResult = data.results[0];
+        // Find the first valid /in/ profile URL
+        const validProfile = data.results.find((r: any) =>
+            r.url &&
+            r.url.includes('/in/') &&
+            !r.url.includes('/pub/dir/') &&
+            !r.url.includes('/directory/')
+        );
 
-        // Filter out directory pages (not actual profiles)
-        if (topResult.url.includes('/pub/dir/') || topResult.url.includes('/directory/')) {
-            console.log(`[Exa] Result is a directory page, not a profile: ${topResult.url}`);
+        if (!validProfile) {
+            console.log(`[Exa] No valid /in/ profile found in ${data.results.length} results`);
             return {
                 success: false,
-                error: 'No specific LinkedIn profile found',
+                error: 'No specific LinkedIn profile found (not a /in/ URL)',
             };
         }
 
-        console.log(`[Exa] Found LinkedIn: ${topResult.url} - "${topResult.title}"`);
+        console.log(`[Exa] Found LinkedIn: ${validProfile.url} - "${validProfile.title}"`);
 
         return {
             success: true,
-            linkedinUrl: topResult.url,
-            title: topResult.title,
+            linkedinUrl: validProfile.url,
+            title: validProfile.title,
         };
     } catch (error) {
         console.error('[Exa] Error:', error);
