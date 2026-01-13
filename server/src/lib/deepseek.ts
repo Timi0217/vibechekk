@@ -520,12 +520,12 @@ ${codeSamples.length > 8000 ? codeSamples.substring(0, 8000) + '\n[truncated]' :
 
 Write a professional assessment following this EXACT structure:
 
-### 0. archetype_reason (1-2 sentences) - REQUIRED
-Explain WHY this specific developer got their archetype based on THEIR repos and behavior. Be specific!
+### 0. archetype_reason (3-4 sentences) - REQUIRED
+Explain WHY this specific developer got their archetype based on THEIR repos and behavior. Be extremely specific about what you saw in their code, commit history, and technical choices.
 Examples:
-- "Classified as CRAFTSPERSON because 80% of their repos have comprehensive test suites and consistent code style patterns."
-- "Earned ARCHITECT status through designing scalable systems in their payment-gateway and microservices-template repos."
-- "Identified as HIDDEN GEM: low star count but exceptionally clean React code with TypeScript and proper error handling."
+- "Classified as CRAFTSPERSON because 80% of their repos have comprehensive test suites and consistent code style patterns. Their attention to detail in the payments-backend repo specifically reveals a strong grasp of defensive coding and error boundary implementation."
+- "Earned ARCHITECT status through designing scalable systems in their payment-gateway and microservices-template repos. The use of event-driven architecture and persistent message queues indicates high-level systems design proficiency."
+- "Identified as HIDDEN GEM: low star count but exceptionally clean React code with TypeScript and proper error handling. Their UI component abstraction in 'design-system-v2' shows professional-grade architecture often missed in public profiles."
 
 ### 1. trajectory_summary (2-3 sentences)
 Describe their developer EVOLUTION - how they've changed over time. If they have old C/systems work but recent TypeScript/Python, lead with the recent focus. Example: "Started with systems programming in C during university, now focuses on modern web development with TypeScript and React."
@@ -659,11 +659,16 @@ Golden rules:
 
         // Ensure archetype_reason uses accurate data AND maintains AI depth
         // We take the AI's reason and prepend our verified stats for accuracy
-        const aiReason = analysis.archetype_reason || '';
+        const aiReason = (analysis.archetype_reason || '').trim();
         const statsPrefix = `Classified as ${archetype.replace(/^THE\s+/i, '')} because ${classificationReason.toLowerCase()}${totalStars > 0 ? ` with ${totalStars.toLocaleString()} total stars across ${repoCount} repositories` : ` across ${repoCount} repositories`}.`;
 
-        // If AI gave a good reason, combine them. Otherwise use our stats-based one.
-        if (aiReason && aiReason.length > 20 && !aiReason.toLowerCase().includes('classified as')) {
+        // Combine stats prefix with AI reasoning for maximum depth
+        // If AI reasoning starts with something generic like "Classified as", we strip it
+        const cleanedAiReason = aiReason.replace(/^Classified as [^.]+ because [^.]+\./i, '').trim();
+
+        if (cleanedAiReason && cleanedAiReason.length > 10) {
+            analysis.archetype_reason = `${statsPrefix} ${cleanedAiReason}`;
+        } else if (aiReason && aiReason.length > 10) {
             analysis.archetype_reason = `${statsPrefix} ${aiReason}`;
         } else {
             analysis.archetype_reason = statsPrefix;

@@ -68,8 +68,7 @@ export const fetchUserStats = async (token: string, username: string) => {
 
     return {
       totalStars: repos.reduce((sum: number, r: any) => sum + r.stargazerCount, 0),
-      // Use GraphQL Search count (Sources)
-      totalRepos: response.search.repositoryCount,
+      totalRepos: response.user.repositories.totalCount || response.search.repositoryCount,
       totalCommits: response.user.contributionsCollection.totalCommitContributions,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.contributionCalendar?.totalContributions || response.user.recentActivity.totalCommitContributions,

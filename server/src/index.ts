@@ -38,7 +38,7 @@ const GITHUB_TOKEN = process.env.GITHUB_API_TOKEN;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const PDL_API_KEY = process.env.PDL_API_KEY;
-const EXA_API_KEY = process.env.EXA_API_KEY;
+const EXA_API_KEY = process.env.EXA_API_KEY || '';
 
 // Validate critical API keys
 if (!GITHUB_TOKEN) {
@@ -783,33 +783,26 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                                 }
 
                                 const pdlResult = await pdlEnrichByEmail(PDL_API_KEY, enrichEmail);
-                                if (pdlResult.success && pdlResult.linkedin_url) {
-                                    // Update candidate with enrichment data
+                                const isValidLinkedInProfile = (url: string) => {
+                                    return url && url.toLowerCase().includes('linkedin.com') && url.toLowerCase().includes('/in/') && !url.toLowerCase().includes('/pub/dir/') && !url.toLowerCase().includes('/posts/') && !url.toLowerCase().includes('/pulse/');
+                                };
+
+                                if (pdlResult.success && pdlResult.linkedin_url && isValidLinkedInProfile(pdlResult.linkedin_url)) {
+                                    // Save it to database
                                     await prisma.candidate.update({
                                         where: { id: savedCandidate.id },
                                         data: {
                                             linkedinUrl: pdlResult.linkedin_url,
                                             currentTitle: pdlResult.title,
                                             currentCompany: pdlResult.company,
-                                            location: pdlResult.location || savedCandidate.location as any,
-                                            enrichedAt: new Date(),
-                                            enrichmentData: pdlResult.raw as any
+                                            location: pdlResult.location,
+                                            enrichedAt: new Date()
                                         }
-                                    }).catch((err: Error) => console.log('[Enrich] Update failed:', err.message));
-
-                                    // Send enrichment update to client
-                                    sendEvent('enrichment', {
-                                        handle: candidate.login,
-                                        linkedinUrl: pdlResult.linkedin_url,
-                                        currentTitle: pdlResult.title,
-                                        currentCompany: pdlResult.company,
-                                        location: pdlResult.location
                                     });
-                                    return; // Success with PDL
-                                }
-
-                                // PDL failed, try Exa semantic search
-                                if (EXA_API_KEY) {
+                                    reportData.linkedinUrl = pdlResult.linkedin_url;
+                                } else {
+                                    // Fallback to Exa if PDL failed or returned invalid link
+                                    console.log(`[Analyze] PDL failed or returned non-profile link for ${enrichEmail || candidate.login}, trying Exa...`);
                                     const candidateName = savedCandidate.name || candidate.login;
                                     const context = exaBuildContext({
                                         location: savedCandidate.location || undefined,
@@ -1307,9 +1300,13 @@ app.post('/api/enrich/candidate', checkTierLimit, async (req, res) => {
         // Try People Data Labs first (fastest, most comprehensive)
         if (PDL_API_KEY) {
             console.log(`[Enrich] Calling PDL API for: ${lookupEmail}`);
+            const isValidLinkedInProfile = (url: string) => {
+                return url && url.toLowerCase().includes('linkedin.com') && url.toLowerCase().includes('/in/') && !url.toLowerCase().includes('/pub/dir/') && !url.toLowerCase().includes('/posts/') && !url.toLowerCase().includes('/pulse/');
+            };
+
             const pdlResult = await pdlEnrichByEmail(PDL_API_KEY, lookupEmail);
 
-            if (pdlResult.success && pdlResult.linkedin_url) {
+            if (pdlResult.success && pdlResult.linkedin_url && isValidLinkedInProfile(pdlResult.linkedin_url)) {
                 // Save enrichment data to candidate if we have one
                 if (candidate) {
                     await prisma.candidate.update({

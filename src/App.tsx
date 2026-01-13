@@ -4177,15 +4177,23 @@ function App() {
                   // Use patched stats if available (fetched from client-side GitHub API) for consistency with UI
                   const lastActive = patchedStats?.lastActive || selectedReport.metadata?.lastActive;
 
-                  // For the PDF, use our specific repo count from the analysis session
-                  let totalRepos = (selectedReport.metadata?.archetype_reason?.match(/(\d+)\s+repositories/)?.[1]) || patchedStats?.totalRepos !== undefined ? patchedStats.totalRepos : (userStats.totalRepos || userStats.public_repos || selectedReport.candidate?.public_repos || 0);
-                  totalRepos = parseInt(String(totalRepos));
+                  // For the PDF, use our specific repo count from the analysis session if available
+                  const regexMatch = selectedReport.metadata?.archetype_reason?.match(/(\d+)\s+repositories/);
+                  let totalRepos = 0;
 
-                  let totalStars = patchedStats?.totalStars !== undefined ? patchedStats.totalStars : (userStats.totalStars || 0);
-                  const totalCommits = patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (userStats.totalCommits || 0);
+                  if (regexMatch && regexMatch[1]) {
+                    totalRepos = parseInt(regexMatch[1]);
+                  } else if (patchedStats && patchedStats.totalRepos !== undefined) {
+                    totalRepos = patchedStats.totalRepos;
+                  } else {
+                    totalRepos = userStats.totalRepos || userStats.public_repos || selectedReport.candidate?.public_repos || 0;
+                  }
+
+                  let totalStars = (patchedStats && patchedStats.totalStars !== undefined) ? patchedStats.totalStars : (userStats.totalStars || 0);
+                  const totalCommits = (patchedStats && patchedStats.totalCommits !== undefined) ? patchedStats.totalCommits : (userStats.totalCommits || 0);
 
                   const verifiedSkills = selectedReport.metadata?.verified_skills || [];
-                  const meritPoints = selectedReport.meritPoints || [];
+                  const meritPoints = selectedReport.meritPoints || selectedReport.metadata?.highlights || [];
 
                   // Robust Languages extraction - use patchedStats first for consistency
                   let languages = patchedStats?.languagesList || userStats.languages || [];
@@ -4205,7 +4213,21 @@ function App() {
 
                   // Get archetype from multiple sources for reliability
                   const archetypeRaw = selectedReport.label || selectedReport.archetype || selectedReport.metadata?.label || selectedReport.metadata?.archetype;
-                  const displayArchetype = (archetypeRaw && archetypeRaw.trim() ? archetypeRaw : 'Profile').replace(/^THE\s+/i, '');
+                  let displayArchetype = (archetypeRaw && archetypeRaw.trim() && !['PROFILE', 'GHOST'].includes(archetypeRaw.toUpperCase()) ? archetypeRaw : '').replace(/^THE\s+/i, '');
+
+                  // If displayArchetype is still empty, derive it from the reason if possible
+                  if (!displayArchetype) {
+                    const reason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
+                    const match = reason.match(/Classified as ([^.]+)/i);
+                    if (match && match[1]) {
+                      displayArchetype = match[1].split(' because')[0].trim();
+                    }
+                  }
+
+                  // Final fallback
+                  if (!displayArchetype || displayArchetype.toUpperCase() === 'PROFILE') {
+                    displayArchetype = 'Developer';
+                  }
 
                   const linkedinUrl = selectedReport.candidate?.linkedinUrl;
                   const email = selectedReport.metadata?.email;
@@ -4263,19 +4285,28 @@ function App() {
 
                           {/* Name & Classification */}
                           <div style={{ flex: 1 }}>
-                            <h1 style={{ fontSize: '28px', fontWeight: 700, color: colors.slate900, margin: 0, letterSpacing: '-0.5px', lineHeight: 1.2 }}>
-                              {candidateName}
-                            </h1>
-
-                            {/* Archetype Badge */}
-                            <div style={{ display: 'inline-flex', alignItems: 'center', background: colors.tealBg, border: `1px solid ${colors.teal}30`, borderRadius: '8px', padding: '8px 14px', marginTop: '12px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: 700, color: colors.teal, letterSpacing: '0.5px' }}>
-                                {displayArchetype.toUpperCase()}
-                              </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'nowrap' }}>
+                              <h1 style={{ fontSize: '28px', fontWeight: 700, color: colors.slate900, margin: 0, letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                                {candidateName}
+                              </h1>
+                              {/* Archetype Badge */}
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                background: colors.tealBg,
+                                border: `1px solid ${colors.teal}30`,
+                                borderRadius: '8px',
+                                padding: '6px 12px',
+                                flexShrink: 0
+                              }}>
+                                <span style={{ fontSize: '12px', fontWeight: 700, color: colors.teal, letterSpacing: '0.5px' }}>
+                                  {displayArchetype.toUpperCase()}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Contact Links */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '16px', fontSize: '13px', color: colors.slate500 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '12px', fontSize: '13px', color: colors.slate500 }}>
                               {handle && <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>GitHub</a>}
                               {linkedinUrl && <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>LinkedIn</a>}
                               {/* Email removed from PDF for cleaner display */}
@@ -4323,7 +4354,7 @@ function App() {
                         <div style={{ marginBottom: '32px' }}>
                           <h2 style={{ fontSize: '11px', fontWeight: 700, color: colors.teal, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 12px 0' }}>Executive Summary</h2>
                           <div style={{ background: colors.slate50, borderRadius: '12px', padding: '20px 24px', borderLeft: `4px solid ${colors.teal}`, fontSize: '14px', color: colors.slate700, lineHeight: 1.7 }}>
-                            {assessmentSummary.length > 500 ? assessmentSummary.substring(0, assessmentSummary.substring(0, 500).lastIndexOf('.') + 1) || assessmentSummary.substring(0, 497) + '...' : assessmentSummary}
+                            {assessmentSummary}
                           </div>
                         </div>
 
@@ -4339,7 +4370,7 @@ function App() {
                                   </div>
                                   {point.detail && (
                                     <div style={{ fontSize: '13px', color: colors.slate500, lineHeight: 1.5 }}>
-                                      {point.detail.length <= 120 ? point.detail : point.detail.substring(0, point.detail.substring(0, 117).lastIndexOf(' ')) + '...'}
+                                      {point.detail}
                                     </div>
                                   )}
                                 </div>
