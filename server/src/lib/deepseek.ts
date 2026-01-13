@@ -40,12 +40,13 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
     // STEP 0: Check for minimum data requirements
     // ═══════════════════════════════════════════════════════════════════════════
 
-    const repoCount = globalMetadata.topRepos?.length || 0;
+    const repoCount = globalMetadata.userStats?.totalRepos || globalMetadata.topRepos?.length || 0;
     const hasCodeSamples = codeSamples && codeSamples.trim().length > 100;
     const languages = globalMetadata.userStats?.languages || [];
 
-    // If user has no repos or no analyzable code, return insufficient data response
-    if (repoCount === 0 || (!hasCodeSamples && languages.length === 0)) {
+    // If user has VERY few repos AND no analyzable code, return GHOST.
+    // Otherwise, if they have repos, they are at least a HIDDEN GEM or BUILDER.
+    if (repoCount < 3 && (!hasCodeSamples && languages.length === 0)) {
         console.log(`[DeepSeek] Insufficient data: ${repoCount} repos, hasCode: ${hasCodeSamples}, languages: ${languages.length}`);
         return {
             insufficient_data: true,
@@ -656,9 +657,17 @@ Golden rules:
         analysis.rarity_badge = tierBadge;
         analysis.rarity_percentile = percentile;
 
-        // Ensure archetype_reason uses accurate data (DeepSeek often hallucinates wrong numbers)
-        // Always override with our classification reason that has accurate stats
-        analysis.archetype_reason = `Classified as ${archetype.replace(/^THE\s+/i, '')} because ${classificationReason.toLowerCase()}${totalStars > 0 ? ` with ${totalStars.toLocaleString()} total stars across ${repoCount} repositories` : ''}.`;
+        // Ensure archetype_reason uses accurate data AND maintains AI depth
+        // We take the AI's reason and prepend our verified stats for accuracy
+        const aiReason = analysis.archetype_reason || '';
+        const statsPrefix = `Classified as ${archetype.replace(/^THE\s+/i, '')} because ${classificationReason.toLowerCase()}${totalStars > 0 ? ` with ${totalStars.toLocaleString()} total stars across ${repoCount} repositories` : ` across ${repoCount} repositories`}.`;
+
+        // If AI gave a good reason, combine them. Otherwise use our stats-based one.
+        if (aiReason && aiReason.length > 20 && !aiReason.toLowerCase().includes('classified as')) {
+            analysis.archetype_reason = `${statsPrefix} ${aiReason}`;
+        } else {
+            analysis.archetype_reason = statsPrefix;
+        }
 
         // Ensure highlights have proper distribution
         const positives = (analysis.highlights || []).filter((h: any) => h.type === 'positive');

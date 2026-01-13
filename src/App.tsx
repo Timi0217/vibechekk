@@ -109,9 +109,9 @@ const getRarityFromLabel = (label: string): string => {
   // RARE tier - Blue #3b82f6
   if (l.includes('SPECIALIST') || l.includes('SYSTEMS THINKER')) return 'RARE';
   // UNCOMMON tier - Green #22c55e
-  if (l.includes('MAINTAINER') || l.includes('BUILDER') || l.includes('CONTRIBUTOR') || l.includes('CRAFTSPERSON') || l.includes('HIDDEN GEM') || l.includes('TINKERER')) return 'UNCOMMON';
+  if (l.includes('MAINTAINER') || l.includes('BUILDER') || l.includes('CONTRIBUTOR') || l.includes('CRAFTSPERSON') || l.includes('HIDDEN GEM')) return 'UNCOMMON';
   // COMMON tier - Stone #78716c
-  if (l.includes('GRINDER') || l.includes('HOBBYIST') || l.includes('EXPLORER') || l.includes('APPRENTICE')) return 'COMMON';
+  if (l.includes('TINKERER') || l.includes('GRINDER') || l.includes('HOBBYIST') || l.includes('EXPLORER') || l.includes('APPRENTICE')) return 'COMMON';
   return 'COMMON';
 }
 
@@ -182,7 +182,8 @@ const EmailTooltip = ({ email, handle, activeTooltip, setActiveTooltip }: {
       onMouseEnter={() => setActiveTooltip(handle)}
       onMouseLeave={() => setActiveTooltip(null)}
     >
-      <span style={{ fontSize: '12px' }}>📧</span>
+      {/* Trigger icon for email removed as requested */}
+      <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent)', opacity: 0.5 }} />
       {activeTooltip === handle && (
         <div style={{
           position: 'absolute',
@@ -4175,7 +4176,11 @@ function App() {
 
                   // Use patched stats if available (fetched from client-side GitHub API) for consistency with UI
                   const lastActive = patchedStats?.lastActive || selectedReport.metadata?.lastActive;
-                  let totalRepos = patchedStats?.totalRepos !== undefined ? patchedStats.totalRepos : (userStats.totalRepos || userStats.public_repos || selectedReport.candidate?.public_repos || 0);
+
+                  // For the PDF, use our specific repo count from the analysis session
+                  let totalRepos = (selectedReport.metadata?.archetype_reason?.match(/(\d+)\s+repositories/)?.[1]) || patchedStats?.totalRepos !== undefined ? patchedStats.totalRepos : (userStats.totalRepos || userStats.public_repos || selectedReport.candidate?.public_repos || 0);
+                  totalRepos = parseInt(String(totalRepos));
+
                   let totalStars = patchedStats?.totalStars !== undefined ? patchedStats.totalStars : (userStats.totalStars || 0);
                   const totalCommits = patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (userStats.totalCommits || 0);
 
@@ -4214,11 +4219,9 @@ function App() {
                   // Dynamic Stats configuration
                   const statsList = [];
                   statsList.push({ label: 'Repos', value: totalRepos });
-                  statsList.push({ label: 'Stars', value: totalStars });
-
                   statsList.push({ label: 'Commits', value: totalCommits });
-
                   statsList.push({ label: 'Languages', value: languages.length });
+                  statsList.push({ label: 'Stars', value: totalStars });
 
                   return (
                     <div id="vibe-card-template" style={{
@@ -4670,12 +4673,18 @@ function App() {
                               overflow: 'hidden'
                             }}>
                               <button
-                                onClick={() => {
-                                  const filtered = history.filter((item: any) =>
-                                    !item.label?.toUpperCase().includes('GHOST') && item.rarity?.toUpperCase() !== 'GHOST'
-                                  );
-                                  setHistory(filtered);
-                                  setShowClearDropdown(false);
+                                onClick={async () => {
+                                  try {
+                                    await fetch(`${BACKEND_URL}/api/history/clear-ghosts`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ userId: user?.id })
+                                    });
+                                    fetchHistory();
+                                    setShowClearDropdown(false);
+                                  } catch (e) {
+                                    console.error('Failed to clear ghosts:', e);
+                                  }
                                 }}
                                 style={{
                                   width: '100%',
@@ -4699,10 +4708,19 @@ function App() {
                               </button>
                               <div style={{ height: '1px', background: 'var(--border)' }} />
                               <button
-                                onClick={() => {
+                                onClick={async () => {
                                   if (confirm('Are you sure you want to clear all history? This cannot be undone.')) {
-                                    setHistory([]);
-                                    setShowClearDropdown(false);
+                                    try {
+                                      await fetch(`${BACKEND_URL}/api/history/clear`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ userId: user?.id })
+                                      });
+                                      setHistory([]);
+                                      setShowClearDropdown(false);
+                                    } catch (e) {
+                                      console.error('Failed to clear history:', e);
+                                    }
                                   }
                                 }}
                                 style={{
@@ -4854,12 +4872,6 @@ function App() {
                                   {item.metadata?.userStats?.name || item.candidate?.name || handle || 'Guest Profile'}
                                   {item.metadata?.claimed && <BadgeCheck size={12} color="#059669" fill="#d1fae5" />}
                                 </span>
-                                <EmailTooltip
-                                  email={item.metadata?.email}
-                                  handle={handle}
-                                  activeTooltip={emailTooltip}
-                                  setActiveTooltip={setEmailTooltip}
-                                />
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <ArchetypeIcon label={item.label || item.archetype || 'Profile'} rarity={item.rarity || item.tier || getRarityFromLabel(item.label || item.archetype)} size={12} />

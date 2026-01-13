@@ -1499,6 +1499,49 @@ app.get('/api/history/check/:handle', async (req, res) => {
         res.status(500).json({ success: false, error: 'Check failed' });
     }
 });
+// Clear all history
+app.post('/api/history/clear', async (req, res) => {
+    const { userId } = req.body;
+    try {
+        await prisma.vibeReport.deleteMany({
+            where: userId ? { userId: String(userId) } : {}
+        });
+        res.json({ success: true, message: 'History cleared' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: 'Clear failed' });
+    }
+});
+
+// Clear only "GHOST" entries from history
+app.post('/api/history/clear-ghosts', async (req, res) => {
+    const { userId } = req.body;
+    try {
+        await prisma.vibeReport.deleteMany({
+            where: {
+                userId: userId ? String(userId) : undefined,
+                OR: [
+                    { archetype: { contains: 'GHOST', mode: 'insensitive' } },
+                    { label: { contains: 'GHOST', mode: 'insensitive' } },
+                    { tier: { contains: 'GHOST', mode: 'insensitive' } }
+                ]
+            }
+        });
+        res.json({ success: true, message: 'Ghosts cleared' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: 'Clear ghosts failed' });
+    }
+});
+
+// Delete specific history item
+app.delete('/api/history/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await prisma.vibeReport.delete({ where: { id } });
+        res.json({ success: true, message: 'Item deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: 'Delete failed' });
+    }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GITHUB STATS ENDPOINT - Authenticated GitHub API calls for accurate stats
