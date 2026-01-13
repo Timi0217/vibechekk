@@ -656,10 +656,9 @@ Golden rules:
         analysis.rarity_badge = tierBadge;
         analysis.rarity_percentile = percentile;
 
-        // Ensure archetype_reason is present (DeepSeek might not generate it)
-        if (!analysis.archetype_reason) {
-            analysis.archetype_reason = `Classified as ${archetype.replace(/^THE\s+/i, '')} based on ${classificationReason}.`;
-        }
+        // Ensure archetype_reason uses accurate data (DeepSeek often hallucinates wrong numbers)
+        // Always override with our classification reason that has accurate stats
+        analysis.archetype_reason = `Classified as ${archetype.replace(/^THE\\s+/i, '')} because ${classificationReason.toLowerCase()}${totalStars > 0 ? ` with ${totalStars.toLocaleString()} total stars across ${repoCount} repositories` : ''}.`;
 
         // Ensure highlights have proper distribution
         const positives = (analysis.highlights || []).filter((h: any) => h.type === 'positive');

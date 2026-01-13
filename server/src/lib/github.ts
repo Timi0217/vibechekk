@@ -912,7 +912,7 @@ export const resolveGitHubEmail = async (token: string, username: string): Promi
 
   console.log(`[GitHub] Resolving email for ${username}...`);
 
-  // Strategy 1: Try events API first (fast, gets commit emails)
+  // Strategy 1: Try events API first (fast, gets commit emails from most recent activity)
   try {
     const eventsUrl = `https://api.github.com/users/${username}/events/public`;
     const eventsResponse = await fetch(eventsUrl, {
@@ -926,15 +926,22 @@ export const resolveGitHubEmail = async (token: string, username: string): Promi
     if (eventsResponse.ok) {
       const events = await eventsResponse.json();
 
-      // Look for PushEvent which contains commit author emails
-      for (const event of events) {
+      // Sort events by created_at descending (most recent first)
+      const sortedEvents = [...events].sort((a: any, b: any) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      // Look for the most recent PushEvent which contains commit author emails
+      for (const event of sortedEvents) {
         if (event.type === 'PushEvent' && event.payload?.commits) {
-          for (const commit of event.payload.commits) {
+          // Get the most recent commit in this push
+          const commits = [...event.payload.commits].reverse(); // Most recent last in array
+          for (const commit of commits) {
             if (commit.author?.email) {
               const email = commit.author.email;
               // Skip noreply emails
               if (!email.includes('noreply.github.com') && !email.includes('@users.noreply')) {
-                console.log(`[GitHub] Found email via events API: ${email}`);
+                console.log(`[GitHub] Found email via events API (most recent): ${email}`);
                 return email;
               }
             }

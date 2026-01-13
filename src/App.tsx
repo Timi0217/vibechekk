@@ -4419,9 +4419,10 @@ function App() {
                         const fileName = `vibechekk - ${nameParts[0]} ${nameParts.slice(1).join(' ')}.pdf`.trim();
                         pdf.save(fileName);
 
-                      } catch (err) {
-                        console.error('PDF Init failed:', err);
-                        alert('Failed to generate card. Please try again.');
+                      } catch (err: any) {
+                        console.error('PDF generation failed:', err);
+                        console.error('Error stack:', err?.stack);
+                        alert(`Failed to generate card: ${err?.message || 'Unknown error'}. Please try again.`);
                       } finally {
                         btn.innerHTML = originalText;
                       }
