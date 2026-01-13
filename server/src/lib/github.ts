@@ -38,6 +38,9 @@ export const fetchUserStats = async (token: string, username: string) => {
         recentActivity: contributionsCollection(from: $from) {
           totalCommitContributions
           restrictedContributionsCount
+          contributionCalendar {
+            totalContributions
+          }
         }
         repositories(first: 100, ownerAffiliations: OWNER, privacy: PUBLIC, orderBy: {field: STARGAZERS, direction: DESC}) {
           totalCount
@@ -69,7 +72,7 @@ export const fetchUserStats = async (token: string, username: string) => {
       totalRepos: response.search.repositoryCount,
       totalCommits: response.user.contributionsCollection.totalCommitContributions,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
-      last90DaysCommits: response.user.recentActivity.totalCommitContributions,
+      last90DaysCommits: response.user.recentActivity.contributionCalendar?.totalContributions || response.user.recentActivity.totalCommitContributions,
       createdAt: response.user.createdAt,
       updatedAt: response.user.updatedAt,
       name: response.user.name,

@@ -92,12 +92,12 @@ const features = [
 
 // Archetype badges
 const archetypes = [
-  { name: "THE 10X ENGINEER", tier: "LEGENDARY", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
-  { name: "THE ARCHITECT", tier: "ULTRA RARE", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-  { name: "THE SPECIALIST", tier: "RARE", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
-  { name: "THE HIDDEN GEM", tier: "UNCOMMON", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  { name: "THE CRAFTSPERSON", tier: "UNCOMMON", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  { name: "THE BUILDER", tier: "UNCOMMON", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
+  { name: "THE 10X ENGINEER", tier: "LEGENDARY", color: "bg-amber-600 text-white border-amber-700" },
+  { name: "THE ARCHITECT", tier: "ULTRA RARE", color: "bg-purple-600 text-white border-purple-700" },
+  { name: "THE SPECIALIST", tier: "RARE", color: "bg-blue-600 text-white border-blue-700" },
+  { name: "THE HIDDEN GEM", tier: "UNCOMMON", color: "bg-emerald-600 text-white border-emerald-700" },
+  { name: "THE CRAFTSPERSON", tier: "UNCOMMON", color: "bg-emerald-600 text-white border-emerald-700" },
+  { name: "THE BUILDER", tier: "UNCOMMON", color: "bg-emerald-600 text-white border-emerald-700" },
 ];
 
 const TestimonialCard = ({ name, role, quote, avatar }: { name: string; role: string; quote: string; avatar: string }) => (
@@ -151,14 +151,11 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">V</span>
-            </div>
+            <img src="/logo.png" alt="Vibechekk" className="w-8 h-8" />
             <span className="font-bold text-xl tracking-tight">Vibechekk</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition">Features</a>
-            <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition">Testimonials</a>
             <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
@@ -189,7 +186,7 @@ export default function LandingPage() {
                 <div className="inline-flex items-center gap-2 mb-6">
                   <Badge variant="outline" className="text-sm px-4 py-1.5 rounded-full border-primary/30 bg-primary/5 text-foreground gap-2">
                     <Sparkles className="w-4 h-4 text-primary" />
-                    Trusted by 500+ recruiters
+                    Trusted by the best recruiters
                     <ChevronRight className="w-4 h-4" />
                   </Badge>
                 </div>
@@ -199,7 +196,7 @@ export default function LandingPage() {
                 <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
                   Hire devs who{" "}
                   <AnimatedShinyText className="inline text-primary">
-                    actually ship.
+                    actually ship
                   </AnimatedShinyText>
                 </h1>
               </BlurFade>
@@ -221,11 +218,6 @@ export default function LandingPage() {
                     Install Chrome Extension
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </ShimmerButton>
-                  <Button variant="outline" size="lg" className="h-12 px-6" asChild>
-                    <a href="#features">
-                      See Features
-                    </a>
-                  </Button>
                 </div>
               </BlurFade>
 
@@ -308,27 +300,155 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonials Section */}
-      <section id="testimonials" className="py-24 px-6">
+      {/* PRO Features Section - Chekklist, BulkChekk, AutoChekk */}
+      <section className="py-24 px-6">
         <div className="max-w-7xl mx-auto">
           <BlurFade delay={0.1}>
             <div className="text-center mb-16">
+              <Badge variant="outline" className="text-sm px-4 py-1.5 rounded-full border-amber-500/30 bg-amber-500/10 text-amber-500 mb-4">
+                PRO Features
+              </Badge>
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Loved by top recruiters
+                Supercharge your sourcing
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                See why engineering managers and recruiters at top companies trust Vibechekk.
+                Go beyond one-at-a-time analysis. Find, evaluate, and track developers at scale.
               </p>
             </div>
           </BlurFade>
 
-          <Marquee pauseOnHover className="[--duration:40s]">
-            {testimonials.map((testimonial, i) => (
-              <TestimonialCard key={i} {...testimonial} />
-            ))}
-          </Marquee>
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* AutoChekk - Black/Dark theme */}
+            <BlurFade delay={0.2}>
+              <div className="relative group h-full">
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/20 to-zinc-700/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-full bg-zinc-900 rounded-3xl p-8 border border-zinc-700/50 hover:border-zinc-600 transition-all duration-300">
+                  <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center mb-6 border border-zinc-700">
+                    <svg className="w-7 h-7 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-2xl font-bold text-white">AutoChekk</h3>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
+                  </div>
+                  <p className="text-zinc-400 mb-6 leading-relaxed">
+                    Chekk devs as you browse. Automatic analysis on every email and GitHub account you visit.
+                  </p>
+                  <ul className="space-y-3 text-sm">
+                    <li className="flex items-center gap-3 text-zinc-400">
+                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Zero-click passive analysis
+                    </li>
+                    <li className="flex items-center gap-3 text-zinc-400">
+                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Live activity feed
+                    </li>
+                    <li className="flex items-center gap-3 text-zinc-400">
+                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Email detection & lookup
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </BlurFade>
+
+            {/* Chekklist - Dark Red/Maroon theme */}
+            <BlurFade delay={0.3}>
+              <div className="relative group h-full">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-900/30 to-red-950/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-full rounded-3xl p-8 border border-red-900/50 hover:border-red-800/70 transition-all duration-300" style={{ background: 'linear-gradient(135deg, #3d1a1a 0%, #2a1010 100%)' }}>
+                  <div className="w-14 h-14 rounded-2xl bg-red-950/80 flex items-center justify-center mb-6 border border-red-900/50">
+                    <svg className="w-7 h-7 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 10h4" />
+                      <path d="M19 7V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3" />
+                      <path d="M20 21a2 2 0 0 0 2-2v-3.851c0-1.39-2-2.962-2-4.829V8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v11a2 2 0 0 0 2 2z" />
+                      <path d="M4 21a2 2 0 0 1-2-2v-3.851c0-1.39 2-2.962 2-4.829V8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2z" />
+                      <path d="M9 7V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v3" />
+                    </svg>
+                  </div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-2xl font-bold text-white">Chekklist</h3>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
+                  </div>
+                  <p className="text-red-200/70 mb-6 leading-relaxed">
+                    Find 50 devs for your JD. AI-powered search that finds matching developers worldwide.
+                  </p>
+                  <ul className="space-y-3 text-sm">
+                    <li className="flex items-center gap-3 text-red-200/70">
+                      <span className="w-5 h-5 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Search by language, experience, role
+                    </li>
+                    <li className="flex items-center gap-3 text-red-200/70">
+                      <span className="w-5 h-5 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Progressive streaming results
+                    </li>
+                    <li className="flex items-center gap-3 text-red-200/70">
+                      <span className="w-5 h-5 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Filter by archetype & warmth score
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </BlurFade>
+
+            {/* BulkChekk - Navy Blue theme */}
+            <BlurFade delay={0.4}>
+              <div className="relative group h-full">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-900/30 to-blue-950/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-full rounded-3xl p-8 border border-blue-900/50 hover:border-blue-800/70 transition-all duration-300" style={{ background: 'linear-gradient(135deg, #1a2744 0%, #0f1929 100%)' }}>
+                  <div className="w-14 h-14 rounded-2xl bg-blue-950/80 flex items-center justify-center mb-6 border border-blue-900/50">
+                    <svg className="w-7 h-7 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  </div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-2xl font-bold text-white">BulkChekk</h3>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
+                  </div>
+                  <p className="text-blue-200/70 mb-6 leading-relaxed">
+                    Analyze devs via CSV. Upload a list of candidates and analyze them all at once.
+                  </p>
+                  <ul className="space-y-3 text-sm">
+                    <li className="flex items-center gap-3 text-blue-200/70">
+                      <span className="w-5 h-5 rounded-full bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      CSV, Excel, or PDF resume upload
+                    </li>
+                    <li className="flex items-center gap-3 text-blue-200/70">
+                      <span className="w-5 h-5 rounded-full bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Email-to-GitHub resolution
+                    </li>
+                    <li className="flex items-center gap-3 text-blue-200/70">
+                      <span className="w-5 h-5 rounded-full bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Batch history & progress tracking
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </BlurFade>
+          </div>
         </div>
       </section>
+
+
 
       {/* Pricing Section */}
       <section id="pricing" className="py-24 px-6 bg-muted/30">
@@ -379,7 +499,7 @@ export default function LandingPage() {
                 <h3 className="text-xl font-bold mb-2">Pro</h3>
                 <p className="text-muted-foreground text-sm mb-6">For serious recruiters</p>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold">$29</span>
+                  <span className="text-4xl font-bold">$99</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 <ul className="space-y-3 mb-8">
@@ -444,14 +564,16 @@ export default function LandingPage() {
                 Join 500+ recruiters and engineering managers who use Vibechekk
                 to identify exceptional talent. Free to start.
               </p>
-              <ShimmerButton
-                className="h-14 px-10 text-lg font-semibold"
-                onClick={() => window.open(CHROME_STORE_URL, '_blank')}
-              >
-                <Chrome className="w-5 h-5 mr-2" />
-                Get Started Free
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </ShimmerButton>
+              <div className="flex justify-center">
+                <ShimmerButton
+                  className="h-14 px-10 text-lg font-semibold"
+                  onClick={() => window.open(CHROME_STORE_URL, '_blank')}
+                >
+                  <Chrome className="w-5 h-5 mr-2" />
+                  Get Started Free
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </ShimmerButton>
+              </div>
             </div>
           </BlurFade>
         </div>
@@ -461,9 +583,7 @@ export default function LandingPage() {
       <footer className="py-12 px-6 border-t">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-              <span className="text-white font-bold text-xs">V</span>
-            </div>
+            <img src="/logo.png" alt="Vibechekk" className="w-6 h-6" />
             <span className="font-semibold">Vibechekk</span>
           </div>
           <p className="text-sm text-muted-foreground">

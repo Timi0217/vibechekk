@@ -773,6 +773,11 @@ main {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
 }
 
+.stat-card:hover .stat-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 .stat-card.hero {
   background: white;
   border-color: var(--accent);
@@ -1079,8 +1084,9 @@ main {
   overflow-y: auto;
   scrollbar-width: thin;
   padding: 8px 6px;
+  padding-top: 4px;
   padding-right: 12px;
-  margin: -8px -6px;
+  margin: 0 -6px -8px -6px;
 }
 
 .merit-grid.scrollable::-webkit-scrollbar {

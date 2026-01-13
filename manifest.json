@@ -1,6 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vibechekk",
+  "short_name": " ",
   "version": "1.0.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA10HPMRuFrChUb1yTtZQDSzJAj7ixpO7ZQzS+Pb2thB7xkateHePuxz5Xtxd/wKB1a1kugtlZPpPJo8lsdrSZvduUxIEbU6Sun6D30rigtvKOTRPAgduHnxUN81p/3yUeGVP4YMprVGSvKIvhyzziKZ72q1jo+O7MwKezVMLPEAX2hY/UkO+HokteRxLwn6Dzn1ny4S0bOIf1vSJRcNk/XDYfppFDsj/ECkSdyJpNNBwc/8xpJ3Xzj2F5y3RHqS4lKz26rsZBaEi+7cL2JaZj2xOWyao2CLdIjeDTILEmPkYHt75noYrKRzlTChCmkNw6JKubs+JyVWRfyhe9OZ1dzwIDAQAB",
   "description": "Trajectory of Merit for Developers",

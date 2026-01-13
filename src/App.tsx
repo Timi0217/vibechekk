@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Trash2, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
 import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
@@ -116,10 +116,14 @@ const getRarityFromLabel = (label: string): string => {
 }
 
 const getRarityColor = (rarity: string, label?: string) => {
-  // If rarity not set properly, derive from label
-  let r = rarity?.toUpperCase();
-  if (!r || r === 'UNKNOWN' || r === 'UNDEFINED') {
-    r = getRarityFromLabel(label || '');
+  // ALWAYS derive from label first if we have one (most accurate)
+  // This fixes issues where rarity might be "COMMON" but label is "TINKERER" (UNCOMMON)
+  let r = label ? getRarityFromLabel(label) : rarity?.toUpperCase();
+  if (!r || r === 'UNKNOWN' || r === 'UNDEFINED' || r === 'COMMON') {
+    // Double-check with label fallback
+    const fromLabel = getRarityFromLabel(label || '');
+    if (fromLabel !== 'COMMON') r = fromLabel;
+    else r = rarity?.toUpperCase() || 'COMMON';
   }
   if (r === 'LEGENDARY') return '#f59e0b';
   if (r === 'ULTRA RARE') return '#8b5cf6';
@@ -134,8 +138,10 @@ const formatLastSeen = (dateString: string | null) => {
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-  return `${Math.floor(days / 30)} months ago`;
+  const weeks = Math.floor(days / 7);
+  if (days < 30) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} ${months === 1 ? 'month' : 'months'} ago`;
 };
 
 const getLastSeenColor = (dateString: string | null) => {
@@ -316,6 +322,93 @@ function App() {
   const [autochekkLogs, setAutochekkLogs] = useState<any[]>([])
   const [pendingAnalyses, setPendingAnalyses] = useState<{ handle: string, name?: string, avatar: string, timestamp: number }[]>([])
   const [githubLinked, setGithubLinked] = useState(false)
+  const [patchedStats, setPatchedStats] = useState<{ totalRepos?: number; totalCommits?: number; lastActive?: string; totalStars?: number; languages?: number; name?: string; languagesList?: string[] } | null>(null)
+
+  useEffect(() => {
+    // Fetch fresh GitHub stats from backend (which uses authenticated API - 5000 req/hour)
+    // This repairs stale/missing stats for cached reports
+    if (selectedReport && selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest') {
+      const handle = selectedReport.candidate.githubHandle;
+
+      fetch(`${BACKEND_URL}/api/github/stats/${encodeURIComponent(handle)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(response => {
+          if (!response?.success || !response?.data) {
+            console.log('[GitHub Stats] Backend fetch failed, using stored data only');
+            return;
+          }
+
+          const stats = response.data;
+          console.log('[GitHub Stats] Fetched from backend:', stats);
+
+          const updates: any = {
+            name: stats.name,
+            totalRepos: stats.public_repos,
+            totalStars: stats.totalStars,
+            totalCommits: stats.totalCommits,
+            languages: stats.languages,
+            languagesList: stats.languagesList || [],
+            lastActive: stats.lastActive
+          };
+
+          // Extract LinkedIn from GitHub Profile (blog or bio fields)
+          let linkedinFromGithub: string | null = null;
+          const linkedinRegex = /linkedin\.com\/in\/[\w\-]+/i;
+          if (stats.blog && linkedinRegex.test(stats.blog)) {
+            linkedinFromGithub = stats.blog.startsWith('http') ? stats.blog : `https://${stats.blog}`;
+          } else if (stats.bio && linkedinRegex.test(stats.bio)) {
+            const match = stats.bio.match(linkedinRegex);
+            if (match) {
+              linkedinFromGithub = `https://${match[0]}`;
+            }
+          }
+
+          // Update selectedReport with LinkedIn if found
+          if (linkedinFromGithub) {
+            setSelectedReport((prev: any) => {
+              if (!prev || prev.candidate?.linkedinUrl) return prev;
+              return {
+                ...prev,
+                candidate: {
+                  ...prev.candidate,
+                  linkedinUrl: linkedinFromGithub
+                }
+              };
+            });
+          }
+
+          // Update history with real name and LinkedIn
+          if (updates.name || linkedinFromGithub) {
+            setHistory((prev: any[]) => prev.map((item: any) => {
+              const itemHandle = item.candidate?.githubHandle || item.githubHandle;
+              if (itemHandle?.toLowerCase() === handle.toLowerCase()) {
+                return {
+                  ...item,
+                  candidate: {
+                    ...item.candidate,
+                    name: updates.name || item.candidate?.name,
+                    linkedinUrl: linkedinFromGithub || item.candidate?.linkedinUrl
+                  },
+                  metadata: {
+                    ...item.metadata,
+                    userStats: {
+                      ...item.metadata?.userStats,
+                      name: updates.name || item.metadata?.userStats?.name
+                    }
+                  }
+                };
+              }
+              return item;
+            }));
+          }
+
+          setPatchedStats(updates);
+        })
+        .catch(err => console.error('[GitHub Stats] Error:', err));
+    } else {
+      setPatchedStats(null);
+    }
+  }, [selectedReport]);
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
   const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null)
   const [errorToast, setErrorToast] = useState<ErrorToast | null>(null)
@@ -547,7 +640,7 @@ function App() {
           candidate: {
             ...prev.candidate,
             linkedinUrl: data.data.linkedinUrl,
-            currentTitle: data.data.currentRole,
+            currentTitle: data.data.currentTitle || data.data.currentRole,
             currentCompany: data.data.currentCompany,
             companyLogoUrl: data.data.companyLogo,
             seniority: data.data.seniority,
@@ -558,8 +651,12 @@ function App() {
         setEnrichmentStatus('success');
         // Refresh history to persist
         fetchHistory();
-      } else if (data.code === 'NO_MATCH' || data.error?.includes('No enrichment') || data.error?.includes('No matching')) {
-        console.log('[Enrich] No match found in Apollo database');
+        // Auto-open LinkedIn profile in new tab
+        if (data.data.linkedinUrl) {
+          window.open(data.data.linkedinUrl, '_blank');
+        }
+      } else if (data.code === 'NO_MATCH' || data.code === 'NO_EMAIL' || data.error?.includes('No enrichment') || data.error?.includes('No matching')) {
+        console.log('[Enrich] No match found:', data.error || data.code);
         setEnrichmentStatus('no_match');
       } else if (data.code === 'PRO_REQUIRED') {
         setProFeaturePaywallOpen('Candidate Enrichment');
@@ -945,6 +1042,7 @@ function App() {
 
   const [pendingHandles, setPendingHandles] = useState<string[]>([])
   const [emailTooltip, setEmailTooltip] = useState<string | null>(null) // tracks which email tooltip is open
+  const [showClearDropdown, setShowClearDropdown] = useState(false)
 
   const handleManualSearch = async () => {
     if (!manualUrl) return
@@ -964,11 +1062,9 @@ function App() {
     }
     ownerHandle = ownerHandle.replace(/^@/, '').split('/')[0];
 
-    // 2. CHECK HISTORY (Prevent Duplicates) - DISABLED FOR QA/TESTING
-    // The user wants to see the analysis run after flushing the DB.
-    // Client-side caching prevents this. Letting it hit the backend ensures fresh data.
-    /*
-    const existingReport = history.find(h => {
+    // 2. CHECK HISTORY (Prevent Duplicate Analysis)
+    // If profile already exists in history, just open it instead of re-analyzing
+    const existingReport = history.find((h: any) => {
       const hHandle = h.candidate?.githubHandle || h.githubHandle;
       return hHandle?.toLowerCase() === ownerHandle.toLowerCase();
     });
@@ -979,7 +1075,6 @@ function App() {
       setActiveTab('history');
       return;
     }
-    */
 
     // 3. Prevent duplicate active processing
     if (pendingHandles.includes(ownerHandle)) {
@@ -3289,594 +3384,605 @@ function App() {
     </>
   );
   return (
-    <div className="popup-container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <VibeLogo size={20} color="var(--brand-blue)" strokeWidth={2.5} />
-          <h1 className="logo" style={{ textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>VIBECHEKK</h1>
-        </div>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
-          <BadgeCheck size={14} color={user?.tier === 'PRO' ? '#b45309' : (user ? 'var(--accent)' : 'var(--text-dim)')} strokeWidth={1.5} />
-          <span style={{ fontSize: '10px', fontWeight: 800, color: user?.tier === 'PRO' ? '#b45309' : (user ? 'var(--accent)' : 'var(--text-dim)'), letterSpacing: '0.5px' }}>
-            {user?.tier === 'PRO' ? 'PRO' : (user ? 'AUTHENTICATED' : 'GUEST')} TIER
-          </span>
-        </div>
-      </header>
+    <>
+      <div className="popup-container">
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/public/icon48.png" alt="Vibechekk" style={{ width: '24px', height: '24px' }} />
+            <h1 className="logo" style={{ textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>VIBECHEKK</h1>
+          </div>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '20px' }}>
+            <BadgeCheck size={14} color={user?.tier === 'PRO' ? '#b45309' : (user ? 'var(--accent)' : 'var(--text-dim)')} strokeWidth={1.5} />
+            <span style={{ fontSize: '10px', fontWeight: 800, color: user?.tier === 'PRO' ? '#b45309' : (user ? 'var(--accent)' : 'var(--text-dim)'), letterSpacing: '0.5px' }}>
+              {user?.tier === 'PRO' ? 'PRO' : (user ? 'AUTHENTICATED' : 'GUEST')} TIER
+            </span>
+          </div>
+        </header>
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmId && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          animation: 'fadeIn 0.2s ease'
-        }}>
+        {/* Delete Confirmation Modal */}
+        {deleteConfirmId && (
           <div style={{
-            background: 'white',
-            borderRadius: '16px',
-            padding: '24px',
-            maxWidth: '320px',
-            width: '90%',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-            animation: 'slideUpFade 0.3s ease'
-          }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '50%',
-              background: '#fee2e2',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px'
-            }}>
-              <Trash size={24} color="#dc2626" />
-            </div>
-            <h3 style={{
-              fontSize: '16px',
-              fontWeight: 700,
-              color: 'var(--text-main)',
-              textAlign: 'center',
-              margin: '0 0 8px'
-            }}>
-              Delete Search?
-            </h3>
-            <p style={{
-              fontSize: '13px',
-              color: 'var(--text-dim)',
-              textAlign: 'center',
-              margin: '0 0 24px',
-              lineHeight: 1.5
-            }}>
-              This will permanently remove this search and all its results.
-            </p>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--border)',
-                  background: 'white',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  color: 'var(--text-main)',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setActiveSearches(prev => {
-                    const updated = prev.filter(search => search.id !== deleteConfirmId);
-                    chrome.storage.local.set({ active_searches: updated });
-                    return updated;
-                  });
-                  setDeleteConfirmId(null);
-                }}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: '#dc2626',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  color: 'white',
-                  cursor: 'pointer'
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Error Toast */}
-      {errorToast && (
-        <div style={{
-          position: 'fixed',
-          top: '60px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '12px',
-          padding: '12px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-          zIndex: 10000,
-          maxWidth: '350px',
-          animation: 'slideIn 0.3s ease-out'
-        }}>
-          <AlertTriangle size={18} color="#dc2626" />
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: '13px', color: '#991b1b', fontWeight: 600 }}>{errorToast.message}</p>
-            {errorToast.action && (
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#b91c1c' }}>{errorToast.action}</p>
-            )}
-          </div>
-          <button
-            onClick={() => setErrorToast(null)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
-          >
-            <X size={14} color="#dc2626" />
-          </button>
-        </div>
-      )}
-
-      <div className="tabs-nav">
-        <div className="tab-slider" style={{
-          transform: `translateX(${activeTab === 'analyze' ? '0' :
-            activeTab === 'history' ? '100%' :
-              activeTab === 'analytics' ? '200%' : '300%'})`
-        }} />
-        <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
-          <Search size={14} strokeWidth={2} />
-        </button>
-        <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
-          <div style={{ position: 'relative' }}>
-            <Clock size={14} strokeWidth={2} />
-            {pendingHandles.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                top: '-6px',
-                right: '-8px',
-                width: '14px',
-                height: '14px',
-                background: 'var(--accent)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid white'
-              }}>
-                <Loader2 size={8} color="white" className="spin" />
-              </div>
-            )}
-          </div>
-        </button>
-        <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
-          <TrendingUp size={14} strokeWidth={2} />
-        </button>
-        <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setSelectedReport(null); }}>
-          <Settings size={14} strokeWidth={2} />
-        </button>
-      </div>
-
-      <main>
-        {authLoading ? (
-          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            height: '300px',
-            flexDirection: 'column',
-            gap: '12px'
+            zIndex: 1000,
+            animation: 'fadeIn 0.2s ease'
           }}>
-            <Loader2 size={24} className="spin" color="var(--accent)" />
-            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
-          </div>
-        ) : selectedReport ? (
-          (selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) ? (
-            // Insufficient data state (GHOST profile)
-            <div className="detail-view">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
-                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
-                  padding: '10px',
-                  marginLeft: '-8px',
-                  background: 'var(--bg-gray)',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}>
-                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
-                </button>
-                <div>
-                  <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{selectedReport.handle || 'Guest Profile'}</h2>
-                </div>
+            <div style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '24px',
+              maxWidth: '320px',
+              width: '90%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              animation: 'slideUpFade 0.3s ease'
+            }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                background: '#fee2e2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}>
+                <Trash size={24} color="#dc2626" />
               </div>
-              <div style={{ textAlign: 'center', padding: '64px 32px' }}>
-                <div style={{
-                  width: '80px',
-                  height: '80px',
-                  background: 'var(--bg-gray)',
-                  borderRadius: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 24px auto',
-                  border: '1px solid var(--border)'
-                }}>
-                  <Ghost size={40} color="var(--text-dim)" strokeWidth={1.5} />
-                </div>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '12px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>GHOST PROFILE</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto', fontWeight: 500 }}>
-                  This profile has limited public repositories or code to analyze. They likely work in private repos or enterprise environments.
-                </p>
+              <h3 style={{
+                fontSize: '16px',
+                fontWeight: 700,
+                color: 'var(--text-main)',
+                textAlign: 'center',
+                margin: '0 0 8px'
+              }}>
+                Delete Search?
+              </h3>
+              <p style={{
+                fontSize: '13px',
+                color: 'var(--text-dim)',
+                textAlign: 'center',
+                margin: '0 0 24px',
+                lineHeight: 1.5
+              }}>
+                This will permanently remove this search and all its results.
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => setDeleteConfirmId(null)}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border)',
+                    background: 'white',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'var(--text-main)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveSearches(prev => {
+                      const updated = prev.filter(search => search.id !== deleteConfirmId);
+                      chrome.storage.local.set({ active_searches: updated });
+                      return updated;
+                    });
+                    setDeleteConfirmId(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: '#dc2626',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Delete
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="detail-view">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '8px' }}>
-                <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
-                  padding: '10px',
-                  marginLeft: '-8px',
-                  background: 'var(--bg-gray)',
+          </div>
+        )}
+
+        {/* Error Toast */}
+        {errorToast && (
+          <div style={{
+            position: 'fixed',
+            top: '60px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            zIndex: 10000,
+            maxWidth: '350px',
+            animation: 'slideIn 0.3s ease-out'
+          }}>
+            <AlertTriangle size={18} color="#dc2626" />
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: '13px', color: '#991b1b', fontWeight: 600 }}>{errorToast.message}</p>
+              {errorToast.action && (
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#b91c1c' }}>{errorToast.action}</p>
+              )}
+            </div>
+            <button
+              onClick={() => setErrorToast(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+            >
+              <X size={14} color="#dc2626" />
+            </button>
+          </div>
+        )}
+
+        <div className="tabs-nav">
+          <div className="tab-slider" style={{
+            transform: `translateX(${activeTab === 'analyze' ? '0' :
+              activeTab === 'history' ? '100%' :
+                activeTab === 'analytics' ? '200%' : '300%'})`
+          }} />
+          <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
+            <Search size={14} strokeWidth={2} />
+          </button>
+          <button className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { setActiveTab('history'); setSelectedReport(null); }}>
+            <div style={{ position: 'relative' }}>
+              <Clock size={14} strokeWidth={2} />
+              {pendingHandles.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-8px',
+                  width: '14px',
+                  height: '14px',
+                  background: 'var(--accent)',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  border: 'none',
-                  cursor: 'pointer'
+                  border: '2px solid white'
                 }}>
-                  <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
-                </button>
+                  <Loader2 size={8} color="white" className="spin" />
+                </div>
+              )}
+            </div>
+          </button>
+          <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
+            <TrendingUp size={14} strokeWidth={2} />
+          </button>
+          <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveTab('settings'); setSelectedReport(null); }}>
+            <Settings size={14} strokeWidth={2} />
+          </button>
+        </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-                  {(() => {
-                    const handle = selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : '';
-                    return (
-                      <>
-                        {handle ? (
-                          <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '12px', overflow: 'hidden' }}>
-                            <img
-                              src={`https://github.com/${handle}.png?size=48`}
-                              alt={handle}
-                              className="history-avatar"
-                              style={{ width: '48px', height: '48px', display: 'block' }}
-                            />
-                          </a>
-                        ) : (
-                          <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
-                            <User size={24} color="var(--text-dim)" />
+        <main>
+          {authLoading ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '300px',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <Loader2 size={24} className="spin" color="var(--accent)" />
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
+            </div>
+          ) : selectedReport ? (
+            (selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) ? (
+              // Insufficient data state (GHOST profile)
+              <div className="detail-view">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
+                  <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
+                    padding: '10px',
+                    marginLeft: '-8px',
+                    background: 'var(--bg-gray)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}>
+                    <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
+                  </button>
+                  <div>
+                    <h2 className="history-name" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>{selectedReport.handle || 'Guest Profile'}</h2>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '64px 32px' }}>
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    background: 'var(--bg-gray)',
+                    borderRadius: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 24px auto',
+                    border: '1px solid var(--border)'
+                  }}>
+                    <Ghost size={40} color="var(--text-dim)" strokeWidth={1.5} />
+                  </div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '12px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>GHOST PROFILE</h3>
+                  <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.6, maxWidth: '280px', margin: '0 auto', fontWeight: 500 }}>
+                    This profile has limited public repositories or code to analyze. They likely work in private repos or enterprise environments.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="detail-view">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '8px', position: 'relative' }}>
+                  <button className="back-btn" onClick={() => setSelectedReport(null)} style={{
+                    padding: '10px',
+                    marginLeft: '-8px',
+                    background: 'var(--bg-gray)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}>
+                    <ArrowLeft size={18} strokeWidth={2.5} color="var(--text-main)" />
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1, minWidth: 0 }}>
+                    {(() => {
+                      const handle = selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest' ? selectedReport.candidate.githubHandle : '';
+                      return (
+                        <>
+                          {/* Left: Profile pic only */}
+                          <div style={{ flexShrink: 0 }}>
+                            {handle ? (
+                              <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '12px', overflow: 'hidden', width: '48px', height: '48px' }}>
+                                <img
+                                  src={`https://github.com/${handle}.png?size=96`}
+                                  alt={handle}
+                                  style={{ width: '48px', height: '48px', display: 'block', objectFit: 'cover' }}
+                                />
+                              </a>
+                            ) : (
+                              <div className="history-avatar-placeholder" style={{ width: '48px', height: '48px', borderRadius: '12px' }}>
+                                <User size={24} color="var(--text-dim)" />
+                              </div>
+                            )}
                           </div>
-                        )}
-                        <div className="history-meta" style={{ gap: '2px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                          {/* Center: Name and Archetype */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <a
                               href={`https://github.com/${handle}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="profile-github-link"
-                              style={{ textDecoration: 'none' }}
+                              style={{ textDecoration: 'none', display: 'block', overflow: 'hidden' }}
                             >
-                              <h2 className="history-name clickable" style={{ fontSize: '18px', margin: 0, letterSpacing: '-0.02em' }}>
-                                {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || handle || 'Guest Profile'}
+                              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--text-main)', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {patchedStats?.name || selectedReport.candidate?.name || selectedReport.metadata?.userStats?.name || handle || 'Guest Profile'}
                               </h2>
                             </a>
-                            {selectedReport.rarity_badge && (
-                              <span style={{ fontSize: '14px' }} title={selectedReport.rarity}>{selectedReport.rarity_badge}</span>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity || getRarityFromLabel(selectedReport.label)} size={14} />
-                            <div className="archetype-tooltip-wrapper">
-                              <div className={`archetype-badge ${getRarityClass(selectedReport.rarity || getRarityFromLabel(selectedReport.label))}`}>
-                                {stripThe(selectedReport.label) || 'Profile'}
-                              </div>
-                              <div className="archetype-tooltip">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                                  <div>
-                                    <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
-                                    {(selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.').replace('Classified as THE ', 'Classified as ')}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                              {/* Left: Icon and Badge */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                <ArchetypeIcon label={selectedReport.label || 'Profile'} rarity={selectedReport.rarity || getRarityFromLabel(selectedReport.label)} size={14} />
+                                <div className="archetype-tooltip-wrapper">
+                                  <div className={`archetype-badge ${getRarityClass(selectedReport.rarity || getRarityFromLabel(selectedReport.label))}`}>
+                                    {stripThe(selectedReport.label) || 'Profile'}
                                   </div>
-                                  <div
-                                    style={{ cursor: 'pointer', padding: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const rawText = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.';
-                                      const cleanText = rawText.replace('Classified as THE ', 'Classified as ');
-                                      navigator.clipboard.writeText(cleanText);
-                                      const btn = e.currentTarget;
-                                      btn.style.background = 'rgba(34, 197, 94, 0.4)'; // Green flash
-                                      setTimeout(() => {
-                                        btn.style.background = 'rgba(255,255,255,0.1)';
-                                      }, 500);
-                                    }}
-                                    title="Copy description"
-                                  >
-                                    <Copy size={12} color="white" />
+                                  <div className="archetype-tooltip">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                      <div>
+                                        <strong style={{ display: 'block', marginBottom: '4px' }}>{stripThe(selectedReport.label) || 'Profile'}</strong>
+                                        {(selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || 'Analysis based on GitHub activity.').replace('Classified as THE ', 'Classified as ')}
+                                      </div>
+                                      <div
+                                        style={{ cursor: 'pointer', padding: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard.writeText((selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '').replace('Classified as THE ', 'Classified as '));
+                                        }}
+                                        title="Copy description"
+                                      >
+                                        <Copy size={12} color="white" />
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                            {selectedReport.metadata?.lastActive && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
-                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: getLastSeenColor(selectedReport.metadata.lastActive) }} />
-                                Last seen {formatLastSeen(selectedReport.metadata.lastActive)}
+
+                              {/* Right: Email and LinkedIn icons */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                {/* Email Button */}
+                                {(() => {
+                                  const email = selectedReport.candidate?.email || selectedReport.metadata?.email || selectedReport.metadata?.userStats?.email;
+                                  const hasEmail = !!email;
+                                  const emailCopied = copiedId === 'profile-email';
+                                  return (
+                                    <div style={{ position: 'relative' }}>
+                                      <button
+                                        onClick={async () => {
+                                          if (hasEmail) {
+                                            await navigator.clipboard.writeText(email);
+                                            setCopiedId('profile-email');
+                                            setTimeout(() => setCopiedId(null), 2000);
+                                          }
+                                        }}
+                                        disabled={!hasEmail}
+                                        title={hasEmail ? `Copy ${email}` : 'No email on file'}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          width: '26px',
+                                          height: '26px',
+                                          borderRadius: '6px',
+                                          background: emailCopied ? 'rgba(16, 185, 129, 0.25)' : hasEmail ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.08)',
+                                          border: 'none',
+                                          cursor: hasEmail ? 'pointer' : 'not-allowed',
+                                          transition: 'all 0.15s ease',
+                                          opacity: hasEmail ? 1 : 0.5,
+                                        }}
+                                      >
+                                        {emailCopied ? (
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="20 6 9 17 4 12" />
+                                          </svg>
+                                        ) : (
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={hasEmail ? "#10b981" : "#94a3b8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect x="2" y="4" width="20" height="16" rx="2" />
+                                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                                          </svg>
+                                        )}
+                                      </button>
+                                      {emailCopied && (
+                                        <div style={{
+                                          position: 'absolute',
+                                          top: '-28px',
+                                          left: '50%',
+                                          transform: 'translateX(-50%)',
+                                          background: '#10b981',
+                                          color: 'white',
+                                          padding: '4px 8px',
+                                          borderRadius: '4px',
+                                          fontSize: '10px',
+                                          fontWeight: 600,
+                                          whiteSpace: 'nowrap',
+                                          zIndex: 10,
+                                          animation: 'fadeIn 0.15s ease-out',
+                                        }}>
+                                          Copied!
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+
+                                {/* LinkedIn Button */}
+                                {(() => {
+                                  const linkedinUrl = selectedReport.candidate?.linkedinUrl;
+                                  if (linkedinUrl) {
+                                    return (
+                                      <a
+                                        href={linkedinUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="Open LinkedIn profile"
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          width: '26px',
+                                          height: '26px',
+                                          borderRadius: '6px',
+                                          background: 'rgba(0, 119, 181, 0.12)',
+                                          transition: 'all 0.15s ease',
+                                        }}
+                                      >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="#0077b5">
+                                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                                        </svg>
+                                      </a>
+                                    );
+                                  } else if (user?.tier === 'PRO') {
+                                    return (
+                                      <button
+                                        onClick={() => enrichCandidate(
+                                          selectedReport.candidate?.id,
+                                          selectedReport.candidate?.email || selectedReport.metadata?.email,
+                                          selectedReport.candidate?.name || selectedReport.metadata?.userStats?.name
+                                        )}
+                                        disabled={enriching}
+                                        title={enrichmentStatus === 'no_match' ? 'Not found' : enrichmentStatus === 'error' ? 'Enrichment failed' : 'Find LinkedIn profile'}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          width: '26px',
+                                          height: '26px',
+                                          borderRadius: '6px',
+                                          background: enrichmentStatus === 'no_match' ? 'rgba(245, 158, 11, 0.15)' : enrichmentStatus === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(0, 119, 181, 0.12)',
+                                          border: 'none',
+                                          cursor: enriching ? 'wait' : 'pointer',
+                                          opacity: enriching ? 0.6 : 1,
+                                          transition: 'all 0.15s ease',
+                                        }}
+                                      >
+                                        {enriching ? (
+                                          <Loader2 size={13} color="#0077b5" style={{ animation: 'spin 1s linear infinite' }} />
+                                        ) : enrichmentStatus === 'no_match' ? (
+                                          <AlertCircle size={13} color="#f59e0b" />
+                                        ) : enrichmentStatus === 'error' ? (
+                                          <AlertCircle size={13} color="#ef4444" />
+                                        ) : (
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="#94a3b8">
+                                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                                          </svg>
+                                        )}
+                                      </button>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
-                            )}
-                            {/* LinkedIn badge from Apollo enrichment */}
-                            {selectedReport.candidate?.linkedinUrl && (
-                              <a
-                                href={selectedReport.candidate.linkedinUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '3px 8px',
-                                  borderRadius: '4px',
-                                  background: '#0077b5',
-                                  color: 'white',
-                                  textDecoration: 'none',
-                                  fontSize: '10px',
-                                  fontWeight: 600
-                                }}
-                              >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                                </svg>
-                                LinkedIn
-                              </a>
-                            )}
-                            {/* Twitter from enrichment */}
-                            {selectedReport.candidate?.twitterUrl && (
-                              <a
-                                href={selectedReport.candidate.twitterUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '3px 8px',
-                                  borderRadius: '4px',
-                                  background: '#1DA1F2',
-                                  color: 'white',
-                                  textDecoration: 'none',
-                                  fontSize: '10px',
-                                  fontWeight: 600
-                                }}
-                              >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                                </svg>
-                                X
-                              </a>
-                            )}
-                          </div>
-                          {/* Company & Title from enrichment */}
-                          {selectedReport.candidate?.currentCompany && (
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              marginTop: '6px',
-                              fontSize: '11px',
-                              color: 'var(--text-secondary)'
-                            }}>
-                              {selectedReport.candidate.companyLogoUrl && (
-                                <img
-                                  src={selectedReport.candidate.companyLogoUrl}
-                                  alt=""
-                                  style={{ width: '16px', height: '16px', borderRadius: '3px', objectFit: 'contain' }}
-                                />
-                              )}
-                              <span>
-                                {selectedReport.candidate.currentTitle
-                                  ? `${selectedReport.candidate.currentTitle} @ ${selectedReport.candidate.currentCompany}`
-                                  : selectedReport.candidate.currentCompany
-                                }
-                              </span>
-                              {selectedReport.candidate.seniority && (
-                                <span style={{
-                                  fontSize: '8px',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  background: selectedReport.candidate.seniority.toLowerCase().includes('senior') ||
-                                    selectedReport.candidate.seniority.toLowerCase().includes('director') ||
-                                    selectedReport.candidate.seniority.toLowerCase().includes('vp')
-                                    ? '#fef3c7'
-                                    : 'var(--bg-tertiary)',
-                                  color: selectedReport.candidate.seniority.toLowerCase().includes('senior') ||
-                                    selectedReport.candidate.seniority.toLowerCase().includes('director') ||
-                                    selectedReport.candidate.seniority.toLowerCase().includes('vp')
-                                    ? '#b45309'
-                                    : 'var(--text-dim)',
-                                  fontWeight: 700,
-                                  textTransform: 'uppercase'
-                                }}>
-                                  {selectedReport.candidate.seniority}
-                                </span>
-                              )}
                             </div>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })()}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Last seen - absolutely positioned at bottom right, sitting on divider */}
+                  {/* Last seen - absolutely positioned at bottom right, sitting on divider */}
+                  {(patchedStats?.lastActive || selectedReport.metadata?.lastActive) && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '4px',
+                      right: '0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: getLastSeenColor(patchedStats?.lastActive || selectedReport.metadata.lastActive) }} />
+                      <span style={{ fontSize: '9px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                        {formatLastSeen(patchedStats?.lastActive || selectedReport.metadata.lastActive)}
+                      </span>
+                    </div>
+                  )}
+
                 </div>
 
-                {/* Enrich Button - shows when no LinkedIn data */}
-                {user?.tier === 'PRO' && !selectedReport.candidate?.linkedinUrl && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <button
-                      onClick={() => enrichCandidate(
-                        selectedReport.candidate?.id,
-                        selectedReport.candidate?.email || selectedReport.metadata?.email,
-                        selectedReport.candidate?.name || selectedReport.metadata?.userStats?.name
-                      )}
-                      disabled={enriching}
+                {/* Stats Bar (Repositories, Stars, Commits, Languages) */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: '8px',
+                  width: '100%',
+                  marginBottom: '8px'
+                  /* Removed horizontal padding to align with sections below */
+                }}>
+                  {[
+                    {
+                      label: 'REPOS',
+                      value: patchedStats?.totalRepos !== undefined ? patchedStats.totalRepos : (selectedReport.metadata?.userStats?.totalRepos || selectedReport.candidate?.public_repos || 0)
+                    },
+                    {
+                      label: 'COMMITS',
+                      value: patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (selectedReport.metadata?.userStats?.totalCommits || 0)
+                    },
+                    {
+                      label: 'LANGUAGES',
+                      value: patchedStats?.languages !== undefined && patchedStats.languages > 0
+                        ? patchedStats.languages
+                        : ((selectedReport.metadata?.userStats?.languages?.length || 0) > 0
+                          ? selectedReport.metadata.userStats.languages.length
+                          : (selectedReport.metadata?.verified_skills?.length > 0
+                            ? new Set(selectedReport.metadata.verified_skills.map((s: any) => (typeof s === 'string' ? s.split('|')[0] : s.name).trim())).size
+                            : 0)),
+                      tooltip: patchedStats?.languagesList?.join(', ') || selectedReport.metadata?.userStats?.languages?.join(', ')
+                    },
+                    {
+                      label: 'STARS',
+                      value: patchedStats?.totalStars !== undefined ? patchedStats.totalStars : (selectedReport.metadata?.userStats?.totalStars || 0)
+                    }
+                  ].map((stat, i) => (
+                    <div
+                      key={i}
+                      className="stat-card"
                       style={{
+                        background: 'white',
+                        aspectRatio: '1 / 1', /* Force perfect square */
+                        height: 'auto',
+                        width: '100%',
+                        padding: '0',
+                        borderRadius: '12px', /* Slightly more rounded for modern look */
+                        border: '1px solid var(--border)',
                         display: 'flex',
+                        flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '8px',
-                        padding: '10px 16px',
-                        borderRadius: '8px',
-                        background: enrichmentStatus === 'no_match'
-                          ? '#f59e0b'
-                          : enrichmentStatus === 'error'
-                            ? '#ef4444'
-                            : 'linear-gradient(135deg, #0077b5 0%, #00a0dc 100%)',
-                        border: 'none',
-                        color: 'white',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: enriching ? 'wait' : 'pointer',
-                        opacity: enriching ? 0.7 : 1,
-                        transition: 'all 0.2s ease',
-                        width: '100%'
-                      }}
-                    >
-                      {enriching ? (
-                        <>
-                          <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                          Searching Apollo database...
-                        </>
-                      ) : enrichmentStatus === 'no_match' ? (
-                        <>
-                          <AlertCircle size={14} />
-                          No LinkedIn profile found for this person
-                        </>
-                      ) : enrichmentStatus === 'error' ? (
-                        <>
-                          <AlertCircle size={14} />
-                          Enrichment failed - try again
-                        </>
-                      ) : (
-                        <>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                          </svg>
-                          Enrich with LinkedIn & Company Data
-                        </>
+                        gap: '4px',
+                        boxShadow: 'none', /* Flat look per pic 2 modern vibe */
+                        cursor: stat.tooltip ? 'help' : 'default',
+                        position: 'relative'
+                      }}>
+                      <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', lineHeight: '1' }}>{stat.value}</span>
+                      <span style={{ fontSize: '8px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', textAlign: 'center', whiteSpace: 'nowrap', letterSpacing: '0.5px' }}>{stat.label}</span>
+                      {stat.tooltip && (
+                        <div className="stat-tooltip" style={{
+                          position: 'absolute',
+                          bottom: '100%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          marginBottom: '8px',
+                          padding: '8px 12px',
+                          background: 'rgba(0,0,0,0.9)',
+                          color: 'white',
+                          fontSize: '11px',
+                          fontWeight: 500,
+                          borderRadius: '6px',
+                          whiteSpace: 'nowrap',
+                          opacity: 0,
+                          visibility: 'hidden',
+                          transition: 'opacity 0.2s, visibility 0.2s',
+                          pointerEvents: 'none',
+                          zIndex: 100
+                        }}>
+                          {stat.tooltip}
+                        </div>
                       )}
-                    </button>
-                    {enrichmentStatus === 'no_match' && (
-                      <p style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '6px', textAlign: 'center' }}>
-                        This person wasn't found in Apollo's database. They may not have a public professional profile.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="detail-section">
-                <button
-                  onClick={() => {
-                    setShowFullSummary(!showFullSummary);
-                    if (!showFullSummary) setShowDetailedSummary(false);
-                  }}
-                  className="section-header-btn"
-                >
-                  <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
-                  {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
-                </button>
-
-                {showFullSummary && (
-                  <div className="trajectory-box expanded">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                      <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
-                        {showDetailedSummary
-                          ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                          : (selectedReport.trajectorySummary || selectedReport.trajectory)
-                        }
-                      </p>
-                      <button
-                        className="copy-icon-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const text = showDetailedSummary
-                            ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
-                            : selectedReport.trajectorySummary;
-                          navigator.clipboard.writeText(text);
-                          setCopiedId('summary');
-                          setTimeout(() => setCopiedId(null), 2000);
-                        }}
-                      >
-                        {copiedId === 'summary' ? (
-                          <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
-                        ) : (
-                          <Copy size={14} strokeWidth={2} />
-                        )}
-                      </button>
                     </div>
+                  ))}
+                </div>
 
-                    {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
-                      <button
-                        className="view-more-btn"
-                        onClick={() => setShowDetailedSummary(!showDetailedSummary)}
-                        style={{ marginTop: '12px' }}
-                      >
-                        {showDetailedSummary ? 'view less' : 'view more'}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {selectedReport.metadata?.technical_signal && (
                 <div className="detail-section">
                   <button
                     onClick={() => {
-                      setShowTechnicalSignal(!showTechnicalSignal);
-                      if (!showTechnicalSignal) setShowDetailedTechnical(false);
+                      setShowFullSummary(!showFullSummary);
+                      if (!showFullSummary) setShowDetailedSummary(false);
                     }}
                     className="section-header-btn"
                   >
-                    <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
-                    {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+                    <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>SKILL OVERVIEW</h3>
+                    {showFullSummary ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
                   </button>
 
-                  {showTechnicalSignal && (
-                    <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                  {showFullSummary && (
+                    <div className="trajectory-box expanded">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                        <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
-                          {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                            ? selectedReport.metadata.technical_signal_detailed
-                            : selectedReport.metadata.technical_signal
+                        <p className="trajectory-text" style={{ flex: 1, margin: 0 }}>
+                          {showDetailedSummary
+                            ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                            : (selectedReport.trajectorySummary || selectedReport.trajectory)
                           }
                         </p>
                         <button
                           className="copy-icon-btn"
                           onClick={(e) => {
                             e.stopPropagation();
-                            const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
-                              ? selectedReport.metadata.technical_signal_detailed
-                              : selectedReport.metadata.technical_signal;
+                            const text = showDetailedSummary
+                              ? (selectedReport.recruiterSummary || selectedReport.recruiter_summary)
+                              : selectedReport.trajectorySummary;
                             navigator.clipboard.writeText(text);
-                            setCopiedId('signal');
+                            setCopiedId('summary');
                             setTimeout(() => setCopiedId(null), 2000);
                           }}
                         >
-                          {copiedId === 'signal' ? (
+                          {copiedId === 'summary' ? (
                             <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
                           ) : (
                             <Copy size={14} strokeWidth={2} />
@@ -3884,48 +3990,160 @@ function App() {
                         </button>
                       </div>
 
-                      {selectedReport.metadata.technical_signal_detailed && (
+                      {(selectedReport.recruiterSummary || selectedReport.recruiter_summary) && (
                         <button
                           className="view-more-btn"
-                          onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
+                          onClick={() => setShowDetailedSummary(!showDetailedSummary)}
                           style={{ marginTop: '12px' }}
                         >
-                          {showDetailedTechnical ? 'view less' : 'view more'}
+                          {showDetailedSummary ? 'view less' : 'view more'}
                         </button>
                       )}
                     </div>
                   )}
                 </div>
-              )
-              }
 
-              {
-                selectedReport.metadata?.verified_skills?.length > 0 && (
+                {selectedReport.metadata?.technical_signal && (
                   <div className="detail-section">
-                    <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
-                    <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>SKILLS VERIFIED FROM CODE</h3>
+                    <button
+                      onClick={() => {
+                        setShowTechnicalSignal(!showTechnicalSignal);
+                        if (!showTechnicalSignal) setShowDetailedTechnical(false);
+                      }}
+                      className="section-header-btn"
+                    >
+                      <h3 className="section-title" style={{ marginBottom: 0, textTransform: 'uppercase' }}>TECHNICAL SIGNAL</h3>
+                      {showTechnicalSignal ? <ChevronDown size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
+                    </button>
+
+                    {showTechnicalSignal && (
+                      <div className="trajectory-box expanded" style={{ background: 'rgba(33, 150, 243, 0.08)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                          <p className="trajectory-text" style={{ margin: 0, fontWeight: 500, flex: 1 }}>
+                            {showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                              ? selectedReport.metadata.technical_signal_detailed
+                              : selectedReport.metadata.technical_signal
+                            }
+                          </p>
+                          <button
+                            className="copy-icon-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const text = showDetailedTechnical && selectedReport.metadata.technical_signal_detailed
+                                ? selectedReport.metadata.technical_signal_detailed
+                                : selectedReport.metadata.technical_signal;
+                              navigator.clipboard.writeText(text);
+                              setCopiedId('signal');
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                          >
+                            {copiedId === 'signal' ? (
+                              <BadgeCheck size={14} strokeWidth={2} color="var(--accent)" />
+                            ) : (
+                              <Copy size={14} strokeWidth={2} />
+                            )}
+                          </button>
+                        </div>
+
+                        {selectedReport.metadata.technical_signal_detailed && (
+                          <button
+                            className="view-more-btn"
+                            onClick={() => setShowDetailedTechnical(!showDetailedTechnical)}
+                            style={{ marginTop: '12px' }}
+                          >
+                            {showDetailedTechnical ? 'view less' : 'view more'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+                }
+
+                {
+                  selectedReport.metadata?.verified_skills?.length > 0 && (
+                    <div className="detail-section">
+                      <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}></div>
+                      <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>SKILLS VERIFIED FROM CODE</h3>
+                      <div className="merit-grid scrollable">
+                        {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
+                          const isExpanded = expandedSkills.includes(i);
+                          const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
+
+                          const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
+                          const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
+                          const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
+
+                          return (
+                            <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                              <div className="merit-header">
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                                  <span className="merit-title">{name}</span>
+                                </div>
+                                {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                              </div>
+                              {isExpanded && (
+                                <div className="merit-detail">
+                                  {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
+                                  {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )
+                }
+
+
+                {selectedReport.meritPoints?.length > 0 && !(selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) && (
+                  <div className="detail-section">
+                    <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
+                    <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
                     <div className="merit-grid scrollable">
-                      {selectedReport.metadata.verified_skills.map((skill: any, i: number) => {
-                        const isExpanded = expandedSkills.includes(i);
-                        const toggle = () => setExpandedSkills(prev => prev.includes(i) ? prev.filter(idx => idx !== i) : [...prev, i]);
-
-                        const name = skill.name || skill.title || (typeof skill === 'string' ? skill.split('|')[0] : 'Skill');
-                        const level = skill.level || (typeof skill === 'string' ? skill.split('|')[1]?.trim() : '');
-                        const evidence = skill.evidence || (typeof skill === 'string' ? skill.split('|')[2]?.trim() : '');
-
+                      {selectedReport.meritPoints.map((point: any, i: number) => {
+                        const isExpanded = expandedMerits.includes(i);
+                        const isNegative = point.type === 'negative';
+                        const toggle = () => {
+                          setExpandedMerits((prev: number[]) =>
+                            prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
+                          );
+                        };
                         return (
-                          <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
+                          <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
                             <div className="merit-header">
                               <div style={{ display: 'flex', alignItems: 'center' }}>
-                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                                <span className="merit-title">{name}</span>
+                                {isNegative ? (
+                                  <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
+                                ) : (
+                                  <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
+                                )}
+                                <span className="merit-title">{point.title || point}</span>
                               </div>
                               {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                             </div>
                             {isExpanded && (
                               <div className="merit-detail">
-                                {level && <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Proficiency: {level}</div>}
-                                {evidence && <p style={{ margin: '0 0 12px 0' }}>{evidence}</p>}
+                                <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
+
+                                {point.business_impact && (
+                                  <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
+                                    <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
+                                    <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
+                                  </div>
+                                )}
+
+                                {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
+                                  <div>
+                                    <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
+                                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      ```
+                                      {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
+                                    </ul>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -3933,2042 +4151,1959 @@ function App() {
                       })}
                     </div>
                   </div>
-                )
-              }
+                )}
 
+                {/* Hidden Professional Report Template for PDF Generation */}
+                {(() => {
+                  // Professional B2B color palette - Airbnb/Notion inspired
+                  const colors = {
+                    white: '#ffffff',
+                    slate900: '#0f172a',
+                    slate700: '#334155',
+                    slate500: '#64748b',
+                    slate400: '#94a3b8',
+                    slate300: '#cbd5e1',
+                    slate200: '#e2e8f0',
+                    slate100: '#f1f5f9',
+                    slate50: '#f8fafc',
+                    teal: '#0d9488',
+                    tealLight: '#14b8a6',
+                    tealBg: '#f0fdfa'
+                  };
 
-              {selectedReport.meritPoints?.length > 0 && !(selectedReport.label?.toUpperCase()?.includes('GHOST') || selectedReport.insufficient_data) && (
-                <div className="detail-section">
-                  <div style={{ width: '100%', borderBottom: '1px solid var(--border)', marginTop: '8px', marginBottom: '8px' }}></div>
-                  <h3 className="section-title" style={{ marginBottom: '12px', marginTop: '4px' }}>HIGHLIGHTS</h3>
-                  <div className="merit-grid scrollable">
-                    {selectedReport.meritPoints.map((point: any, i: number) => {
-                      const isExpanded = expandedMerits.includes(i);
-                      const isNegative = point.type === 'negative';
-                      const toggle = () => {
-                        setExpandedMerits((prev: number[]) =>
-                          prev.includes(i) ? prev.filter((idx: number) => idx !== i) : [...prev, i]
-                        );
-                      };
-                      return (
-                        <div key={i} className={`merit-card ${isExpanded ? 'expanded' : ''} ${isNegative ? 'negative' : ''}`} onClick={toggle} style={{ cursor: 'pointer' }}>
-                          <div className="merit-header">
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              {isNegative ? (
-                                <AlertTriangle size={14} style={{ marginRight: '8px', color: '#ea580c' }} strokeWidth={1.5} />
-                              ) : (
-                                <BadgeCheck size={14} style={{ marginRight: '8px', color: 'var(--accent)' }} strokeWidth={1.5} />
-                              )}
-                              <span className="merit-title">{point.title || point}</span>
-                            </div>
-                            {isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                  const userStats = selectedReport.metadata?.userStats || selectedReport.candidate?.userStats || {};
+
+                  // Use patched stats if available (fetched from client-side GitHub API)
+                  const lastActive = patchedStats?.lastActive || selectedReport.metadata?.lastActive;
+                  let totalRepos = patchedStats?.totalRepos || userStats.totalRepos || userStats.public_repos || selectedReport.candidate?.public_repos || 0;
+                  let totalStars = userStats.totalStars || 0;
+                  const totalCommits = patchedStats?.totalCommits || userStats.totalCommits || 0;
+
+                  const verifiedSkills = selectedReport.metadata?.verified_skills || [];
+                  const meritPoints = selectedReport.meritPoints || [];
+
+                  // Robust Languages extraction
+                  let languages = userStats.languages || [];
+                  if ((!languages || languages.length === 0) && verifiedSkills.length > 0) {
+                    languages = [...new Set(verifiedSkills.map((s: any) => {
+                      const name = typeof s === 'string' ? s.split('|')[0] : (s.name || '');
+                      return name.trim();
+                    }))].filter(n => n);
+                  }
+
+                  const candidateName = userStats.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer';
+                  const handle = selectedReport.candidate?.githubHandle || '';
+                  const avatar = selectedReport.candidate?.avatar || `https://github.com/${handle}.png?size=400`;
+
+                  const archetypeRaw = selectedReport.label || selectedReport.archetype;
+                  const displayArchetype = (archetypeRaw && archetypeRaw.trim() ? archetypeRaw : 'Developer').replace(/^THE\s+/i, '');
+
+                  const linkedinUrl = selectedReport.candidate?.linkedinUrl;
+                  const email = selectedReport.metadata?.email;
+
+                  let assessmentSummary = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
+                  assessmentSummary = assessmentSummary.replace(/Classified as THE /i, 'Classified as ');
+                  if (!assessmentSummary) {
+                    assessmentSummary = `Classified as ${displayArchetype} based on comprehensive repository analysis, code quality patterns, and development activity.`;
+                  }
+
+                  // Dynamic Stats configuration
+                  const statsList = [];
+                  statsList.push({ label: 'Repos', value: totalRepos });
+                  statsList.push({ label: 'Stars', value: totalStars });
+
+                  statsList.push({ label: 'Commits', value: totalCommits });
+
+                  statsList.push({ label: 'Languages', value: languages.length });
+
+                  return (
+                    <div id="vibe-card-template" style={{
+                      position: 'fixed',
+                      left: '-9999px',
+                      top: 0,
+                      width: '595px',
+                      minHeight: '842px',
+                      background: colors.white,
+                      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                      color: colors.slate700,
+                      boxSizing: 'border-box',
+                      lineHeight: 1.5
+                    }
+                    }>
+                      {/* === HEADER === */}
+                      < div style={{
+                        padding: '40px 48px 32px',
+                        borderBottom: `1px solid ${colors.slate100}`
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '24px' }}>
+                          {/* Profile Photo */}
+                          <div style={{
+                            width: '88px',
+                            height: '88px',
+                            borderRadius: '16px',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                          }}>
+                            <img
+                              src={avatar}
+                              crossOrigin="anonymous"
+                              alt={candidateName}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => { e.currentTarget.style.background = colors.slate100; }}
+                            />
                           </div>
-                          {isExpanded && (
-                            <div className="merit-detail">
-                              <p style={{ margin: '0 0 12px 0' }}>{point.detail}</p>
 
-                              {point.business_impact && (
-                                <div style={{ background: isNegative ? 'rgba(234, 88, 12, 0.05)' : 'rgba(0, 0, 0, 0.03)', padding: '10px', borderRadius: '6px', marginBottom: '12px', borderLeft: `3px solid ${isNegative ? '#ea580c' : 'var(--accent)'}` }}>
-                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Impact</strong>
-                                  <span style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>{point.business_impact}</span>
-                                </div>
-                              )}
+                          {/* Name & Classification */}
+                          <div style={{ flex: 1 }}>
+                            <h1 style={{ fontSize: '28px', fontWeight: 700, color: colors.slate900, margin: 0, letterSpacing: '-0.5px', lineHeight: 1.2 }}>
+                              {candidateName}
+                            </h1>
 
-                              {point.evidence && Array.isArray(point.evidence) && point.evidence.length > 0 && (
-                                <div>
-                                  <strong style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', letterSpacing: '0.5px' }}>Evidence</strong>
-                                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    ```
-                                    {point.evidence.map((ev: string, idx: number) => <li key={idx}>{ev}</li>)}
-                                  </ul>
-                                </div>
-                              )}
+                            {/* Archetype Badge */}
+                            <div style={{ display: 'inline-flex', alignItems: 'center', background: colors.tealBg, border: `1px solid ${colors.teal}30`, borderRadius: '8px', padding: '8px 14px', marginTop: '12px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: colors.teal, letterSpacing: '0.5px' }}>
+                                {displayArchetype.toUpperCase()}
+                              </span>
                             </div>
-                          )}
+
+                            {/* Contact Links */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '16px', fontSize: '13px', color: colors.slate500 }}>
+                              {handle && <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>GitHub</a>}
+                              {linkedinUrl && <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>LinkedIn</a>}
+                              {email && <span style={{ color: colors.slate500 }}>{email}</span>}
+                            </div>
+                          </div>
+
+                          {/* Vibechekk Branding */}
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: colors.slate400 }}>Vibechekk</div>
+                            <div style={{ fontSize: '11px', color: colors.slate400, marginTop: '2px' }}>Technical Assessment</div>
+                          </div>
                         </div>
-                      );
-                    })}
+                      </div>
+
+                      {/* === CONTENT === */}
+                      <div style={{ padding: '32px 48px' }}>
+
+                        {/* Stats Row */}
+                        <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
+                          {statsList.map((stat, i) => (
+                            <div key={i} style={{ flex: 1, background: colors.slate50, borderRadius: '12px', padding: '16px 8px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '24px', fontWeight: 700, color: colors.slate900 }}>{typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</div>
+                              <div style={{ fontSize: '10px', fontWeight: 600, color: colors.slate500, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>{stat.label}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Technical Skills */}
+                        <div style={{ marginBottom: '32px' }}>
+                          <h2 style={{ fontSize: '11px', fontWeight: 700, color: colors.teal, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 12px 0' }}>Technical Skills</h2>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {languages.slice(0, 8).map((lang: string, i: number) => (
+                              <span key={`lang-${i}`} style={{ background: colors.teal, color: colors.white, padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>{lang}</span>
+                            ))}
+                            {verifiedSkills.slice(0, 8).map((skill: any, i: number) => {
+                              const skillName = typeof skill === 'string' ? skill.split('|')[0] : (skill.name || 'Skill');
+                              const isDup = languages.some((l: string) => l.toLowerCase() === skillName.toLowerCase());
+                              if (isDup) return null;
+                              return <span key={`skill-${i}`} style={{ background: colors.white, color: colors.slate700, padding: '5px 13px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, border: `1px solid ${colors.slate300}` }}>{skillName}</span>;
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Executive Summary */}
+                        <div style={{ marginBottom: '32px' }}>
+                          <h2 style={{ fontSize: '11px', fontWeight: 700, color: colors.teal, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 12px 0' }}>Executive Summary</h2>
+                          <div style={{ background: colors.slate50, borderRadius: '12px', padding: '20px 24px', borderLeft: `4px solid ${colors.teal}`, fontSize: '14px', color: colors.slate700, lineHeight: 1.7 }}>
+                            {assessmentSummary.length > 500 ? assessmentSummary.substring(0, assessmentSummary.substring(0, 500).lastIndexOf('.') + 1) || assessmentSummary.substring(0, 497) + '...' : assessmentSummary}
+                          </div>
+                        </div>
+
+                        {/* Key Strengths */}
+                        {meritPoints.length > 0 && (
+                          <div style={{ marginBottom: '32px' }}>
+                            <h2 style={{ fontSize: '11px', fontWeight: 700, color: colors.teal, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 16px 0' }}>Key Strengths</h2>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                              {meritPoints.slice(0, 4).map((point: any, i: number) => (
+                                <div key={i} style={{ background: colors.white, borderRadius: '12px', padding: '20px', border: `1px solid ${colors.slate200}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                                  <div style={{ fontSize: '14px', fontWeight: 600, color: colors.slate900, marginBottom: '8px', lineHeight: 1.3 }}>
+                                    {point.title || (typeof point === 'string' ? point : 'Technical Excellence')}
+                                  </div>
+                                  {point.detail && (
+                                    <div style={{ fontSize: '13px', color: colors.slate500, lineHeight: 1.5 }}>
+                                      {point.detail.length <= 120 ? point.detail : point.detail.substring(0, point.detail.substring(0, 117).lastIndexOf(' ')) + '...'}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* === FOOTER === */}
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px 48px', borderTop: `1px solid ${colors.slate100}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: colors.white }}>
+                        <div style={{ fontSize: '11px', color: colors.slate400 }}>Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+                        <div style={{ fontSize: '11px', color: colors.slate400 }}>vibechekk.dev</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+
+                <button
+                  className="download-card-btn"
+                  onClick={async () => {
+                    if (!user) {
+                      setSelectedReport(null);
+                      setActiveTab('settings');
+                    } else {
+                      const frontElement = document.getElementById('vibe-card-template');
+                      if (!frontElement) return;
+
+                      const btn = document.querySelector('.download-card-btn') as HTMLElement;
+                      const originalText = btn.innerHTML;
+                      btn.innerText = 'GENERATING PDF...';
+
+                      try {
+                        // Capture card
+                        const frontCanvas = await html2canvas(frontElement, {
+                          scale: 2,
+                          useCORS: true,
+                          backgroundColor: null
+                        });
+
+                        // Create Single Page PDF (Dynamic Height)
+                        const { jsPDF } = await import('jspdf');
+                        const canvasWidth = frontCanvas.width;
+                        const canvasHeight = frontCanvas.height;
+
+                        // Fix width to A4 standard (210mm), calculate height dynamically
+                        const pdfWidth = 210;
+                        const pdfHeight = (canvasHeight * pdfWidth) / canvasWidth;
+
+                        const pdf = new jsPDF({
+                          orientation: 'portrait',
+                          unit: 'mm',
+                          format: [pdfWidth, pdfHeight] // Custom page size matching content exactly
+                        });
+
+                        const frontImg = frontCanvas.toDataURL('image/png');
+                        pdf.addImage(frontImg, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+                        // --- Add Clickable Hotspots for Links ---
+                        // Coordinate calculation (mm):
+                        // Scale Factor = pdfWidth (210) / 595 (CSS px)
+
+                        const k = 210 / 595; // mm per css-pixel
+                        const startX = 160 * k; // 56.4mm
+                        const linkY = 135 * k; // approx 47.6mm
+                        const linkHeight = 6; // clickable height mm
+
+                        // GitHub Link ("GitHub" text is short approx 15mm)
+                        if (selectedReport.candidate?.githubHandle) {
+                          const linkWidth = 15;
+                          pdf.link(startX, linkY, linkWidth, linkHeight, { url: `https://github.com/${selectedReport.candidate.githubHandle}` });
+                        }
+
+                        // LinkedIn Link (Starts after gap 16px -> 5.6mm)
+                        const gap = 16 * k;
+                        const ghWidth = 15; // Width of "GitHub"
+                        if (selectedReport.candidate?.linkedinUrl) {
+                          const linkWidth = 20; // Width of "LinkedIn"
+                          pdf.link(startX + ghWidth + gap, linkY, linkWidth, linkHeight, { url: selectedReport.candidate.linkedinUrl });
+                        }
+
+                        const nameParts = (selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || 'Developer').split(' ');
+                        const fileName = `vibechekk - ${nameParts[0]} ${nameParts.slice(1).join(' ')}.pdf`.trim();
+                        pdf.save(fileName);
+
+                      } catch (err) {
+                        console.error('PDF Init failed:', err);
+                        alert('Failed to generate card. Please try again.');
+                      } finally {
+                        btn.innerHTML = originalText;
+                      }
+                    }
+                  }}
+                >
+                  <FileDown size={16} />
+                  DOWNLOAD REPORT
+                </button>
+              </div >
+            )
+
+
+          ) : (
+            <>
+              {activeTab === 'analyze' && (
+                <div className="search-box">
+                  <h2 className="section-title" style={{ textAlign: 'center', textTransform: 'uppercase' }}>CHEKK DEV SKILLS</h2>
+                  <div style={{ textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '-4px' }}>
+                    Analyze code quality & originality from GitHub
                   </div>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      className="input-field"
+                      placeholder="github.com/username or @handle"
+                      value={manualUrl}
+                      onChange={e => setManualUrl(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && manualUrl && handleManualSearch()}
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      onClick={handleManualSearch}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        padding: '4px',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'var(--text-dim)'
+                      }}
+                      title="New Analysis"
+                    >
+                      <Plus size={16} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                  <button className="primary-btn" onClick={handleManualSearch} disabled={!manualUrl} style={{ minHeight: '44px' }}>
+                    {manualUrl ? 'RUN' : (pendingHandles.length > 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                        <Clock size={16} className="spin" />
+                        <span>
+                          {pendingHandles.length === 1 ? (
+                            loadingStep === 1 ? 'FETCHING PROFILE...' :
+                              loadingStep === 2 ? 'LOCATING TOP REPOS...' :
+                                loadingStep === 3 ? 'ANALYZING CODE STRUCTURE...' :
+                                  loadingStep === 4 ? 'CHECKING ORIGINALITY...' :
+                                    loadingStep === 5 ? 'EXTRACTING EVIDENCE...' :
+                                      loadingStep === 6 ? 'GENERATING IMPACT ANALYSIS...' :
+                                        'FINALIZING REPORT...'
+                          ) : `PROCESSING ${pendingHandles.length} PROFILES...`}
+                        </span>
+                      </div>
+                    ) : 'RUN')}
+                  </button>
+                  {/* Only show usage limits and upgrade prompts for non-PRO users */}
+                  {user?.tier !== 'PRO' && (
+                    <>
+                      <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>
+                        {usageInfo ? (
+                          usageInfo.used >= usageInfo.limit ? (
+                            <span style={{ color: '#dc2626' }}>NO CHEKKS LEFT - {user ? 'UPGRADE TO PRO' : 'SIGN IN FOR MORE'}</span>
+                          ) : (
+                            `${usageInfo.limit - usageInfo.used} FREE CHEKK${usageInfo.limit - usageInfo.used !== 1 ? 'S' : ''} LEFT THIS WEEK`
+                          )
+                        ) : '2 FREE CHEKKS REMAINING'}
+                      </div>
+                      <div className="referral-card" style={{
+                        marginTop: '24px',
+                        padding: '20px',
+                        borderRadius: '16px',
+                        background: 'linear-gradient(135deg, #451a03 0%, #2a1005 100%)',
+                        color: 'white',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(69, 26, 3, 0.25)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}>
+                        {/* Decorative circles like the purple card */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '-40px',
+                          right: '-40px',
+                          width: '120px',
+                          height: '120px',
+                          borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.1)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '-20px',
+                          left: '-20px',
+                          width: '60px',
+                          height: '60px',
+                          borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.05)'
+                        }} />
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+                          <Zap size={15} fill="white" style={{ position: 'relative', top: '-0.5px' }} />
+                          <span style={{ fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Get Unlimited Chekks for Free</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9, position: 'relative' }}>
+                          Refer 3 friends and get unlimited chekks for one week free if they each run at least one chekk.
+                        </p>
+                        <button className="primary-btn" style={{
+                          marginTop: '8px',
+                          background: 'white',
+                          color: 'var(--accent)',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '0 16px',
+                          height: '34px',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          justifyContent: 'center',
+                          position: 'relative'
+                        }}
+                          onClick={() => {
+                            setActiveTab('settings');
+                            if (user) {
+                              setShowInviteModal(true);
+                            }
+                          }}
+                        >
+                          INVITE FRIENDS
+                        </button>
+                      </div>
+
+                      <button className="primary-btn" style={{
+                        marginTop: '24px',
+                        background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
+                        color: 'white',
+                        border: 'none',
+                        fontSize: '13px',
+                        height: '52px',
+                        fontWeight: 800,
+                        letterSpacing: '1px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                        borderRadius: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '100%'
+                      }}
+                        onClick={handleUpgradeToPro}
+                      >
+                        UPGRADE FOR UNLIMITED CHEKKS
+                      </button>
+
+                    </>
+                  )
+                  }
+
+                  {
+                    user?.tier === 'PRO' && (
+                      <div style={{ marginTop: '20px' }}>
+                        {proFeaturesContent}
+                      </div>
+                    )
+                  }
+
                 </div>
               )}
 
-              {/* Hidden Vibe Card Template for PDF Generation */}
-              {(() => {
-                // GitHub black theme with tier accent colors
-                const tierAccents: Record<string, { accent: string; accentLight: string }> = {
-                  'LEGENDARY': { accent: '#f59e0b', accentLight: '#fcd34d' },
-                  'ULTRA RARE': { accent: '#a855f7', accentLight: '#c4b5fd' },
-                  'RARE': { accent: '#3b82f6', accentLight: '#93c5fd' },
-                  'UNCOMMON': { accent: '#10b981', accentLight: '#6ee7b7' },
-                  'COMMON': { accent: '#6b7280', accentLight: '#9ca3af' }
-                };
-
-                const tier = getRarityFromLabel(selectedReport.label || selectedReport.archetype || '');
-                const a = tierAccents[tier] || tierAccents['COMMON'];
-
-                // GitHub-style colors
-                const bg = '#0d1117';
-                const bgLight = '#161b22';
-                const border = '#30363d';
-
-                return (
-                  <div id="vibe-card-template" style={{
-                    position: 'fixed',
-                    left: '-9999px',
-                    top: 0,
-                    width: '400px',
-                    height: '600px',
-                    background: bg,
-                    padding: '6px',
-                    boxSizing: 'border-box',
-                    fontFamily: "'Inter', 'Segoe UI', sans-serif"
-                  }}>
-                    {/* Card Frame */}
-                    <div style={{
-                      width: '100%',
-                      height: '100%',
-                      border: `3px solid ${a.accent}`,
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      background: bg
-                    }}>
-
-                      {/* Header with Avatar */}
-                      <div style={{
-                        background: bgLight,
-                        padding: '12px 16px',
-                        borderBottom: `2px solid ${a.accent}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '14px'
-                      }}>
-                        {/* Avatar in Header */}
-                        <div style={{
-                          width: '56px',
-                          height: '56px',
-                          borderRadius: '50%',
-                          border: `3px solid ${a.accent}`,
-                          overflow: 'hidden',
-                          flexShrink: 0,
-                          background: bg
-                        }}>
-                          <img
-                            src={selectedReport.candidate?.avatar || `https://github.com/${selectedReport.candidate?.githubHandle}.png?size=400`}
-                            crossOrigin="anonymous"
-                            alt="Avatar"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                          />
-                        </div>
-
-                        {/* Name and Tier */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ fontSize: '20px', fontWeight: 900, color: '#ffffff', lineHeight: 1.2 }}>
-                            {selectedReport.metadata?.reachability?.signal && <span style={{ marginRight: '8px' }} title={`Reachability: ${selectedReport.metadata.reachability.label}`}>{selectedReport.metadata.reachability.signal}</span>}
-                            {selectedReport.metadata?.userStats?.name || selectedReport.candidate?.name || selectedReport.candidate?.githubHandle || 'Developer'}
-                          </div>
-                          <EmailTooltip
-                            email={selectedReport.metadata?.email}
-                            handle={selectedReport.candidate?.githubHandle || ''}
-                            activeTooltip={emailTooltip}
-                            setActiveTooltip={setEmailTooltip}
-                          />
-                        </div>
-                        <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: `${a.accent}15`,
-                            border: `1px solid ${a.accent}40`,
-                            borderRadius: '6px',
-                            padding: '3px 8px'
-                          }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={a.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              {(() => {
-                                const label = (selectedReport.label || selectedReport.archetype || '').toUpperCase();
-                                if (label.includes('10X')) return <><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" /><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /></>;
-                                if (label.includes('ARCHITECT')) return <><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></>;
-                                if (label.includes('PROFESSOR')) return <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></>;
-                                if (label.includes('SPECIALIST')) return <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></>;
-                                if (label.includes('SYSTEMS')) return <><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /><rect x="9" y="9" width="6" height="6" /></>;
-                                if (label.includes('MAINTAINER')) return <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />;
-                                if (label.includes('BUILDER')) return <><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /></>;
-                                if (label.includes('CONTRIBUTOR')) return <><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /></>;
-                                if (label.includes('CRAFTSPERSON') || label.includes('CRAFTSMAN')) return <><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></>;
-                                if (label.includes('HIDDEN') || label.includes('GEM')) return <path d="M6 3h12l4 6-10 13L2 9Z" />;
-                                if (label.includes('TINKERER')) return <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />;
-                                if (label.includes('GRINDER')) return <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>;
-                                if (label.includes('HOBBYIST')) return <><path d="M17 8h1a4 4 0 1 1 0 8h-1" /><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" /></>;
-                                if (label.includes('EXPLORER')) return <><circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" /></>;
-                                if (label.includes('APPRENTICE')) return <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />;
-                                if (label.includes('GHOST')) return <><path d="M9 10h.01" /><path d="M15 10h.01" /><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" /></>;
-                                return <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />;
-                              })()}
-                            </svg>
-
-                            <span style={{
+              {activeTab === 'history' && (
+                <div className="history-list">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {archetypeFilter ? pluralizeArchetype(archetypeFilter) : 'History'}
+                    </h2>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      {archetypeFilter && (
+                        <button
+                          onClick={() => setArchetypeFilter(null)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent)',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            textTransform: 'uppercase'
+                          }}
+                        >
+                          Clear Filter
+                        </button>
+                      )}
+                      {history.length > 0 && (
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            onClick={() => setShowClearDropdown(!showClearDropdown)}
+                            style={{
+                              background: 'var(--bg-gray)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '6px',
+                              color: 'var(--text-dim)',
                               fontSize: '10px',
                               fontWeight: 700,
-                              color: a.accent,
-                              letterSpacing: '1px'
-                            }}>
-                              {(selectedReport.label || selectedReport.archetype || 'DEVELOPER').replace(/^THE\s+/i, '').toUpperCase()}
-                            </span>
-                          </div>
-
-                          {selectedReport.metadata?.lastActive && (
-                            <div style={{
-                              fontSize: '10px',
-                              fontWeight: 600,
-                              color: 'rgba(255,255,255,0.6)',
+                              cursor: 'pointer',
+                              textTransform: 'uppercase',
+                              padding: '4px 10px',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px'
+                            }}
+                          >
+                            <Trash2 size={12} />
+                            Clear
+                            <ChevronDown size={10} style={{ transform: showClearDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                          </button>
+                          {showClearDropdown && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '100%',
+                              right: 0,
+                              marginTop: '4px',
+                              background: 'white',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                              zIndex: 100,
+                              minWidth: '140px',
+                              overflow: 'hidden'
                             }}>
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: getLastSeenColor(selectedReport.metadata.lastActive) }} />
-                              Last seen {formatLastSeen(selectedReport.metadata.lastActive)}
+                              <button
+                                onClick={() => {
+                                  const filtered = history.filter((item: any) =>
+                                    !item.label?.toUpperCase().includes('GHOST') && item.rarity?.toUpperCase() !== 'GHOST'
+                                  );
+                                  setHistory(filtered);
+                                  setShowClearDropdown(false);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '10px 14px',
+                                  border: 'none',
+                                  background: 'none',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                  color: 'var(--text-main)',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-gray)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                              >
+                                <Ghost size={14} />
+                                Clear Ghosts
+                              </button>
+                              <div style={{ height: '1px', background: 'var(--border)' }} />
+                              <button
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to clear all history? This cannot be undone.')) {
+                                    setHistory([]);
+                                    setShowClearDropdown(false);
+                                  }
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '10px 14px',
+                                  border: 'none',
+                                  background: 'none',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                  color: '#ef4444',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.05)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                              >
+                                <Trash2 size={14} />
+                                Clear All
+                              </button>
                             </div>
                           )}
                         </div>
-                      </div>
-
-                      {/* Classification Reason Section */}
-                      <div style={{
-                        padding: '12px 14px',
-                        background: bg,
-                        borderBottom: `1px solid ${border}`
-                      }}>
-                        <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px', marginBottom: '6px' }}>
-                          LORE
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#e6edf3', lineHeight: 1.5 }}>
-                          {(() => {
-                            let reason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
-                            // Remove "THE " if present
-                            reason = reason.replace(/Classified as THE /i, 'Classified as ');
-
-                            if (reason) {
-                              const limit = 210; // Increased limit
-                              const minFill = limit * 0.5; // Only stop at period if it fills >50% of lines
-
-                              if (reason.length <= limit) return reason;
-
-                              // 1. Try to find a period that fills enough space
-                              const lastPeriod = reason.substring(0, limit).lastIndexOf('.');
-                              if (lastPeriod > minFill) return reason.substring(0, lastPeriod + 1);
-
-                              // 2. If no good period, try to cut at a comma (clause) near the end
-                              const lastComma = reason.substring(0, limit).lastIndexOf(',');
-                              if (lastComma > minFill) return reason.substring(0, lastComma) + '...';
-
-                              // 3. Fallback to max fill (word boundary)
-                              const lastSpace = reason.substring(0, limit - 3).lastIndexOf(' ');
-                              return reason.substring(0, lastSpace) + '...';
-                            }
-                            const archetype = (selectedReport.label || selectedReport.archetype || 'Developer').replace(/^THE\s+/i, '');
-                            return `Classified as ${archetype} based on repository analysis, code patterns, and development activity.`;
-                          })()}
-                        </div>
-                      </div>
-
-                      {/* Stats Bar */}
-                      <div style={{
-                        display: 'flex',
-                        background: bgLight,
-                        borderTop: `1px solid ${border}`,
-                        borderBottom: `1px solid ${border}`
-                      }}>
-                        {[
-                          { label: 'REPOS', value: selectedReport.metadata?.userStats?.totalRepos || '0' },
-                          { label: 'STARS', value: selectedReport.metadata?.userStats?.totalStars || '0' },
-                          { label: 'COMMITS', value: selectedReport.metadata?.userStats?.totalCommits || '0' }
-                        ].map((stat, i) => (
-                          <div key={i} style={{
-                            flex: 1,
-                            textAlign: 'center',
-                            padding: '12px 0',
-                            borderRight: i < 2 ? `1px solid ${border}` : 'none'
-                          }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#8b949e', letterSpacing: '1px' }}>{stat.label}</div>
-                            <div style={{ fontSize: '22px', fontWeight: 900, color: a.accent }}>{stat.value}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Info Section */}
-                      <div style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {/* Skills & Languages */}
-                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                          {/* Languages first */}
-                          {(selectedReport.metadata?.userStats?.languages || []).slice(0, 6).map((lang: string, i: number) => (
-                            <span key={`lang-${i}`} style={{
-                              background: a.accent,
-                              color: bg,
-                              padding: '3px 7px',
-                              borderRadius: '4px',
-                              fontSize: '8px',
-                              fontWeight: 700
-                            }}>
-                              {lang}
-                            </span>
-                          ))}
-                          {/* Then verified skills */}
-                          {(selectedReport.verified_skills || []).slice(0, 4).map((skill: any, i: number) => {
-                            const name = typeof skill === 'string' ? skill : skill.name;
-                            // Skip if already shown as language
-                            const langs = (selectedReport.metadata?.userStats?.languages || []).map((l: string) => l.toLowerCase());
-                            if (langs.includes(name?.toLowerCase())) return null;
-                            return (
-                              <span key={`skill-${i}`} style={{
-                                background: 'transparent',
-                                color: a.accent,
-                                padding: '3px 7px',
-                                borderRadius: '4px',
-                                fontSize: '8px',
-                                fontWeight: 700,
-                                border: `1px solid ${a.accent}`
-                              }}>
-                                {name}
-                              </span>
-                            );
-                          })}
-                        </div>
-
-                        {/* Rarity Tier Box */}
-                        <div style={{
-                          background: bgLight,
-                          borderRadius: '6px',
-                          padding: '10px 12px',
-                          border: `1px solid ${a.accent}`,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}>
-                          <div>
-                            <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1.5px' }}>RARITY TIER</div>
-                            <div style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', marginTop: '2px' }}>
-                              {tier}
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '8px', fontWeight: 700, color: '#8b949e', letterSpacing: '1px' }}>PERCENTILE</div>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: a.accent, marginTop: '2px' }}>
-                              {selectedReport.rarity_percentile || (() => {
-                                const t = tier;
-                                if (t === 'LEGENDARY') return 'Top 1%';
-                                if (t === 'ULTRA RARE') return 'Top 5%';
-                                if (t === 'RARE') return 'Top 15%';
-                                if (t === 'UNCOMMON') return 'Top 30%';
-                                return 'Top 50%';
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Signature Traits (show 3) */}
-                        {selectedReport.meritPoints && selectedReport.meritPoints.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {selectedReport.meritPoints.slice(0, 3).map((point: any, i: number) => (
-                              <div key={i} style={{
-                                background: '#f5f3e7',
-                                borderRadius: '6px',
-                                padding: '10px 12px',
-                                borderLeft: `4px solid ${a.accent}`,
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                              }}>
-                                <div style={{ fontSize: '8px', fontWeight: 700, color: a.accent, letterSpacing: '1px', marginBottom: '3px' }}>
-                                  {i === 0 ? '★ KEY STRENGTH' : i === 1 ? '◆ HIGHLIGHT' : '● NOTABLE'}
-                                </div>
-                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#1f2937', lineHeight: 1.3 }}>
-                                  {point.title || (typeof point === 'string' ? point : 'Excellence')}
-                                </div>
-                                {point.detail && (
-                                  <div style={{
-                                    fontSize: '9px',
-                                    color: '#6b7280',
-                                    marginTop: '3px',
-                                    lineHeight: 1.3,
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                  }}>
-                                    {(() => {
-                                      const text = point.detail;
-                                      if (!text) return '';
-                                      const limit = 85;
-                                      const minFill = limit * 0.5;
-
-                                      if (text.length <= limit) return text;
-
-                                      // 1. Prioritize period if it fills enough space
-                                      const lastPeriod = text.substring(0, limit).lastIndexOf('.');
-                                      if (lastPeriod > minFill) return text.substring(0, lastPeriod + 1);
-
-                                      // 2. Comma near end
-                                      const lastComma = text.substring(0, limit).lastIndexOf(',');
-                                      if (lastComma > minFill) return text.substring(0, lastComma) + '...';
-
-                                      // 3. Fallback to space
-                                      const lastSpace = text.substring(0, limit - 3).lastIndexOf(' ');
-                                      return text.substring(0, lastSpace) + '...';
-                                    })()}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                      </div>
-
-                      {/* Footer */}
-                      <div style={{
-                        padding: '8px 16px',
-                        textAlign: 'center',
-                        background: bgLight,
-                        borderTop: `1px solid ${border}`,
-                        marginTop: 'auto'
-                      }}>
-                        <div style={{
-                          fontSize: '8px',
-                          fontWeight: 700,
-                          color: '#8b949e',
-                          letterSpacing: '1px',
-                          textTransform: 'uppercase'
-                        }}>
-                          VIEW FULL PROFILE AT VIBECHEKK.DEV/{(selectedReport.candidate?.githubHandle || 'dev').toLowerCase()}
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
-                );
-              })()}
+                  {(() => {
+                    const filteredHistory = archetypeFilter
+                      ? history.filter((item: any) => item.label?.toUpperCase() === archetypeFilter.toUpperCase())
+                      : history;
 
+                    // Get handles that already have results in history
+                    const completedHandles = new Set(history.map((item: any) =>
+                      (item.candidate?.githubHandle || item.githubHandle || '').toLowerCase()
+                    ));
 
+                    // Combine BOTH manual (pendingHandles) and autochekk (pendingAnalyses) into one list
+                    const allPending = [
+                      ...pendingHandles.map(h => ({ handle: h, name: undefined as string | undefined, avatar: '', timestamp: Date.now() })),
+                      ...pendingAnalyses
+                    ];
 
+                    // Filter out skeleton cards ONLY if the handle is fully processed and in history
+                    // If it's pending, we should show the loader even if a past result exists (re-analysis case)
+                    // But standard logic is: if in history, don't show pending. 
+                    // Let's refine: Show pending if it's NOT in filtered history.
+                    const activePending = allPending.filter(p => true); // Show all pending states for now to debug visibility
 
-              <button
-                className="download-card-btn"
-                onClick={async () => {
-                  if (!user) {
-                    setSelectedReport(null);
-                    setActiveTab('settings');
-                  } else {
-                    const frontElement = document.getElementById('vibe-card-template');
-                    if (!frontElement) return;
+                    // Actually, let's stick to the filter but ensure it's case-insensitive and robust
+                    // const activePending = allPending.filter(p => !completedHandles.has(p.handle?.toLowerCase()));
 
-                    const btn = document.querySelector('.download-card-btn') as HTMLElement;
-                    const originalText = btn.innerHTML;
-                    btn.innerText = 'GENERATING PDF...';
-
-                    try {
-                      // Capture card (front only now)
-                      const frontCanvas = await html2canvas(frontElement, {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: null
-                      });
-
-                      // Create 1-page PDF
-                      const { jsPDF } = await import('jspdf');
-                      const pdf = new jsPDF({
-                        orientation: 'portrait',
-                        unit: 'mm',
-                        format: [63.5, 88.9]
-                      });
-
-                      const frontImg = frontCanvas.toDataURL('image/png');
-                      pdf.addImage(frontImg, 'PNG', 0, 0, 63.5, 88.9);
-
-                      pdf.save(`VibeCard-${selectedReport.candidate?.githubHandle || 'Dev'}.pdf`);
-
-                    } catch (err) {
-                      console.error('PDF Init failed:', err);
-                      alert('Failed to generate card. Please try again.');
-                    } finally {
-                      btn.innerHTML = originalText;
-                    }
-                  }
-                }}
-              >
-                <FileDown size={16} />
-                DOWNLOAD REPORT CARD
-              </button>
-            </div>
-          )
-
-
-        ) : (
-          <>
-            {activeTab === 'analyze' && (
-              <div className="search-box">
-                <h2 className="section-title" style={{ textAlign: 'center', textTransform: 'uppercase' }}>CHEKK DEV SKILLS</h2>
-                <div style={{ textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '-4px' }}>
-                  Analyze code quality & originality from GitHub
-                </div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    className="input-field"
-                    placeholder="github.com/username or @handle"
-                    value={manualUrl}
-                    onChange={e => setManualUrl(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && manualUrl && handleManualSearch()}
-                    style={{ paddingRight: '40px' }}
-                  />
-                  <button
-                    onClick={handleManualSearch}
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      padding: '4px',
-                      cursor: 'pointer',
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: 'var(--text-dim)'
-                    }}
-                    title="New Analysis"
-                  >
-                    <Plus size={16} strokeWidth={2.5} />
-                  </button>
-                </div>
-                <button className="primary-btn" onClick={handleManualSearch} disabled={!manualUrl} style={{ minHeight: '44px' }}>
-                  {manualUrl ? 'RUN' : (pendingHandles.length > 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-                      <Clock size={16} className="spin" />
-                      <span>
-                        {pendingHandles.length === 1 ? (
-                          loadingStep === 1 ? 'FETCHING PROFILE...' :
-                            loadingStep === 2 ? 'LOCATING TOP REPOS...' :
-                              loadingStep === 3 ? 'ANALYZING CODE STRUCTURE...' :
-                                loadingStep === 4 ? 'CHECKING ORIGINALITY...' :
-                                  loadingStep === 5 ? 'EXTRACTING EVIDENCE...' :
-                                    loadingStep === 6 ? 'GENERATING IMPACT ANALYSIS...' :
-                                      'FINALIZING REPORT...'
-                        ) : `PROCESSING ${pendingHandles.length} PROFILES...`}
-                      </span>
-                    </div>
-                  ) : 'RUN')}
-                </button>
-                {/* Only show usage limits and upgrade prompts for non-PRO users */}
-                {user?.tier !== 'PRO' && (
-                  <>
-                    <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>
-                      {usageInfo ? (
-                        usageInfo.used >= usageInfo.limit ? (
-                          <span style={{ color: '#dc2626' }}>NO CHEKKS LEFT - {user ? 'UPGRADE TO PRO' : 'SIGN IN FOR MORE'}</span>
-                        ) : (
-                          `${usageInfo.limit - usageInfo.used} FREE CHEKK${usageInfo.limit - usageInfo.used !== 1 ? 'S' : ''} LEFT THIS WEEK`
-                        )
-                      ) : '2 FREE CHEKKS REMAINING'}
-                    </div>
-                    <div className="referral-card" style={{
-                      marginTop: '24px',
-                      padding: '20px',
-                      borderRadius: '16px',
-                      background: 'linear-gradient(135deg, #451a03 0%, #2a1005 100%)',
-                      color: 'white',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(69, 26, 3, 0.25)',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}>
-                      {/* Decorative circles like the purple card */}
-                      <div style={{
-                        position: 'absolute',
-                        top: '-40px',
-                        right: '-40px',
-                        width: '120px',
-                        height: '120px',
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.1)'
-                      }} />
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '-20px',
-                        left: '-20px',
-                        width: '60px',
-                        height: '60px',
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.05)'
-                      }} />
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-                        <Zap size={15} fill="white" style={{ position: 'relative', top: '-0.5px' }} />
-                        <span style={{ fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Get Unlimited Chekks for Free</span>
-                      </div>
-                      <p style={{ margin: 0, fontSize: '11px', lineHeight: '1.5', fontWeight: 500, opacity: 0.9, position: 'relative' }}>
-                        Refer 3 friends and get unlimited chekks for one week free if they each run at least one chekk.
-                      </p>
-                      <button className="primary-btn" style={{
-                        marginTop: '8px',
-                        background: 'white',
-                        color: 'var(--accent)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '0 16px',
-                        height: '34px',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        justifyContent: 'center',
-                        position: 'relative'
-                      }}
-                        onClick={() => {
-                          setActiveTab('settings');
-                          if (user) {
-                            setShowInviteModal(true);
-                          }
-                        }}
-                      >
-                        INVITE FRIENDS
-                      </button>
-                    </div>
-
-                    <button className="primary-btn" style={{
-                      marginTop: '24px',
-                      background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-                      color: 'white',
-                      border: 'none',
-                      fontSize: '13px',
-                      height: '52px',
-                      fontWeight: 800,
-                      letterSpacing: '1px',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                      borderRadius: '16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '100%'
-                    }}
-                      onClick={handleUpgradeToPro}
-                    >
-                      UPGRADE FOR UNLIMITED CHEKKS
-                    </button>
-
-                  </>
-                )
-                }
-
-                {
-                  user?.tier === 'PRO' && (
-                    <div style={{ marginTop: '20px' }}>
-                      {proFeaturesContent}
-                    </div>
-                  )
-                }
-
-              </div>
-            )}
-
-            {activeTab === 'history' && (
-              <div className="history-list">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {archetypeFilter ? pluralizeArchetype(archetypeFilter) : 'History'}
-                  </h2>
-                  {archetypeFilter && (
-                    <button
-                      onClick={() => setArchetypeFilter(null)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--accent)',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        textTransform: 'uppercase'
-                      }}
-                    >
-                      Clear Filter
-                    </button>
-                  )}
-                </div>
-                {(() => {
-                  const filteredHistory = archetypeFilter
-                    ? history.filter((item: any) => item.label?.toUpperCase() === archetypeFilter.toUpperCase())
-                    : history;
-
-                  // Get handles that already have results in history
-                  const completedHandles = new Set(history.map((item: any) =>
-                    (item.candidate?.githubHandle || item.githubHandle || '').toLowerCase()
-                  ));
-
-                  // Combine BOTH manual (pendingHandles) and autochekk (pendingAnalyses) into one list
-                  const allPending = [
-                    ...pendingHandles.map(h => ({ handle: h, name: undefined as string | undefined, avatar: '', timestamp: Date.now() })),
-                    ...pendingAnalyses
-                  ];
-
-                  // Filter out skeleton cards for handles that already have results
-                  const activePending = allPending.filter(p =>
-                    !completedHandles.has(p.handle?.toLowerCase())
-                  );
-
-                  // Skeleton cards for pending analyses (only those not in history yet)
-                  const skeletonCards = activePending.map((pending, i) => (
-                    <div key={`pending-${pending.handle}-${i}`} className="history-item" style={{ opacity: 0.8, animation: 'pulse 1.5s infinite' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
-                        {pending.handle ? (
-                          <img
-                            src={`https://github.com/${pending.handle}.png?size=40`}
-                            alt={pending.handle}
-                            className="history-avatar"
-                            style={{ opacity: 0.7 }}
-                          />
-                        ) : (
-                          <div className="history-avatar-placeholder">
-                            <Loader2 size={20} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
-                          </div>
-                        )}
-                        <div className="history-meta">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span className="history-name">{pending.handle || 'Analyzing...'}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Loader2 size={12} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
-                            <div style={{
-                              background: 'linear-gradient(90deg, var(--border) 25%, var(--bg-gray) 50%, var(--border) 75%)',
-                              backgroundSize: '200% 100%',
-                              animation: 'shimmer 1.5s infinite',
-                              borderRadius: '6px',
-                              padding: '4px 10px',
-                              fontSize: '10px',
-                              color: 'var(--text-dim)'
-                            }}>
-                              ANALYZING...
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <ChevronRight size={14} color="var(--text-dim)" />
-                    </div>
-                  ));
-
-                  if (filteredHistory.length === 0 && pendingAnalyses.length === 0) {
-                    return (
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '40px 20px',
-                        textAlign: 'center',
-                        color: 'var(--text-dim)',
-                        background: 'white',
-                        borderRadius: '16px',
-                        border: '2px dashed var(--border)'
-                      }}>
-                        <div style={{
-                          width: '48px',
-                          height: '48px',
-                          borderRadius: '50%',
-                          background: 'var(--bg-gray)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginBottom: '12px'
-                        }}>
-                          <Ghost size={24} color="var(--primary)" />
-                        </div>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-                          {archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No chekks yet!'}
-                        </span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                          Search for a GitHub handle above to see results here.
-                        </span>
-                      </div>
-                    );
-                  }
-
-                  const historyCards = filteredHistory.map((item: any, i: number) => {
-                    const handle = item.candidate?.githubHandle || item.githubHandle || '';
-                    return (
-                      <div key={i} className={`history-item ${getRarityClass(item.rarity)}`} onClick={() => handleOpenReport(item)}>
+                    // Skeleton cards for pending analyses (only those not in history yet)
+                    const skeletonCards = activePending.map((pending, i) => (
+                      <div key={`pending-${pending.handle}-${i}`} className="history-item" style={{ opacity: 0.8, animation: 'pulse 1.5s infinite' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
-                          {handle ? (
+                          {pending.handle ? (
                             <img
-                              src={`https://github.com/${handle}.png?size=40`}
-                              alt={handle}
+                              src={`https://github.com/${pending.handle}.png?size=40`}
+                              alt={pending.handle}
                               className="history-avatar"
+                              style={{ opacity: 0.7 }}
                             />
                           ) : (
                             <div className="history-avatar-placeholder">
-                              <User size={20} color="var(--text-dim)" />
+                              <Loader2 size={20} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
                             </div>
                           )}
                           <div className="history-meta">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span className="history-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {item.metadata?.userStats?.name || item.candidate?.name || handle || 'Guest Profile'}
-                                {item.metadata?.claimed && <BadgeCheck size={12} color="#059669" fill="#d1fae5" />}
-                              </span>
-                              <EmailTooltip
-                                email={item.metadata?.email}
-                                handle={handle}
-                                activeTooltip={emailTooltip}
-                                setActiveTooltip={setEmailTooltip}
-                              />
+                              <span className="history-name">{pending.handle || 'Analyzing...'}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <ArchetypeIcon label={item.label || item.archetype || 'Profile'} rarity={item.rarity || item.tier || getRarityFromLabel(item.label || item.archetype)} size={12} />
+                              <Loader2 size={12} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
                               <div style={{
-                                padding: '4px 10px',
+                                background: 'linear-gradient(90deg, var(--border) 25%, var(--bg-gray) 50%, var(--border) 75%)',
+                                backgroundSize: '200% 100%',
+                                animation: 'shimmer 1.5s infinite',
                                 borderRadius: '6px',
+                                padding: '4px 10px',
                                 fontSize: '10px',
-                                fontWeight: 700,
-                                letterSpacing: '0.5px',
-                                textTransform: 'uppercase',
-                                color: getRarityColor(item.rarity || item.tier, item.label || item.archetype),
-                                background: `${getRarityColor(item.rarity || item.tier, item.label || item.archetype)}15`,
-                                border: `1px solid ${getRarityColor(item.rarity || item.tier, item.label || item.archetype)}30`
+                                color: 'var(--text-dim)'
                               }}>
-                                {stripThe(item.label || item.archetype) || 'Profile'}
+                                ANALYZING...
                               </div>
                             </div>
                           </div>
                         </div>
-                        <div className="history-action-icon">
-                          <ChevronRight size={16} color="var(--text-dim)" strokeWidth={2.5} />
-                        </div>
+                        <ChevronRight size={14} color="var(--text-dim)" />
                       </div>
-                    );
-                  });
+                    ));
 
-                  return <>{skeletonCards}{historyCards}</>;
-                })()}
-              </div>
-            )}
+                    if (filteredHistory.length === 0 && pendingHandles.length === 0 && pendingAnalyses.length === 0) {
+                      return (
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '40px 20px',
+                          textAlign: 'center',
+                          color: 'var(--text-dim)',
+                          background: 'white',
+                          borderRadius: '16px',
+                          border: '2px dashed var(--border)'
+                        }}>
+                          <div style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '50%',
+                            background: 'var(--bg-gray)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: '12px'
+                          }}>
+                            <Ghost size={24} color="var(--primary)" />
+                          </div>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                            {archetypeFilter ? `No ${archetypeFilter} profiles found.` : 'No chekks yet!'}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                            Search for a GitHub handle above to see results here.
+                          </span>
+                        </div>
+                      );
+                    }
 
-            {activeTab === 'analytics' && (
-              <div className="analytics-view">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <div>
-                    <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Pipeline Analytics
-                    </h2>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '6px' }}>
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#059669' }}>ACTIVE</span>
-                  </div>
+                    const historyCards = filteredHistory.map((item: any, i: number) => {
+                      const handle = item.candidate?.githubHandle || item.githubHandle || '';
+                      return (
+                        <div key={i} className={`history-item ${getRarityClass(item.rarity)}`} onClick={() => handleOpenReport(item)}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                            {handle ? (
+                              <img
+                                src={`https://github.com/${handle}.png?size=40`}
+                                alt={handle}
+                                className="history-avatar"
+                              />
+                            ) : (
+                              <div className="history-avatar-placeholder">
+                                <User size={20} color="var(--text-dim)" />
+                              </div>
+                            )}
+                            <div className="history-meta">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="history-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  {item.metadata?.userStats?.name || item.candidate?.name || handle || 'Guest Profile'}
+                                  {item.metadata?.claimed && <BadgeCheck size={12} color="#059669" fill="#d1fae5" />}
+                                </span>
+                                <EmailTooltip
+                                  email={item.metadata?.email}
+                                  handle={handle}
+                                  activeTooltip={emailTooltip}
+                                  setActiveTooltip={setEmailTooltip}
+                                />
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <ArchetypeIcon label={item.label || item.archetype || 'Profile'} rarity={item.rarity || item.tier || getRarityFromLabel(item.label || item.archetype)} size={12} />
+                                <div style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.5px',
+                                  textTransform: 'uppercase',
+                                  color: getRarityColor(item.rarity || item.tier, item.label || item.archetype),
+                                  background: `${getRarityColor(item.rarity || item.tier, item.label || item.archetype)}15`,
+                                  border: `1px solid ${getRarityColor(item.rarity || item.tier, item.label || item.archetype)}30`
+                                }}>
+                                  {stripThe(item.label || item.archetype) || 'Profile'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="history-action-icon">
+                            <ChevronRight size={16} color="var(--text-dim)" strokeWidth={2.5} />
+                          </div>
+                        </div>
+                      );
+                    });
+
+                    return <>{skeletonCards}{historyCards}</>;
+                  })()}
                 </div>
+              )}
 
-                {analyticsLoading ? (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '200px',
-                    flexDirection: 'column',
-                    gap: '12px'
-                  }}>
-                    <Loader2 size={24} className="spin" color="var(--accent)" />
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
+              {activeTab === 'analytics' && (
+                <div className="analytics-view">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <div>
+                      <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Analytics
+                      </h2>
+                    </div>
                   </div>
-                ) : analytics ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div className="stat-card hero" style={{ padding: '20px', background: 'white' }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                        <div className="stat-value" style={{ fontSize: '38px' }}>
-                          {tierFilter ? analytics.filteredTotal : analytics.totalChecks}
-                        </div>
-                        <TrendingUp size={16} color="var(--accent)" strokeWidth={3} style={{ marginBottom: '4px' }} />
-                      </div>
-                      <div className="stat-label" style={{ opacity: 0.7 }}>
-                        {tierFilter ? `${tierFilter} PROFILES` : 'GITHUB PROFILES PROCESSED'}
-                      </div>
-                    </div>
 
-                    <div className="filter-section">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>FILTER BY TIER</h3>
-                        {tierFilter && (
-                          <button
-                            onClick={() => setTierFilter(null)}
-                            style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: 'var(--accent)', fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            CLEAR
-                          </button>
-                        )}
+                  {analyticsLoading ? (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '200px',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}>
+                      <Loader2 size={24} className="spin" color="var(--accent)" />
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.5px' }}>LOADING...</span>
+                    </div>
+                  ) : analytics ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <div className="stat-card hero" style={{ padding: '20px', background: 'white' }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                          <div className="stat-value" style={{ fontSize: '38px' }}>
+                            {tierFilter ? analytics.filteredTotal : analytics.totalChecks}
+                          </div>
+                          <TrendingUp size={16} color="var(--accent)" strokeWidth={3} style={{ marginBottom: '4px' }} />
+                        </div>
+                        <div className="stat-label" style={{ opacity: 0.7 }}>
+                          {tierFilter ? `${tierFilter} PROFILES` : 'GITHUB PROFILES PROCESSED'}
+                        </div>
                       </div>
-                      <div className="tier-filter-container">
-                        {[
-                          { name: 'LEGENDARY', color: '#d97706' },
-                          { name: 'ULTRA RARE', color: '#7c3aed' },
-                          { name: 'RARE', color: '#0891b2' },
-                          { name: 'UNCOMMON', color: '#059669' },
-                          { name: 'COMMON', color: '#6b7280' }
-                        ].map(tier => {
-                          const isActive = tierFilter === tier.name;
-                          const count = analytics.tierBreakdown?.[tier.name] || 0;
-                          return (
+
+                      <div className="filter-section">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>FILTER BY TIER</h3>
+                          {tierFilter && (
                             <button
-                              key={tier.name}
-                              className={`tier-filter-btn ${isActive ? 'active' : ''}`}
-                              onClick={() => setTierFilter(isActive ? null : tier.name)}
-                              style={isActive ? {
-                                color: 'white',
-                                background: tier.color,
-                                borderColor: tier.color
-                              } : undefined}
+                              onClick={() => setTierFilter(null)}
+                              style={{ background: 'none', border: 'none', padding: 0, fontSize: '10px', color: 'var(--accent)', fontWeight: 700, cursor: 'pointer' }}
                             >
-                              {tier.name}
-                              <span className="count">{count}</span>
+                              CLEAR
                             </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="detail-section">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>
-                          {tierFilter ? `${tierFilter} DISTRIBUTION` : 'PROFILE DISTRIBUTION'}
-                        </h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '9px', color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.05em' }}>BY ARCHETYPE</span>
-                          {!user && <Lock size={10} color="var(--text-dim)" strokeWidth={3} />}
+                          )}
+                        </div>
+                        <div className="tier-filter-container">
+                          {[
+                            { name: 'LEGENDARY', color: '#d97706' },
+                            { name: 'ULTRA RARE', color: '#7c3aed' },
+                            { name: 'RARE', color: '#0891b2' },
+                            { name: 'UNCOMMON', color: '#059669' },
+                            { name: 'COMMON', color: '#6b7280' }
+                          ].map(tier => {
+                            const isActive = tierFilter === tier.name;
+                            const count = analytics.tierBreakdown?.[tier.name] || 0;
+                            return (
+                              <button
+                                key={tier.name}
+                                className={`tier-filter-btn ${isActive ? 'active' : ''}`}
+                                onClick={() => setTierFilter(isActive ? null : tier.name)}
+                                style={isActive ? {
+                                  color: 'white',
+                                  background: tier.color,
+                                  borderColor: tier.color
+                                } : undefined}
+                              >
+                                {tier.name}
+                                <span className="count">{count}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
 
-                      <div className={`locked-container ${!user ? 'locked' : ''}`}>
-                        <div className="history-list" style={{ gap: '10px', pointerEvents: !user ? 'none' : 'auto' }}>
-                          {Object.entries(analytics.distribution).length > 0 ? (
-                            Object.entries(analytics.distribution)
-                              .sort(([, a]: any, [, b]: any) => b - a)
-                              .map(([arch, count]: any) => {
-                                const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
-                                const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
-                                return (
-                                  <div
-                                    key={arch}
-                                    className="stat-card compact"
-                                    style={{ background: 'white' }}
-                                  >
-                                    <div className="stat-info">
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <div className="archetype-icon-small">
-                                          <ArchetypeIcon label={arch} size={14} />
+                      <div className="detail-section">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <h3 className="section-title" style={{ fontSize: '10px', marginBottom: 0 }}>
+                            {tierFilter ? `${tierFilter} DISTRIBUTION` : 'PROFILE DISTRIBUTION'}
+                          </h3>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '9px', color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.05em' }}>BY ARCHETYPE</span>
+                            {!user && <Lock size={10} color="var(--text-dim)" strokeWidth={3} />}
+                          </div>
+                        </div>
+
+                        <div className={`locked-container ${!user ? 'locked' : ''}`}>
+                          <div className="history-list" style={{ gap: '10px', pointerEvents: !user ? 'none' : 'auto' }}>
+                            {Object.entries(analytics.distribution).length > 0 ? (
+                              Object.entries(analytics.distribution)
+                                .sort(([, a]: any, [, b]: any) => b - a)
+                                .map(([arch, count]: any) => {
+                                  const baseTotal = tierFilter ? analytics.filteredTotal : analytics.totalChecks;
+                                  const percentage = Math.round((count / Math.max(baseTotal, 1)) * 100);
+                                  return (
+                                    <div
+                                      key={arch}
+                                      className="stat-card compact"
+                                      style={{ background: 'white' }}
+                                    >
+                                      <div className="stat-info">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                          <div className="archetype-icon-small">
+                                            <ArchetypeIcon label={arch} size={14} />
+                                          </div>
+                                          <span className="stat-arch-name">{pluralizeArchetype(arch)}</span>
                                         </div>
-                                        <span className="stat-arch-name">{pluralizeArchetype(arch)}</span>
+                                        <div style={{ textAlign: 'right' }}>
+                                          <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
+                                          <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
+                                        </div>
                                       </div>
-                                      <div style={{ textAlign: 'right' }}>
-                                        <span className="stat-count" style={{ display: 'block' }}>{count} {count === 1 ? 'profile' : 'profiles'}</span>
-                                        <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 800 }}>{percentage}%</span>
+                                      <div className="percentage-bar-bg" style={{ height: '4px' }}>
+                                        <div
+                                          className="percentage-bar-fill"
+                                          style={{
+                                            width: `${percentage}%`,
+                                            background: percentage > 1 ? 'var(--accent)' : 'var(--border)',
+                                            borderRadius: '2px'
+                                          }}
+                                        ></div>
                                       </div>
                                     </div>
-                                    <div className="percentage-bar-bg" style={{ height: '4px' }}>
-                                      <div
-                                        className="percentage-bar-fill"
-                                        style={{
-                                          width: `${percentage}%`,
-                                          background: percentage > 1 ? 'var(--accent)' : 'var(--border)',
-                                          borderRadius: '2px'
-                                        }}
-                                      ></div>
-                                    </div>
-                                  </div>
-                                );
-                              })
-                          ) : (
-                            <div style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '48px 24px',
-                              textAlign: 'center',
-                              gap: '16px'
-                            }}>
+                                  );
+                                })
+                            ) : (
                               <div style={{
-                                width: '64px',
-                                height: '64px',
-                                borderRadius: '20px',
-                                background: 'linear-gradient(135deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.06) 100%)',
                                 display: 'flex',
+                                flexDirection: 'column',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                border: '1px dashed var(--border)'
+                                padding: '48px 24px',
+                                textAlign: 'center',
+                                gap: '16px'
                               }}>
-                                <Search size={28} color="var(--text-dim)" strokeWidth={1.5} style={{ opacity: 0.5 }} />
+                                <div style={{
+                                  width: '64px',
+                                  height: '64px',
+                                  borderRadius: '20px',
+                                  background: 'linear-gradient(135deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.06) 100%)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  border: '1px dashed var(--border)'
+                                }}>
+                                  <Search size={28} color="var(--text-dim)" strokeWidth={1.5} style={{ opacity: 0.5 }} />
+                                </div>
+                                <div>
+                                  <p style={{
+                                    fontSize: '13px',
+                                    fontWeight: 700,
+                                    color: 'var(--text-main)',
+                                    margin: '0 0 6px 0',
+                                    letterSpacing: '-0.01em'
+                                  }}>
+                                    No {tierFilter || 'profiles'} discovered yet
+                                  </p>
+                                  <p style={{
+                                    fontSize: '11px',
+                                    color: 'var(--text-dim)',
+                                    margin: 0,
+                                    fontWeight: 500,
+                                    lineHeight: 1.5
+                                  }}>
+                                    Run analyses to populate your pipeline
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <p style={{
-                                  fontSize: '13px',
-                                  fontWeight: 700,
-                                  color: 'var(--text-main)',
-                                  margin: '0 0 6px 0',
-                                  letterSpacing: '-0.01em'
-                                }}>
-                                  No {tierFilter || 'profiles'} discovered yet
-                                </p>
-                                <p style={{
-                                  fontSize: '11px',
-                                  color: 'var(--text-dim)',
-                                  margin: 0,
-                                  fontWeight: 500,
-                                  lineHeight: 1.5
-                                }}>
-                                  Run analyses to populate your pipeline
-                                </p>
+                            )}
+                          </div>
+
+                          {!user && !authLoading && (
+                            <div className="paywall-overlay">
+                              <div className="paywall-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                <div style={{ marginBottom: '16px' }}>
+                                  <span style={{ fontSize: '10px', fontWeight: 700, opacity: 0.5, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                                    Unlock Full Pipeline Intelligence
+                                  </span>
+                                </div>
+                                <button className="paywall-btn" onClick={() => setActiveTab('settings')}>
+                                  <Lock size={14} strokeWidth={3} />
+                                  <span>Sign in to Unlock</span>
+                                </button>
                               </div>
                             </div>
                           )}
                         </div>
-
-                        {!user && !authLoading && (
-                          <div className="paywall-overlay">
-                            <div className="paywall-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                              <div style={{ marginBottom: '16px' }}>
-                                <span style={{ fontSize: '10px', fontWeight: 700, opacity: 0.5, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                                  Unlock Full Pipeline Intelligence
-                                </span>
-                              </div>
-                              <button className="paywall-btn" onClick={() => setActiveTab('settings')}>
-                                <Lock size={14} strokeWidth={3} />
-                                <span>Sign in to Unlock</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="stat-card empty">
-                    <p className="footer-info">Connect your ATS to view real-time data trends.</p>
-                  </div>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <div className="stat-card empty">
+                      <p className="footer-info">Connect your ATS to view real-time data trends.</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {activeTab === 'settings' && (
-              <div className="settings-scroll-container">
-                <div className="settings-group">
-                  <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHENTICATION REQUIRED'}</h2>
-                  {user ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      {/* Account Card */}
-                      <div style={{
-                        background: 'white',
-                        borderRadius: '16px',
-                        padding: '16px',
-                        border: '1px solid rgba(0,0,0,0.05)',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-                        position: 'relative',
-                        overflow: 'hidden'
-                      }}>
-                        {/* Decorative background element */}
+              {activeTab === 'settings' && (
+                <div className="settings-scroll-container">
+                  <div className="settings-group">
+                    <h2 style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600, margin: 0, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user ? 'Settings' : 'AUTHENTICATION REQUIRED'}</h2>
+                    {user ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {/* Account Card */}
                         <div style={{
-                          position: 'absolute',
-                          top: '-10%',
-                          right: '-5%',
-                          width: '120px',
-                          height: '120px',
-                          background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(196, 114, 30, 0.05) 100%)',
-                          borderRadius: '50%',
-                          filter: 'blur(20px)',
-                          zIndex: 0
-                        }} />
+                          background: 'white',
+                          borderRadius: '16px',
+                          padding: '16px',
+                          border: '1px solid rgba(0,0,0,0.05)',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          {/* Decorative background element */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '-10%',
+                            right: '-5%',
+                            width: '120px',
+                            height: '120px',
+                            background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(196, 114, 30, 0.05) 100%)',
+                            borderRadius: '50%',
+                            filter: 'blur(20px)',
+                            zIndex: 0
+                          }} />
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', position: 'relative', zIndex: 1 }}>
-                          {user.picture ? (
-                            <div style={{ position: 'relative' }}>
-                              <img
-                                src={user.picture}
-                                alt={user.name}
-                                style={{
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '18px', position: 'relative', zIndex: 1 }}>
+                            {user.picture ? (
+                              <div style={{ position: 'relative' }}>
+                                <img
+                                  src={user.picture}
+                                  alt={user.name}
+                                  style={{
+                                    width: '64px',
+                                    height: '64px',
+                                    borderRadius: '22px',
+                                    objectFit: 'cover',
+                                    border: '2px solid white',
+                                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                                  }}
+                                />
+                                <div style={{
+                                  position: 'absolute',
+                                  bottom: '2px',
+                                  right: '2px',
+                                  width: '14px',
+                                  height: '14px',
+                                  background: '#10b981',
+                                  border: '2.5px solid white',
+                                  borderRadius: '50%',
+                                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                                }} />
+                              </div>
+                            ) : (
+                              <div style={{ position: 'relative' }}>
+                                <div style={{
                                   width: '64px',
                                   height: '64px',
                                   borderRadius: '22px',
-                                  objectFit: 'cover',
-                                  border: '2px solid white',
-                                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
-                                }}
-                              />
-                              <div style={{
-                                position: 'absolute',
-                                bottom: '2px',
-                                right: '2px',
-                                width: '14px',
-                                height: '14px',
-                                background: '#10b981',
-                                border: '2.5px solid white',
-                                borderRadius: '50%',
-                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
-                              }} />
-                            </div>
-                          ) : (
-                            <div style={{ position: 'relative' }}>
-                              <div style={{
-                                width: '64px',
-                                height: '64px',
-                                borderRadius: '22px',
-                                background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)',
-                                color: 'white',
-                                fontSize: '26px',
-                                fontWeight: 800,
-                                position: 'relative',
-                                overflow: 'hidden'
-                              }}>
-                                {/* Inner glow/mesh effect */}
+                                  background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)',
+                                  color: 'white',
+                                  fontSize: '26px',
+                                  fontWeight: 800,
+                                  position: 'relative',
+                                  overflow: 'hidden'
+                                }}>
+                                  {/* Inner glow/mesh effect */}
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '-20%',
+                                    left: '-20%',
+                                    width: '140%',
+                                    height: '140%',
+                                    background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 70%)',
+                                    zIndex: 1
+                                  }} />
+                                  <span style={{ position: 'relative', zIndex: 2 }}>
+                                    {user.name ? user.name.charAt(0).toUpperCase() : <User size={28} />}
+                                  </span>
+                                </div>
                                 <div style={{
                                   position: 'absolute',
-                                  top: '-20%',
-                                  left: '-20%',
-                                  width: '140%',
-                                  height: '140%',
-                                  background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 70%)',
-                                  zIndex: 1
+                                  bottom: '2px',
+                                  right: '2px',
+                                  width: '14px',
+                                  height: '14px',
+                                  background: '#10b981',
+                                  border: '2.5px solid white',
+                                  borderRadius: '50%',
+                                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
                                 }} />
-                                <span style={{ position: 'relative', zIndex: 2 }}>
-                                  {user.name ? user.name.charAt(0).toUpperCase() : <User size={28} />}
-                                </span>
+                              </div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                                <h3 style={{
+                                  fontSize: '18px',
+                                  fontWeight: 800,
+                                  margin: 0,
+                                  color: '#1a1a1a',
+                                  letterSpacing: '-0.02em',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>
+                                  {user.name ? user.name.split(' ')[0] : 'User'}
+                                </h3>
                               </div>
                               <div style={{
-                                position: 'absolute',
-                                bottom: '2px',
-                                right: '2px',
-                                width: '14px',
-                                height: '14px',
-                                background: '#10b981',
-                                border: '2.5px solid white',
-                                borderRadius: '50%',
-                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
-                              }} />
-                            </div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                              <h3 style={{
-                                fontSize: '18px',
-                                fontWeight: 800,
-                                margin: 0,
-                                color: '#1a1a1a',
-                                letterSpacing: '-0.02em',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                marginTop: '4px',
+                                width: 'fit-content',
+                                padding: '3px 8px',
+                                background: user.tier === 'PRO'
+                                  ? 'rgba(245, 158, 11, 0.1)'
+                                  : 'rgba(124, 58, 237, 0.08)',
+                                borderRadius: '6px',
+                                border: user.tier === 'PRO'
+                                  ? '1px solid rgba(245, 158, 11, 0.2)'
+                                  : '1px solid rgba(124, 58, 237, 0.1)'
                               }}>
-                                {user.name ? user.name.split(' ')[0] : 'User'}
-                              </h3>
-                            </div>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              marginTop: '4px',
-                              width: 'fit-content',
-                              padding: '3px 8px',
-                              background: user.tier === 'PRO'
-                                ? 'rgba(245, 158, 11, 0.1)'
-                                : 'rgba(124, 58, 237, 0.08)',
-                              borderRadius: '6px',
-                              border: user.tier === 'PRO'
-                                ? '1px solid rgba(245, 158, 11, 0.2)'
-                                : '1px solid rgba(124, 58, 237, 0.1)'
-                            }}>
-                              <BadgeCheck
-                                size={10}
-                                color={user.tier === 'PRO' ? '#b45309' : '#7c3aed'}
-                                strokeWidth={2.5}
-                              />
-                              <span style={{
-                                fontSize: '9px',
-                                fontWeight: 800,
-                                color: user.tier === 'PRO' ? '#b45309' : '#7c3aed',
-                                letterSpacing: '0.04em'
-                              }}>
-                                AUTHENTICATED
-                              </span>
+                                <BadgeCheck
+                                  size={10}
+                                  color={user.tier === 'PRO' ? '#b45309' : '#7c3aed'}
+                                  strokeWidth={2.5}
+                                />
+                                <span style={{
+                                  fontSize: '9px',
+                                  fontWeight: 800,
+                                  color: user.tier === 'PRO' ? '#b45309' : '#7c3aed',
+                                  letterSpacing: '0.04em'
+                                }}>
+                                  AUTHENTICATED
+                                </span>
+                              </div>
                             </div>
                           </div>
+
+
                         </div>
 
+                        {/* Attributes hidden for PRO users as they are on search page */}
+                        {user?.tier !== 'PRO' && proFeaturesContent}
 
-                      </div>
-
-                      {/* Attributes hidden for PRO users as they are on search page */}
-                      {user?.tier !== 'PRO' && proFeaturesContent}
-
-                      {/* Authentication Perks */}
-                      <div style={{
-                        background: 'white',
-                        borderRadius: '16px',
-                        padding: '20px',
-                        border: '1px solid var(--border)'
-                      }}>
-                        <h4 style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: 'var(--text-dim)',
-                          margin: '0 0 16px 0',
-                          letterSpacing: '0.1em',
-                          textTransform: 'uppercase'
+                        {/* Authentication Perks */}
+                        <div style={{
+                          background: 'white',
+                          borderRadius: '16px',
+                          padding: '20px',
+                          border: '1px solid var(--border)'
                         }}>
-                          Authentication Perks
-                        </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          {/* Pipeline Analytics */}
-                          <button
-                            onClick={() => { setActiveTab('analytics'); }}
-                            style={{
-                              width: '100%',
-                              padding: '14px 16px',
-                              borderRadius: '12px',
-                              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.04) 100%)',
-                              border: '1px solid rgba(16, 185, 129, 0.2)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              transition: 'all 0.2s ease'
-                            }}
-                          >
-                            <div style={{
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '10px',
-                              background: 'rgba(16, 185, 129, 0.15)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <TrendingUp size={18} color="#10b981" strokeWidth={2} />
-                            </div>
-                            <div style={{ textAlign: 'left', flex: 1 }}>
-                              <span style={{ fontSize: '13px', fontWeight: 700, display: 'block', color: 'var(--text-main)' }}>
-                                Pipeline Analytics
-                              </span>
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                                View trends and archetypes
-                              </span>
-                            </div>
-                            <ChevronRight size={18} color="var(--text-dim)" />
-                          </button>
-
-                          {/* Get Free Chekks */}
-                          <button
-                            onClick={() => setShowInviteModal(true)}
-                            style={{
-                              width: '100%',
-                              padding: '14px 16px',
-                              borderRadius: '12px',
-                              background: 'linear-gradient(135deg, rgba(196, 114, 30, 0.08) 0%, rgba(180, 83, 9, 0.04) 100%)',
-                              border: '1px solid rgba(196, 114, 30, 0.2)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              transition: 'all 0.2s ease'
-                            }}
-                          >
-                            <div style={{
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '10px',
-                              background: 'rgba(196, 114, 30, 0.15)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <Heart size={18} color="var(--accent)" strokeWidth={2} />
-                            </div>
-                            <div style={{ textAlign: 'left', flex: 1 }}>
-                              <span style={{ fontSize: '13px', fontWeight: 700, display: 'block', color: 'var(--text-main)' }}>
-                                Get Free Chekks
-                              </span>
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                                Invite friends, earn +5 per signup
-                              </span>
-                            </div>
-                            <ChevronRight size={18} color="var(--text-dim)" />
-                          </button>
-
-                          {/* Claim Github */}
-                          <div style={{ position: 'relative' }}>
+                          <h4 style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: 'var(--text-dim)',
+                            margin: '0 0 16px 0',
+                            letterSpacing: '0.1em',
+                            textTransform: 'uppercase'
+                          }}>
+                            Authentication Perks
+                          </h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {/* Pipeline Analytics */}
                             <button
-                              onClick={() => {
-                                if (!githubLinked) {
-                                  const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID || 'PLACEHOLDER';
-                                  window.open(`https://github.com/login/oauth/authorize?client_id=${clientId}`, '_blank');
-                                }
-                              }}
+                              onClick={() => { setActiveTab('analytics'); }}
                               style={{
+                                width: '100%',
+                                padding: '14px 16px',
+                                borderRadius: '12px',
+                                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.04) 100%)',
+                                border: '1px solid rgba(16, 185, 129, 0.2)',
+                                cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '12px',
-                                padding: '14px 16px',
-                                borderRadius: '14px',
-                                background: githubLinked ? 'rgba(71, 85, 105, 0.12)' : 'rgba(36, 41, 46, 0.03)',
-                                border: githubLinked ? '1px solid rgba(71, 85, 105, 0.4)' : '1px solid rgba(36, 41, 46, 0.1)',
-                                cursor: githubLinked ? 'default' : 'pointer',
-                                width: '100%',
-                                transition: 'all 0.2s ease',
-                                outline: 'none'
+                                transition: 'all 0.2s ease'
                               }}
                             >
                               <div style={{
                                 width: '36px',
                                 height: '36px',
                                 borderRadius: '10px',
-                                background: githubLinked ? 'rgba(71, 85, 105, 0.25)' : 'rgba(36, 41, 46, 0.1)',
+                                background: 'rgba(16, 185, 129, 0.15)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center'
                               }}>
-                                {githubLinked ? (
-                                  <BadgeCheck size={18} color="#475569" strokeWidth={2} />
-                                ) : (
-                                  <Code size={18} color="#24292e" strokeWidth={2} />
-                                )}
+                                <TrendingUp size={18} color="#10b981" strokeWidth={2} />
                               </div>
                               <div style={{ textAlign: 'left', flex: 1 }}>
                                 <span style={{ fontSize: '13px', fontWeight: 700, display: 'block', color: 'var(--text-main)' }}>
-                                  {githubLinked ? 'GitHub Claimed' : 'Claim Github'}
+                                  Pipeline Analytics
                                 </span>
-                                {githubLinked ? (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      chrome.storage.local.remove(['auth_token'], () => {
-                                        setGithubLinked(false);
-                                        setGithubUsername(null);
-                                      });
-                                    }}
-                                    style={{
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      background: '#18181b',
-                                      border: '1px solid #27272a',
-                                      cursor: 'pointer',
-                                      fontSize: '9px',
-                                      fontWeight: 700,
-                                      color: 'white',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.3px',
-                                      lineHeight: 1.2,
-                                      marginTop: '4px'
-                                    }}
-                                  >
-                                    Unclaim
-                                  </button>
-                                ) : (
-                                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                                    Boost reports with private repos
-                                  </span>
-                                )}
+                                <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                  View trends and archetypes
+                                </span>
                               </div>
-                              {githubLinked ? (
-                                <div
-                                  className="github-info-tooltip"
-                                  style={{
-                                    position: 'relative',
-                                    cursor: 'help',
-                                    opacity: 0.5,
-                                    display: 'flex',
-                                    alignItems: 'center'
-                                  }}
-                                >
-                                  <Info size={18} color="var(--text-dim)" strokeWidth={2} />
+                              <ChevronRight size={18} color="var(--text-dim)" />
+                            </button>
+
+                            {/* Get Free Chekks */}
+                            <button
+                              onClick={() => setShowInviteModal(true)}
+                              style={{
+                                width: '100%',
+                                padding: '14px 16px',
+                                borderRadius: '12px',
+                                background: 'linear-gradient(135deg, rgba(196, 114, 30, 0.08) 0%, rgba(180, 83, 9, 0.04) 100%)',
+                                border: '1px solid rgba(196, 114, 30, 0.2)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <div style={{
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '10px',
+                                background: 'rgba(196, 114, 30, 0.15)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                <Heart size={18} color="var(--accent)" strokeWidth={2} />
+                              </div>
+                              <div style={{ textAlign: 'left', flex: 1 }}>
+                                <span style={{ fontSize: '13px', fontWeight: 700, display: 'block', color: 'var(--text-main)' }}>
+                                  Get Free Chekks
+                                </span>
+                                <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                  Invite friends, earn +5 per signup
+                                </span>
+                              </div>
+                              <ChevronRight size={18} color="var(--text-dim)" />
+                            </button>
+
+                            {/* Claim Github */}
+                            <div style={{ position: 'relative' }}>
+                              <button
+                                onClick={() => {
+                                  if (!githubLinked) {
+                                    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID || 'PLACEHOLDER';
+                                    window.open(`https://github.com/login/oauth/authorize?client_id=${clientId}`, '_blank');
+                                  }
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '12px',
+                                  padding: '14px 16px',
+                                  borderRadius: '14px',
+                                  background: githubLinked ? 'rgba(71, 85, 105, 0.12)' : 'rgba(36, 41, 46, 0.03)',
+                                  border: githubLinked ? '1px solid rgba(71, 85, 105, 0.4)' : '1px solid rgba(36, 41, 46, 0.1)',
+                                  cursor: githubLinked ? 'default' : 'pointer',
+                                  width: '100%',
+                                  transition: 'all 0.2s ease',
+                                  outline: 'none'
+                                }}
+                              >
+                                <div style={{
+                                  width: '36px',
+                                  height: '36px',
+                                  borderRadius: '10px',
+                                  background: githubLinked ? 'rgba(71, 85, 105, 0.25)' : 'rgba(36, 41, 46, 0.1)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  {githubLinked ? (
+                                    <BadgeCheck size={18} color="#475569" strokeWidth={2} />
+                                  ) : (
+                                    <Code size={18} color="#24292e" strokeWidth={2} />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left', flex: 1 }}>
+                                  <span style={{ fontSize: '13px', fontWeight: 700, display: 'block', color: 'var(--text-main)' }}>
+                                    {githubLinked ? 'GitHub Claimed' : 'Claim Github'}
+                                  </span>
+                                  {githubLinked ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        chrome.storage.local.remove(['auth_token'], () => {
+                                          setGithubLinked(false);
+                                          setGithubUsername(null);
+                                        });
+                                      }}
+                                      style={{
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: '#18181b',
+                                        border: '1px solid #27272a',
+                                        cursor: 'pointer',
+                                        fontSize: '9px',
+                                        fontWeight: 700,
+                                        color: 'white',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.3px',
+                                        lineHeight: 1.2,
+                                        marginTop: '4px'
+                                      }}
+                                    >
+                                      Unclaim
+                                    </button>
+                                  ) : (
+                                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 500 }}>
+                                      Boost reports with private repos
+                                    </span>
+                                  )}
+                                </div>
+                                {githubLinked ? (
                                   <div
-                                    className="tooltip-content"
+                                    className="github-info-tooltip"
                                     style={{
-                                      position: 'absolute',
-                                      bottom: '100%',
-                                      right: '0',
-                                      marginBottom: '6px',
-                                      padding: '6px 10px',
-                                      background: '#18181b',
-                                      color: 'white',
-                                      fontSize: '11px',
-                                      fontWeight: 500,
-                                      borderRadius: '6px',
-                                      whiteSpace: 'nowrap',
-                                      opacity: 0,
-                                      visibility: 'hidden',
-                                      transition: 'opacity 0.15s ease, visibility 0.15s ease',
-                                      pointerEvents: 'none',
-                                      zIndex: 100
+                                      position: 'relative',
+                                      cursor: 'help',
+                                      opacity: 0.5,
+                                      display: 'flex',
+                                      alignItems: 'center'
                                     }}
                                   >
-                                    @{githubUsername || 'your account'}
-                                  </div>
-                                  <style>{`
+                                    <Info size={18} color="var(--text-dim)" strokeWidth={2} />
+                                    <div
+                                      className="tooltip-content"
+                                      style={{
+                                        position: 'absolute',
+                                        bottom: '100%',
+                                        right: '0',
+                                        marginBottom: '6px',
+                                        padding: '6px 10px',
+                                        background: '#18181b',
+                                        color: 'white',
+                                        fontSize: '11px',
+                                        fontWeight: 500,
+                                        borderRadius: '6px',
+                                        whiteSpace: 'nowrap',
+                                        opacity: 0,
+                                        visibility: 'hidden',
+                                        transition: 'opacity 0.15s ease, visibility 0.15s ease',
+                                        pointerEvents: 'none',
+                                        zIndex: 100
+                                      }}
+                                    >
+                                      @{githubUsername || 'your account'}
+                                    </div>
+                                    <style>{`
                                     .github-info-tooltip:hover .tooltip-content {
                                       opacity: 1 !important;
                                       visibility: visible !important;
                                     }
                                   `}</style>
-                                </div>
-                              ) : (
-                                <ChevronRight size={18} color="var(--text-dim)" />
-                              )}
-                            </button>
+                                  </div>
+                                ) : (
+                                  <ChevronRight size={18} color="var(--text-dim)" />
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Upgrade to Pro Card */}
-                      {user.tier !== 'PRO' && (
-                        <div style={{
-                          background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
-                          borderRadius: '16px',
-                          padding: '24px',
-                          color: 'white',
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}>
-                          {/* Decorative circle */}
+                        {/* Upgrade to Pro Card */}
+                        {user.tier !== 'PRO' && (
                           <div style={{
-                            position: 'absolute',
-                            top: '-30px',
-                            right: '-30px',
-                            width: '120px',
-                            height: '120px',
-                            borderRadius: '50%',
-                            background: 'rgba(255,255,255,0.1)'
-                          }} />
-
-                          <div style={{ marginBottom: '16px' }}>
-                            <h4 style={{ fontSize: '15px', fontWeight: 800, margin: '0', letterSpacing: '-0.01em' }}>
-                              Upgrade to <span style={{
-                                padding: '2px 6px',
-                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                color: '#1a1a1a',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 900,
-                                letterSpacing: '0.05em',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginLeft: '6px',
-                                boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
-                                verticalAlign: 'middle',
-                                transform: 'translateY(-1px)'
-                              }}>PRO</span>
-                            </h4>
-                          </div>
-
-                          <div style={{ marginBottom: '20px' }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
-                              <BadgeCheck size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
-                              <div>
-                                <span style={{ fontSize: '12px', fontWeight: 800, display: 'block', letterSpacing: '0.05em' }}>UNLIMITED</span>
-                                <span style={{ fontSize: '10px', opacity: 0.75 }}>No chekk limits, analyze your entire ATS</span>
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
-                              <Binoculars size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
-                              <div>
-                                <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>AUTOCHEKK</span>
-                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Scan for Github profiles as you browse</span>
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
-                              <ClipboardList size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
-                              <div>
-                                <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>CHEKKLIST</span>
-                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Find 50 devs matched to your JD</span>
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                              <FileSpreadsheet size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
-                              <div>
-                                <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>BULKCHEKK</span>
-                                <span style={{ fontSize: '10px', opacity: 0.75 }}>Analyze hundreds of profiles from CSV</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={handleUpgradeToPro}
-                            style={{
-                              width: '100%',
-                              padding: '14px',
-                              borderRadius: '10px',
-                              background: 'white',
-                              color: '#7c3aed',
-                              fontSize: '12px',
-                              fontWeight: 800,
-                              border: 'none',
-                              cursor: 'pointer',
-                              letterSpacing: '0.03em'
-                            }}
-                          >
-                            UPGRADE NOW
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Sign Out Button */}
-                      <button
-                        onClick={logout}
-                        style={{
-                          width: '100%',
-                          padding: '14px',
-                          borderRadius: '12px',
-                          background: 'linear-gradient(180deg, #c2410c 0%, #9a3412 100%)',
-                          color: 'white',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          letterSpacing: '0.05em',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '10px',
-                          marginTop: '24px',
-                        }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.filter = 'brightness(1.1)';
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 12px 24px -4px rgba(154, 52, 18, 0.4)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.filter = 'none';
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)';
-                        }}
-                      >
-                        <LogOut size={16} strokeWidth={2.2} />
-                        SIGN OUT
-                      </button>
-
-                      {/* Admin-only Danger Zone - Only for timidayokayode@gmail.com */}
-                      {user?.email === 'timidayokayode@gmail.com' && (
-                        <div style={{ marginTop: '24px', marginBottom: '16px' }}>
-                          <h4 style={{ fontSize: '11px', fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Shield size={12} /> Admin Zone
-                          </h4>
-
-                          {/* Tier Toggle for Testing */}
-                          <div style={{
-                            padding: '12px',
-                            borderRadius: '10px',
-                            background: 'rgba(34, 197, 94, 0.05)',
-                            border: '1px solid rgba(34, 197, 94, 0.15)',
-                            marginBottom: '12px'
+                            background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
+                            borderRadius: '16px',
+                            padding: '24px',
+                            color: 'white',
+                            position: 'relative',
+                            overflow: 'hidden'
                           }}>
-                            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '8px' }}>
-                              Test Tier Override
+                            {/* Decorative circle */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '-30px',
+                              right: '-30px',
+                              width: '120px',
+                              height: '120px',
+                              borderRadius: '50%',
+                              background: 'rgba(255,255,255,0.1)'
+                            }} />
+
+                            <div style={{ marginBottom: '16px' }}>
+                              <h4 style={{ fontSize: '15px', fontWeight: 800, margin: '0', letterSpacing: '-0.01em' }}>
+                                Upgrade to <span style={{
+                                  padding: '2px 6px',
+                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                  color: '#1a1a1a',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 900,
+                                  letterSpacing: '0.05em',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  marginLeft: '6px',
+                                  boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+                                  verticalAlign: 'middle',
+                                  transform: 'translateY(-1px)'
+                                }}>PRO</span>
+                              </h4>
                             </div>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              {(['AUTHENTICATED', 'PRO'] as const).map((tier) => (
-                                <button
-                                  key={tier}
-                                  onClick={async () => {
-                                    // Update local user state
-                                    const newUser = { ...user, tier, usageCount: 0 };
-                                    setUser(newUser);
-                                    // Update chrome storage
-                                    chrome.storage.local.set({ user_data: newUser });
-                                    // Also update backend tier (for persistent testing)
-                                    try {
-                                      await fetch(`${BACKEND_URL}/api/admin/set-tier`, {
-                                        method: 'POST',
-                                        headers: {
-                                          'Content-Type': 'application/json',
-                                          'Authorization': `Bearer ${tokens.vibeToken}`
-                                        },
-                                        body: JSON.stringify({ tier, resetUsage: true })
-                                      });
-                                    } catch (e) {
-                                      console.log('Admin tier set (local only)');
-                                    }
-                                    // Update usage info - reset to 0 used
-                                    const tierLimits: Record<string, number> = { AUTHENTICATED: 3, PRO: Infinity };
-                                    setUsageInfo({ used: 0, limit: tierLimits[tier], tier, resetTime: 'weekly' });
-                                  }}
-                                  style={{
-                                    flex: 1,
-                                    padding: '8px',
-                                    borderRadius: '6px',
-                                    background: user?.tier === tier
-                                      ? tier === 'PRO' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                                        : 'var(--accent)'
-                                      : 'rgba(0,0,0,0.05)',
-                                    color: user?.tier === tier ? 'white' : 'var(--text-dim)',
-                                    fontSize: '10px',
-                                    fontWeight: 700,
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s'
-                                  }}
-                                >
-                                  {tier}
-                                </button>
-                              ))}
+
+                            <div style={{ marginBottom: '20px' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+                                <BadgeCheck size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                <div>
+                                  <span style={{ fontSize: '12px', fontWeight: 800, display: 'block', letterSpacing: '0.05em' }}>UNLIMITED</span>
+                                  <span style={{ fontSize: '10px', opacity: 0.75 }}>No chekk limits, analyze your entire ATS</span>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+                                <Binoculars size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                <div>
+                                  <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>AUTOCHEKK</span>
+                                  <span style={{ fontSize: '10px', opacity: 0.75 }}>Scan for Github profiles as you browse</span>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+                                <ClipboardList size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                <div>
+                                  <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>CHEKKLIST</span>
+                                  <span style={{ fontSize: '10px', opacity: 0.75 }}>Find 50 devs matched to your JD</span>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                <FileSpreadsheet size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                <div>
+                                  <span style={{ fontSize: '12px', fontWeight: 700, display: 'block' }}>BULKCHEKK</span>
+                                  <span style={{ fontSize: '10px', opacity: 0.75 }}>Analyze hundreds of profiles from CSV</span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Clear Cache Button */}
-                          <button
-                            onClick={() => {
-                              if (window.confirm('Are you sure you want to clear all local data (history, caches, login)? This cannot be undone.')) {
-                                chrome.storage.local.clear(() => {
-                                  window.location.reload();
-                                });
-                              }
-                            }}
-                            style={{
-                              width: '100%',
-                              padding: '12px',
-                              borderRadius: '10px',
-                              background: 'rgba(239, 68, 68, 0.05)',
-                              color: '#ef4444',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              border: '1px solid rgba(239, 68, 68, 0.15)',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '8px'
-                            }}
-                          >
-                            <Trash size={14} />
-                            Clear Local Cache
-                          </button>
-                        </div>
-                      )}
-
-
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-                      <button
-                        onClick={() => handleGoogleLogin()}
-                        disabled={isLoggingIn}
-                        style={{
-                          width: '100%',
-                          padding: '12px',
-                          borderRadius: '10px',
-                          background: 'white',
-                          color: '#3c4043',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '12px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)',
-                          border: '1px solid #dadce0'
-                        }}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 18 18">
-                          <path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.49h4.84c-.21 1.12-.84 2.07-1.79 2.7v2.25h2.91c1.7-1.56 2.68-3.86 2.68-6.6z" />
-                          <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.25c-.81.54-1.85.87-3.05.87-2.34 0-4.33-1.58-5.03-3.71H.95v2.3C2.43 15.89 5.5 18 9 18z" />
-                          <path fill="#FBBC05" d="M3.97 10.73c-.18-.54-.28-1.12-.28-1.73s.1-1.19.28-1.73V4.97H.95C.35 6.19 0 7.56 0 9s.35 2.81.95 4.03l3.02-2.3z" />
-                          <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0 5.5 0 2.43 2.11.95 5.03L3.97 7.33C4.67 5.2 6.66 3.58 9 3.58z" />
-                        </svg>
-                        {isLoggingIn ? 'SIGNING IN...' : 'CONTINUE WITH GOOGLE'}
-                      </button>
-
-                      <div className="benefits-scroll-container" style={{ marginTop: '6px' }}>
-                        <div className="benefits-scroll-track">
-                          {[
-                            'Invite friends',
-                            'Save history',
-                            'See trends',
-                            'Full analytics',
-                            'Connect ATS',
-                            'Claim profile',
-                            'Invite friends',
-                            'Save history',
-                            'See trends',
-                            'Full analytics',
-                            'Connect ATS',
-                            'Claim profile'
-                          ].map((text, i) => (
-                            <span key={i} className="benefit-tag">
-                              <BadgeCheck size={12} color="var(--accent)" strokeWidth={2.5} />
-                              {text}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Tier Showcase */}
-                      <div className="tier-showcase" style={{
-                        marginTop: '80px',
-                        padding: '16px 0'
-                      }}>
-                        <p style={{
-                          fontSize: '9px',
-                          color: 'var(--text-dim)',
-                          margin: '0 0 14px 0',
-                          fontWeight: 700,
-                          letterSpacing: '0.1em',
-                          textTransform: 'uppercase',
-                          textAlign: 'center'
-                        }}>DEV RARITY TIERS</p>
-
-                        <div style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '8px',
-                          justifyContent: 'center'
-                        }}>
-                          {[
-                            { name: 'LEGENDARY', color: '#d97706', glow: 'rgba(180, 83, 9, 0.3)' },
-                            { name: 'ULTRA RARE', color: '#7c3aed', glow: 'rgba(124, 58, 237, 0.25)' },
-                            { name: 'RARE', color: '#0891b2', glow: 'rgba(8, 145, 178, 0.2)' },
-                            { name: 'UNCOMMON', color: '#059669', glow: 'rgba(5, 150, 105, 0.2)' },
-                            { name: 'COMMON', color: '#6b7280', glow: 'rgba(107, 114, 128, 0.15)' }
-                          ].map((tier) => (
-                            <div
-                              key={tier.name}
-                              className="tier-showcase-badge"
+                            <button
+                              onClick={handleUpgradeToPro}
                               style={{
-                                padding: '6px 12px',
-                                borderRadius: '6px',
-                                background: `linear-gradient(135deg, ${tier.color}15 0%, ${tier.color}08 100%)`,
-                                border: `1px solid ${tier.color}20`,
-                                boxShadow: `0 2px 8px ${tier.glow}`,
-                                fontSize: '9px',
+                                width: '100%',
+                                padding: '14px',
+                                borderRadius: '10px',
+                                background: 'white',
+                                color: '#7c3aed',
+                                fontSize: '12px',
                                 fontWeight: 800,
-                                color: tier.color,
-                                letterSpacing: '0.05em',
-                                cursor: 'default',
-                                transition: 'all 0.2s ease'
+                                border: 'none',
+                                cursor: 'pointer',
+                                letterSpacing: '0.03em'
                               }}
                             >
-                              {tier.name}
+                              UPGRADE NOW
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Sign Out Button */}
+                        <button
+                          onClick={logout}
+                          style={{
+                            width: '100%',
+                            padding: '14px',
+                            borderRadius: '12px',
+                            background: 'linear-gradient(180deg, #c2410c 0%, #9a3412 100%)',
+                            color: 'white',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '10px',
+                            marginTop: '24px',
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.filter = 'brightness(1.1)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 12px 24px -4px rgba(154, 52, 18, 0.4)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.filter = 'none';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1), 0 8px 20px -4px rgba(154, 52, 18, 0.3)';
+                          }}
+                        >
+                          <LogOut size={16} strokeWidth={2.2} />
+                          SIGN OUT
+                        </button>
+
+                        {/* Admin-only Danger Zone - Only for timidayokayode@gmail.com */}
+                        {user?.email === 'timidayokayode@gmail.com' && (
+                          <div style={{ marginTop: '24px', marginBottom: '16px' }}>
+                            <h4 style={{ fontSize: '11px', fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Shield size={12} /> Admin Zone
+                            </h4>
+
+                            {/* Tier Toggle for Testing */}
+                            <div style={{
+                              padding: '12px',
+                              borderRadius: '10px',
+                              background: 'rgba(34, 197, 94, 0.05)',
+                              border: '1px solid rgba(34, 197, 94, 0.15)',
+                              marginBottom: '12px'
+                            }}>
+                              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '8px' }}>
+                                Test Tier Override
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                {(['AUTHENTICATED', 'PRO'] as const).map((tier) => (
+                                  <button
+                                    key={tier}
+                                    onClick={async () => {
+                                      // Update local user state
+                                      const newUser = { ...user, tier, usageCount: 0 };
+                                      setUser(newUser);
+                                      // Update chrome storage
+                                      chrome.storage.local.set({ user_data: newUser });
+                                      // Also update backend tier (for persistent testing)
+                                      try {
+                                        await fetch(`${BACKEND_URL}/api/admin/set-tier`, {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${tokens.vibeToken}`
+                                          },
+                                          body: JSON.stringify({ tier, resetUsage: true })
+                                        });
+                                      } catch (e) {
+                                        console.log('Admin tier set (local only)');
+                                      }
+                                      // Update usage info - reset to 0 used
+                                      const tierLimits: Record<string, number> = { AUTHENTICATED: 3, PRO: Infinity };
+                                      setUsageInfo({ used: 0, limit: tierLimits[tier], tier, resetTime: 'weekly' });
+                                    }}
+                                    style={{
+                                      flex: 1,
+                                      padding: '8px',
+                                      borderRadius: '6px',
+                                      background: user?.tier === tier
+                                        ? tier === 'PRO' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                                          : 'var(--accent)'
+                                        : 'rgba(0,0,0,0.05)',
+                                      color: user?.tier === tier ? 'white' : 'var(--text-dim)',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s'
+                                    }}
+                                  >
+                                    {tier}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          ))}
+
+                            {/* Clear Cache Button */}
+                            <button
+                              onClick={() => {
+                                if (window.confirm('Are you sure you want to clear all local data (history, caches, login)? This cannot be undone.')) {
+                                  chrome.storage.local.clear(() => {
+                                    window.location.reload();
+                                  });
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                borderRadius: '10px',
+                                background: 'rgba(239, 68, 68, 0.05)',
+                                color: '#ef4444',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                border: '1px solid rgba(239, 68, 68, 0.15)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
+                              }}
+                            >
+                              <Trash size={14} />
+                              Clear Local Cache
+                            </button>
+                          </div>
+                        )}
+
+
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                        <button
+                          onClick={() => handleGoogleLogin()}
+                          disabled={isLoggingIn}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: 'white',
+                            color: '#3c4043',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)',
+                            border: '1px solid #dadce0'
+                          }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 18 18">
+                            <path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.49h4.84c-.21 1.12-.84 2.07-1.79 2.7v2.25h2.91c1.7-1.56 2.68-3.86 2.68-6.6z" />
+                            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.25c-.81.54-1.85.87-3.05.87-2.34 0-4.33-1.58-5.03-3.71H.95v2.3C2.43 15.89 5.5 18 9 18z" />
+                            <path fill="#FBBC05" d="M3.97 10.73c-.18-.54-.28-1.12-.28-1.73s.1-1.19.28-1.73V4.97H.95C.35 6.19 0 7.56 0 9s.35 2.81.95 4.03l3.02-2.3z" />
+                            <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0 5.5 0 2.43 2.11.95 5.03L3.97 7.33C4.67 5.2 6.66 3.58 9 3.58z" />
+                          </svg>
+                          {isLoggingIn ? 'SIGNING IN...' : 'CONTINUE WITH GOOGLE'}
+                        </button>
+
+                        <div className="benefits-scroll-container" style={{ marginTop: '6px' }}>
+                          <div className="benefits-scroll-track">
+                            {[
+                              'Invite friends',
+                              'Save history',
+                              'See trends',
+                              'Full analytics',
+                              'Connect ATS',
+                              'Claim profile',
+                              'Invite friends',
+                              'Save history',
+                              'See trends',
+                              'Full analytics',
+                              'Connect ATS',
+                              'Claim profile'
+                            ].map((text, i) => (
+                              <span key={i} className="benefit-tag">
+                                <BadgeCheck size={12} color="var(--accent)" strokeWidth={2.5} />
+                                {text}
+                              </span>
+                            ))}
+                          </div>
                         </div>
 
-                        <p style={{
-                          fontSize: '11px',
-                          color: 'var(--text-dim)',
-                          margin: '14px 0 0 0',
-                          textAlign: 'center',
-                          fontWeight: 500
+                        {/* Tier Showcase */}
+                        <div className="tier-showcase" style={{
+                          marginTop: '80px',
+                          padding: '16px 0'
                         }}>
-                          Discover where your searches rank
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </>
-        )
-        }
-      </main>
+                          <p style={{
+                            fontSize: '9px',
+                            color: 'var(--text-dim)',
+                            margin: '0 0 14px 0',
+                            fontWeight: 700,
+                            letterSpacing: '0.1em',
+                            textTransform: 'uppercase',
+                            textAlign: 'center'
+                          }}>DEV RARITY TIERS</p>
 
-      {/* Invite Friends Modal */}
-      {
-        showInviteModal && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0,0,0,0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 1000,
-              padding: '20px'
-            }}
-            onClick={() => setShowInviteModal(false)}
-          >
-            <div
-              style={{
-                background: 'white',
-                borderRadius: '20px',
-                padding: '28px',
-                maxWidth: '340px',
-                width: '100%',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '20px',
-                  background: 'linear-gradient(135deg, var(--accent) 0%, #b45309 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px auto',
-                  boxShadow: '0 8px 24px rgba(196, 114, 30, 0.3)'
-                }}>
-                  <Heart size={28} color="white" strokeWidth={2} />
-                </div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', color: 'var(--text-main)' }}>
-                  Invite Friends
-                </h3>
-                {user?.tier !== 'PRO' && (
-                  <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
-                    Refer 3 friends who run a chekk and get <strong style={{ color: 'var(--accent)' }}>1 week unlimited</strong>!
-                  </p>
-                )}
-                {user?.tier === 'PRO' && (
-                  <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
-                    Share Vibechekk with your network
-                  </p>
-                )}
-                {/* Progress bar for non-Pro, Count for Pro */}
-                {referralInfo && (
-                  <div style={{ marginTop: '16px' }}>
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      fontSize: '11px',
-                      color: 'var(--text-dim)',
-                      marginBottom: '6px'
-                    }}>
-                      <span>{user?.tier === 'PRO' ? 'Referrals' : 'Progress'}</span>
-                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
-                        {user?.tier === 'PRO'
-                          ? referralInfo.activeReferrals
-                          : `${referralInfo.progressToReward.current}/${referralInfo.progressToReward.target}`
-                        }
-                      </span>
-                    </div>
-                    {user?.tier !== 'PRO' && (
-                      <div style={{
-                        height: '8px',
-                        background: 'var(--bg-gray)',
-                        borderRadius: '4px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${(referralInfo.progressToReward.current / referralInfo.progressToReward.target) * 100}%`,
-                          background: 'linear-gradient(90deg, var(--accent) 0%, #b45309 100%)',
-                          borderRadius: '4px',
-                          transition: 'width 0.3s ease'
-                        }} />
+                          <div style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                            justifyContent: 'center'
+                          }}>
+                            {[
+                              { name: 'LEGENDARY', color: '#d97706', glow: 'rgba(180, 83, 9, 0.3)' },
+                              { name: 'ULTRA RARE', color: '#7c3aed', glow: 'rgba(124, 58, 237, 0.25)' },
+                              { name: 'RARE', color: '#0891b2', glow: 'rgba(8, 145, 178, 0.2)' },
+                              { name: 'UNCOMMON', color: '#059669', glow: 'rgba(5, 150, 105, 0.2)' },
+                              { name: 'COMMON', color: '#6b7280', glow: 'rgba(107, 114, 128, 0.15)' }
+                            ].map((tier) => (
+                              <div
+                                key={tier.name}
+                                className="tier-showcase-badge"
+                                style={{
+                                  padding: '6px 12px',
+                                  borderRadius: '6px',
+                                  background: `linear-gradient(135deg, ${tier.color}15 0%, ${tier.color}08 100%)`,
+                                  border: `1px solid ${tier.color}20`,
+                                  boxShadow: `0 2px 8px ${tier.glow}`,
+                                  fontSize: '9px',
+                                  fontWeight: 800,
+                                  color: tier.color,
+                                  letterSpacing: '0.05em',
+                                  cursor: 'default',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                {tier.name}
+                              </div>
+                            ))}
+                          </div>
+
+                          <p style={{
+                            fontSize: '11px',
+                            color: 'var(--text-dim)',
+                            margin: '14px 0 0 0',
+                            textAlign: 'center',
+                            fontWeight: 500
+                          }}>
+                            Discover where your searches rank
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              <div style={{
-                background: 'var(--bg-gray)',
-                borderRadius: '12px',
-                padding: '14px 16px',
-                marginBottom: '16px',
+            </>
+          )
+          }
+        </main>
+
+        {/* Invite Friends Modal */}
+        {
+          showInviteModal && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.5)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px'
-              }}>
-                <div style={{
-                  flex: 1,
-                  fontSize: '12px',
-                  fontFamily: 'monospace',
-                  color: 'var(--text-main)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}>
-                  {referralInfo?.referralLink?.replace('https://', '') || (user?.id ? `vibechekk.dev/r/${user.id.slice(0, 8)}` : 'Loading...')}
-                </div>
-                <button
-                  onClick={() => {
-                    const code = referralInfo?.referralCode || user?.id?.slice(0, 8);
-                    if (!code) return;
-                    const link = `https://vibechekk.dev/r/${code}`;
-                    navigator.clipboard.writeText(link);
-                    setCopiedId('modal-referral');
-                    setTimeout(() => setCopiedId(null), 2000);
-                  }}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    background: 'var(--accent)',
-                    color: 'white',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    border: 'none',
-                    cursor: 'pointer',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '20px'
+              }}
+              onClick={() => setShowInviteModal(false)}
+            >
+              <div
+                style={{
+                  background: 'white',
+                  borderRadius: '20px',
+                  padding: '28px',
+                  maxWidth: '340px',
+                  width: '100%',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '20px',
+                    background: 'linear-gradient(135deg, var(--accent) 0%, #b45309 100%)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  {copiedId === 'modal-referral' ? (
-                    <><BadgeCheck size={14} /> COPIED</>
-                  ) : (
-                    <><Copy size={14} /> COPY</>
+                    justifyContent: 'center',
+                    margin: '0 auto 16px auto',
+                    boxShadow: '0 8px 24px rgba(196, 114, 30, 0.3)'
+                  }}>
+                    <Heart size={28} color="white" strokeWidth={2} />
+                  </div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', color: 'var(--text-main)' }}>
+                    Invite Friends
+                  </h3>
+                  {user?.tier !== 'PRO' && (
+                    <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
+                      Refer 3 friends who run a chekk and get <strong style={{ color: 'var(--accent)' }}>1 week unlimited</strong>!
+                    </p>
                   )}
-                </button>
-              </div>
+                  {user?.tier === 'PRO' && (
+                    <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
+                      Share Vibechekk with your network
+                    </p>
+                  )}
+                  {/* Progress bar for non-Pro, Count for Pro */}
+                  {referralInfo && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '11px',
+                        color: 'var(--text-dim)',
+                        marginBottom: '6px'
+                      }}>
+                        <span>{user?.tier === 'PRO' ? 'Referrals' : 'Progress'}</span>
+                        <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                          {user?.tier === 'PRO'
+                            ? referralInfo.activeReferrals
+                            : `${referralInfo.progressToReward.current}/${referralInfo.progressToReward.target}`
+                          }
+                        </span>
+                      </div>
+                      {user?.tier !== 'PRO' && (
+                        <div style={{
+                          height: '8px',
+                          background: 'var(--bg-gray)',
+                          borderRadius: '4px',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            height: '100%',
+                            width: `${(referralInfo.progressToReward.current / referralInfo.progressToReward.target) * 100}%`,
+                            background: 'linear-gradient(90deg, var(--accent) 0%, #b45309 100%)',
+                            borderRadius: '4px',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-              <button
-                onClick={() => setShowInviteModal(false)}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  borderRadius: '12px',
-                  background: 'var(--bg-gray)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                CLOSE
-              </button>
-            </div>
-          </div>
-        )
-      }
-
-      {/* Concurrent Analysis Modal */}
-      {
-        showConcurrentModal && (
-          <div className="modal-overlay" onClick={() => setShowConcurrentModal(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '320px', position: 'relative' }}>
-              <button
-                onClick={() => setShowConcurrentModal(false)}
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  color: 'var(--text-dim)'
-                }}
-              >
-                <X size={18} />
-              </button>
-
-              <div className="modal-body" style={{ textAlign: 'center', padding: '24px 8px 8px 8px' }}>
                 <div style={{
-                  width: '56px',
-                  height: '56px',
-                  background: 'rgba(124, 58, 237, 0.1)',
-                  borderRadius: '16px',
+                  background: 'var(--bg-gray)',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  marginBottom: '16px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px auto'
+                  gap: '12px'
                 }}>
-                  <Layers size={28} color="var(--accent)" strokeWidth={2} />
+                  <div style={{
+                    flex: 1,
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    color: 'var(--text-main)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {referralInfo?.referralLink?.replace('https://', '') || (user?.id ? `vibechekk.dev/r/${user.id.slice(0, 8)}` : 'Loading...')}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const code = referralInfo?.referralCode || user?.id?.slice(0, 8);
+                      if (!code) return;
+                      const link = `https://vibechekk.dev/r/${code}`;
+                      navigator.clipboard.writeText(link);
+                      setCopiedId('modal-referral');
+                      setTimeout(() => setCopiedId(null), 2000);
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: 'var(--accent)',
+                      color: 'white',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    {copiedId === 'modal-referral' ? (
+                      <><BadgeCheck size={14} /> COPIED</>
+                    ) : (
+                      <><Copy size={14} /> COPY</>
+                    )}
+                  </button>
                 </div>
-                <h4 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 8px 0', color: '#1a1a1a' }}>Run Concurrent Analyses</h4>
-                <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.5, margin: '0 0 24px 0' }}>
-                  Sign in to analyze multiple profiles at once and unlock your full pipeline speed.
-                </p>
+
                 <button
-                  className="primary-btn"
-                  onClick={() => {
-                    setShowConcurrentModal(false);
-                    setActiveTab('settings');
+                  onClick={() => setShowInviteModal(false)}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    background: 'var(--bg-gray)',
+                    color: 'var(--text-main)',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    border: 'none',
+                    cursor: 'pointer'
                   }}
-                  style={{ width: '100%', justifyContent: 'center' }}
                 >
-                  Sign In to Unlock
+                  CLOSE
                 </button>
               </div>
             </div>
-          </div>
-        )
-      }
-      {/* Limit Reached Paywall Modal */}
-      {
-        limitPaywallOpen && (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s ease-out'
-          }} onClick={() => setLimitPaywallOpen(false)}>
-            <div
-              className="paywall-overlay"
-              style={{ position: 'relative', width: '100%', maxWidth: '300px', padding: '32px 24px', animation: 'slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
-              onClick={e => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setLimitPaywallOpen(false)}
-                style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '4px' }}
-              >
-                <X size={18} />
-              </button>
+          )
+        }
 
-              <div style={{ marginBottom: '16px', background: 'rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '50%', display: 'inline-flex' }}>
-                <Gem size={32} color="#f59e0b" />
+        {/* Concurrent Analysis Modal */}
+        {
+          showConcurrentModal && (
+            <div className="modal-overlay" onClick={() => setShowConcurrentModal(false)}>
+              <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '320px', position: 'relative' }}>
+                <button
+                  onClick={() => setShowConcurrentModal(false)}
+                  style={{
+                    position: 'absolute',
+                    top: '12px',
+                    right: '12px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    color: 'var(--text-dim)'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+
+                <div className="modal-body" style={{ textAlign: 'center', padding: '24px 8px 8px 8px' }}>
+                  <div style={{
+                    width: '56px',
+                    height: '56px',
+                    background: 'rgba(124, 58, 237, 0.1)',
+                    borderRadius: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px auto'
+                  }}>
+                    <Layers size={28} color="var(--accent)" strokeWidth={2} />
+                  </div>
+                  <h4 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 8px 0', color: '#1a1a1a' }}>Run Concurrent Analyses</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--text-dim)', lineHeight: 1.5, margin: '0 0 24px 0' }}>
+                    Sign in to analyze multiple profiles at once and unlock your full pipeline speed.
+                  </p>
+                  <button
+                    className="primary-btn"
+                    onClick={() => {
+                      setShowConcurrentModal(false);
+                      setActiveTab('settings');
+                    }}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    Sign In to Unlock
+                  </button>
+                </div>
               </div>
-
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>Limit Reached</h3>
-              <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                You've hit your free analysis limit. <br />Upgrade to <strong>Pro</strong> for unlimited access.
-              </p>
-
-              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setLimitPaywallOpen(false); handleUpgradeToPro(); }}>
-                <Zap size={16} fill="white" />
-                Upgrade Now
-              </button>
             </div>
-          </div>
-        )
-      }
-      {/* Pro Feature Required Paywall Modal */}
-      {
-        proFeaturePaywallOpen && (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s ease-out'
-          }} onClick={() => setProFeaturePaywallOpen(null)}>
-            <div
-              className="paywall-overlay"
-              style={{ position: 'relative', width: '100%', maxWidth: '300px', padding: '32px 24px', animation: 'slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
-              onClick={e => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setProFeaturePaywallOpen(null)}
-                style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '4px' }}
+          )
+        }
+        {/* Limit Reached Paywall Modal */}
+        {
+          limitPaywallOpen && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s ease-out'
+            }} onClick={() => setLimitPaywallOpen(false)}>
+              <div
+                className="paywall-overlay"
+                style={{ position: 'relative', width: '100%', maxWidth: '300px', padding: '32px 24px', animation: 'slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                onClick={e => e.stopPropagation()}
               >
-                <X size={18} />
-              </button>
+                <button
+                  onClick={() => setLimitPaywallOpen(false)}
+                  style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '4px' }}
+                >
+                  <X size={18} />
+                </button>
 
-              <div style={{ marginBottom: '16px', background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%)', padding: '16px', borderRadius: '50%', display: 'inline-flex' }}>
-                <Lock size={32} color="#7c3aed" />
+                <div style={{ marginBottom: '16px', background: 'rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '50%', display: 'inline-flex' }}>
+                  <Gem size={32} color="#f59e0b" />
+                </div>
+
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>Limit Reached</h3>
+                <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                  You've hit your free analysis limit. <br />Upgrade to <strong>Pro</strong> for unlimited access.
+                </p>
+
+                <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setLimitPaywallOpen(false); handleUpgradeToPro(); }}>
+                  <Zap size={16} fill="white" />
+                  Upgrade Now
+                </button>
               </div>
-
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>Pro Feature</h3>
-              <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                This feature is exclusive to <strong>Pro</strong> subscribers. Upgrade to unlock <strong>{proFeaturePaywallOpen}</strong> and more features.
-              </p>
-
-              <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setProFeaturePaywallOpen(null); handleUpgradeToPro(); }}>
-                <Zap size={16} fill="white" />
-                Upgrade to Pro
-              </button>
             </div>
-          </div>
-        )
-      }
-    </div>
+          )
+        }
+        {/* Pro Feature Required Paywall Modal */}
+        {
+          proFeaturePaywallOpen && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s ease-out'
+            }} onClick={() => setProFeaturePaywallOpen(null)}>
+              <div
+                className="paywall-overlay"
+                style={{ position: 'relative', width: '100%', maxWidth: '300px', padding: '32px 24px', animation: 'slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setProFeaturePaywallOpen(null)}
+                  style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '4px' }}
+                >
+                  <X size={18} />
+                </button>
+
+                <div style={{ marginBottom: '16px', background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%)', padding: '16px', borderRadius: '50%', display: 'inline-flex' }}>
+                  <Lock size={32} color="#7c3aed" />
+                </div>
+
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>Pro Feature</h3>
+                <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                  This feature is exclusive to <strong>Pro</strong> subscribers. Upgrade to unlock <strong>{proFeaturePaywallOpen}</strong> and more features.
+                </p>
+
+                <button className="paywall-btn" style={{ width: '100%' }} onClick={() => { setProFeaturePaywallOpen(null); handleUpgradeToPro(); }}>
+                  <Zap size={16} fill="white" />
+                  Upgrade to Pro
+                </button>
+              </div>
+            </div>
+          )
+        }
+      </div >
+    </>
   );
 }
 
