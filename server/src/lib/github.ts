@@ -799,69 +799,80 @@ export const searchCandidates = async (token: string, criteria: any) => {
 
     try {
       // Use REST API instead of GraphQL - more permissive for broad queries
+      // DON'T sort by followers - we want diverse candidates, not just popular ones
       const response = await octokit.rest.search.users({
         q,
-        per_page: 100,
-        sort: 'followers',
-        order: 'desc'
+        per_page: 100
+        // No sort parameter - returns mixed results, better for finding hidden gems
       });
 
       console.log(`[Chekklist Search] Found ${response.data.items.length} users`);
 
-      // Fetch detailed data for each user (in parallel)
-      const detailedUsers = await Promise.all(
-        response.data.items.slice(0, 30).map(async (user: any) => { // Limit to 30 per query to avoid rate limits
-          try {
-            // Fetch user details with GraphQL for rich data
-            const detailQuery = `
-              query($login: String!) {
-                user(login: $login) {
-                  login
-                  name
-                  email
-                  avatarUrl
-                  bio
-                  location
-                  url
-                  updatedAt
-                  followers { totalCount }
-                  pullRequests(first: 1) { totalCount }
-                  issues(first: 1) { totalCount }
-                  starredRepositories(first: 1) { totalCount }
-                  contributionsCollection {
-                    totalCommitContributions
-                    contributionCalendar {
-                      totalContributions
-                      weeks {
-                        contributionDays {
-                          contributionCount
+      // Fetch detailed data in batches of 20 to avoid rate limits
+      // We need to analyze diverse candidates to find ones matching archetype/tier filters
+      const BATCH_SIZE = 20;
+      const MAX_USERS = 60; // Get 60 per query for better filtering
+      const usersToFetch = response.data.items.slice(0, MAX_USERS);
+      const detailedUsers: any[] = [];
+
+      for (let i = 0; i < usersToFetch.length; i += BATCH_SIZE) {
+        const batch = usersToFetch.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (user: any) => {
+            try {
+              // Fetch user details with GraphQL for rich data
+              const detailQuery = `
+                query($login: String!) {
+                  user(login: $login) {
+                    login
+                    name
+                    email
+                    avatarUrl
+                    bio
+                    location
+                    url
+                    updatedAt
+                    followers { totalCount }
+                    pullRequests(first: 1) { totalCount }
+                    issues(first: 1) { totalCount }
+                    starredRepositories(first: 1) { totalCount }
+                    contributionsCollection {
+                      totalCommitContributions
+                      contributionCalendar {
+                        totalContributions
+                        weeks {
+                          contributionDays {
+                            contributionCount
+                          }
                         }
                       }
                     }
-                  }
-                  repositories(first: 5, orderBy: {field: PUSHED_AT, direction: DESC}, privacy: PUBLIC) {
-                    nodes {
-                      name
-                      stargazerCount
-                      pushedAt
-                      primaryLanguage { name }
-                      description
+                    repositories(first: 5, orderBy: {field: PUSHED_AT, direction: DESC}, privacy: PUBLIC) {
+                      nodes {
+                        name
+                        stargazerCount
+                        pushedAt
+                        primaryLanguage { name }
+                        description
+                      }
                     }
                   }
                 }
-              }
-            `;
+              `;
 
-            const details: any = await octokit.graphql(detailQuery, { login: user.login });
-            return details.user;
-          } catch (err) {
-            console.error(`[Chekklist Search] Failed to fetch details for ${user.login}:`, err);
-            return null;
-          }
-        })
-      );
+              const details: any = await octokit.graphql(detailQuery, { login: user.login });
+              return details.user;
+            } catch (err) {
+              console.error(`[Chekklist Search] Failed to fetch details for ${user.login}`);
+              return null;
+            }
+          })
+        );
+        detailedUsers.push(...batchResults.filter((u: any) => u !== null));
+      }
 
-      return detailedUsers.filter((u: any) => u !== null);
+      console.log(`[Chekklist Search] Fetched details for ${detailedUsers.length} users`);
+      return detailedUsers;
     } catch (error: any) {
       console.error(`[Chekklist Search] Query failed:`, error.message);
       return [];
@@ -996,23 +1007,31 @@ export const searchCandidates = async (token: string, criteria: any) => {
     console.log(`[Chekklist Search] After fallbacks: ${results.length} candidates`);
   }
 
-  // Sort by combined signal: followers + stars
+  // Prepare candidates with quality metrics (but don't over-bias by popularity)
   results = results
     .map(user => ({
       ...user,
       totalStars: (user.repositories?.nodes || []).reduce((sum: number, r: any) => sum + (r?.stargazerCount || 0), 0),
       followerCount: user.followers?.totalCount || 0,
+      contributionCount: user.contributionsCollection?.totalCommitContributions || 0,
+      repoCount: (user.repositories?.nodes || []).length,
       hasRecentRepos: (user.repositories?.nodes || []).length > 0
     }))
     // Filter out low-quality candidates that will likely be GHOSTs (RELAXED filter)
     .filter(user => {
       // Must have public repos
       if (!user.hasRecentRepos) return false;
-      // Relaxed: Allow users with at least 1 follower OR any stars
-      if (user.totalStars === 0 && user.followerCount < 1) return false;
+      // Must have SOME activity (commits or stars or followers)
+      if (user.contributionCount === 0 && user.totalStars === 0 && user.followerCount < 1) return false;
       return true;
     })
-    .sort((a, b) => (b.followerCount + b.totalStars) - (a.followerCount + a.totalStars))
+    // Diversify: Sort by activity (contributions + repos) NOT popularity (followers)
+    // This finds ACTIVE developers, not just POPULAR ones
+    .sort((a, b) => {
+      const aScore = a.contributionCount + (a.repoCount * 10) + (a.totalStars * 0.1);
+      const bScore = b.contributionCount + (b.repoCount * 10) + (b.totalStars * 0.1);
+      return bScore - aScore;
+    })
     .slice(0, 500);  // Return top 500 for analysis
 
   console.log(`[Chekklist Search] Final results after quality filter: ${results.length} candidates`);
