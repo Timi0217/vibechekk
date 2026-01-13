@@ -905,14 +905,32 @@ export const searchUserByEmail = async (token: string, email: string): Promise<s
  * Resolve a GitHub username to an email address using multiple strategies:
  * 1. Check public profile email (already fetched in userStats)
  * 2. Fetch user's public events and extract email from push events
- * 3. Fetch a commit patch to extract author email
+ * 3. Fetch a commit patch to extract author email (last resort)
  */
 export const resolveGitHubEmail = async (token: string, username: string): Promise<string | null> => {
   const octokit = new Octokit({ auth: token });
 
   console.log(`[GitHub] Resolving email for ${username}...`);
 
-  // Strategy 1: Try events API first (fast, gets commit emails from most recent activity)
+  // Strategy 1: Check GraphQL public email FIRST (most reliable - user explicitly set this)
+  try {
+    const query = `
+      query($login: String!) {
+        user(login: $login) {
+          email
+        }
+      }
+    `;
+    const response: any = await octokit.graphql(query, { login: username });
+    if (response.user?.email) {
+      console.log(`[GitHub] Found PUBLIC email via GraphQL: ${response.user.email}`);
+      return response.user.email;
+    }
+  } catch (error) {
+    console.warn(`[GitHub] GraphQL email query failed for ${username}:`, error);
+  }
+
+  // Strategy 2: Try events API (gets commit emails from most recent activity)
   try {
     const eventsUrl = `https://api.github.com/users/${username}/events/public`;
     const eventsResponse = await fetch(eventsUrl, {
@@ -941,7 +959,7 @@ export const resolveGitHubEmail = async (token: string, username: string): Promi
               const email = commit.author.email;
               // Skip noreply emails
               if (!email.includes('noreply.github.com') && !email.includes('@users.noreply')) {
-                console.log(`[GitHub] Found email via events API (most recent): ${email}`);
+                console.log(`[GitHub] Found email via events API (fallback): ${email}`);
                 return email;
               }
             }
@@ -1004,23 +1022,7 @@ export const resolveGitHubEmail = async (token: string, username: string): Promi
     console.warn(`[GitHub] Commit patch strategy failed for ${username}:`, error);
   }
 
-  // Strategy 3: Try the GraphQL API one more time with a fresh query
-  try {
-    const query = `
-      query($login: String!) {
-        user(login: $login) {
-          email
-        }
-      }
-    `;
-    const response: any = await octokit.graphql(query, { login: username });
-    if (response.user?.email) {
-      console.log(`[GitHub] Found email via GraphQL: ${response.user.email}`);
-      return response.user.email;
-    }
-  } catch (error) {
-    console.warn(`[GitHub] GraphQL email query failed for ${username}:`, error);
-  }
+  // GraphQL already checked as Strategy 1, no need to retry
 
   console.log(`[GitHub] Could not resolve email for ${username}`);
   return null;

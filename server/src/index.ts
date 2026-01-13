@@ -392,6 +392,18 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
         const reportData = await analyzeWithDeepSeek(DEEPSEEK_KEY, profileData, profileData.codeSamples);
         const primaryRepo = profileData.topRepos.length > 0 ? profileData.topRepos[0].name : 'No Public Projects';
 
+        // Resolve email synchronously if not available from GraphQL (so it's available immediately)
+        let resolvedEmail = profileData.email || null;
+        if (!resolvedEmail && GITHUB_TOKEN) {
+            console.log(`[Analysis] No email from GraphQL for ${owner}, resolving from commits...`);
+            resolvedEmail = await resolveGitHubEmail(GITHUB_TOKEN, owner);
+            if (resolvedEmail) {
+                console.log(`[Analysis] Resolved email for ${owner}: ${resolvedEmail}`);
+                // Update profileData so it's included in the response
+                profileData.email = resolvedEmail;
+            }
+        }
+
         const savedCandidate = await prisma.candidate.upsert({
             where: { githubUrl },
             update: {

@@ -4173,17 +4173,17 @@ function App() {
 
                   const userStats = selectedReport.metadata?.userStats || selectedReport.candidate?.userStats || {};
 
-                  // Use patched stats if available (fetched from client-side GitHub API)
+                  // Use patched stats if available (fetched from client-side GitHub API) for consistency with UI
                   const lastActive = patchedStats?.lastActive || selectedReport.metadata?.lastActive;
-                  let totalRepos = patchedStats?.totalRepos || userStats.totalRepos || userStats.public_repos || selectedReport.candidate?.public_repos || 0;
-                  let totalStars = userStats.totalStars || 0;
-                  const totalCommits = patchedStats?.totalCommits || userStats.totalCommits || 0;
+                  let totalRepos = patchedStats?.totalRepos !== undefined ? patchedStats.totalRepos : (userStats.totalRepos || userStats.public_repos || selectedReport.candidate?.public_repos || 0);
+                  let totalStars = patchedStats?.totalStars !== undefined ? patchedStats.totalStars : (userStats.totalStars || 0);
+                  const totalCommits = patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (userStats.totalCommits || 0);
 
                   const verifiedSkills = selectedReport.metadata?.verified_skills || [];
                   const meritPoints = selectedReport.meritPoints || [];
 
-                  // Robust Languages extraction
-                  let languages = userStats.languages || [];
+                  // Robust Languages extraction - use patchedStats first for consistency
+                  let languages = patchedStats?.languagesList || userStats.languages || [];
                   if ((!languages || languages.length === 0) && verifiedSkills.length > 0) {
                     languages = [...new Set(verifiedSkills.map((s: any) => {
                       const name = typeof s === 'string' ? s.split('|')[0] : (s.name || '');
