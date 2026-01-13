@@ -1847,10 +1847,22 @@ function App() {
                   width: '10px',
                   height: '10px',
                   borderRadius: '50%',
-                  background: activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'transparent'),
-                  border: `1.5px solid ${activeSearches.length > 0 ? '#22c55e' : (showChecklistForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)')}`,
+                  background: (() => {
+                    if (activeSearches.length === 0) return showChecklistForm ? '#f59e0b' : 'transparent';
+                    const hasRunning = activeSearches.some(s => s.status === 'running');
+                    return hasRunning ? '#f59e0b' : '#22c55e'; // Yellow while running, green when done
+                  })(),
+                  border: `1.5px solid ${(() => {
+                    if (activeSearches.length === 0) return showChecklistForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)';
+                    const hasRunning = activeSearches.some(s => s.status === 'running');
+                    return hasRunning ? '#f59e0b' : '#22c55e';
+                  })()}`,
                   transition: 'all 0.2s ease',
-                  boxShadow: activeSearches.length > 0 ? '0 0 8px rgba(34, 197, 94, 0.6)' : (showChecklistForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none')
+                  boxShadow: (() => {
+                    if (activeSearches.length === 0) return showChecklistForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none';
+                    const hasRunning = activeSearches.some(s => s.status === 'running');
+                    return hasRunning ? '0 0 8px rgba(245, 158, 11, 0.6)' : '0 0 8px rgba(34, 197, 94, 0.6)';
+                  })()
                 }} />
               </div>
             </div>
@@ -3060,10 +3072,11 @@ function App() {
                   width: '10px',
                   height: '10px',
                   borderRadius: '50%',
-                  background: showBulkChekkForm ? '#f59e0b' : 'transparent',
-                  border: `1.5px solid ${showBulkChekkForm ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)'}`,
+                  background: (bulkProcessing || showBulkChekkForm) ? '#f59e0b' : 'transparent',
+                  border: `1.5px solid ${(bulkProcessing || showBulkChekkForm) ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)'}`,
                   transition: 'all 0.2s ease',
-                  boxShadow: showBulkChekkForm ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none'
+                  boxShadow: (bulkProcessing || showBulkChekkForm) ? '0 0 8px rgba(245, 158, 11, 0.6)' : 'none',
+                  animation: bulkProcessing ? 'yellow-pulse 2s infinite ease-in-out' : 'none'
                 }} />
               </div>
             </div>
@@ -3886,30 +3899,45 @@ function App() {
                   /* Removed horizontal padding to align with sections below */
                 }}>
                   {[
-                    {
-                      label: 'REPOS',
-                      value: patchedStats?.totalRepos !== undefined ? patchedStats.totalRepos : (selectedReport.metadata?.userStats?.totalRepos || selectedReport.candidate?.public_repos || 0)
-                    },
-                    {
-                      label: 'COMMITS',
-                      value: patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (selectedReport.metadata?.userStats?.totalCommits || 0)
-                    },
-                    {
-                      label: 'LANGUAGES',
-                      value: patchedStats?.languages !== undefined && patchedStats.languages > 0
+                    { label: 'REPOS' },
+                    { label: 'COMMITS' },
+                    { label: 'LANGUAGES' },
+                    { label: 'STARS' }
+                  ].map((statLabel) => {
+                    const reason = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
+                    let val: any = 0;
+                    let tooltip = '';
+
+                    if (statLabel.label === 'REPOS') {
+                      val = patchedStats?.totalRepos !== undefined ? patchedStats.totalRepos : (selectedReport.metadata?.userStats?.totalRepos || selectedReport.candidate?.public_repos || 0);
+                      if (val === 0 || !val) {
+                        const match = reason.match(/(\d+)\s+repositories/i);
+                        if (match) val = parseInt(match[1]);
+                      }
+                      tooltip = `${val} total repositories`;
+                    } else if (statLabel.label === 'COMMITS') {
+                      val = patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (selectedReport.metadata?.userStats?.totalCommits || 0);
+                      tooltip = `${val} total commits`;
+                    } else if (statLabel.label === 'LANGUAGES') {
+                      val = patchedStats?.languages !== undefined && patchedStats.languages > 0
                         ? patchedStats.languages
                         : ((selectedReport.metadata?.userStats?.languages?.length || 0) > 0
                           ? selectedReport.metadata.userStats.languages.length
                           : (selectedReport.metadata?.verified_skills?.length > 0
                             ? new Set(selectedReport.metadata.verified_skills.map((s: any) => (typeof s === 'string' ? s.split('|')[0] : s.name).trim())).size
-                            : 0)),
-                      tooltip: patchedStats?.languagesList?.join(', ') || selectedReport.metadata?.userStats?.languages?.join(', ')
-                    },
-                    {
-                      label: 'STARS',
-                      value: patchedStats?.totalStars !== undefined ? patchedStats.totalStars : (selectedReport.metadata?.userStats?.totalStars || 0)
+                            : 0));
+                      tooltip = patchedStats?.languagesList?.join(', ') || selectedReport.metadata?.userStats?.languages?.join(', ');
+                    } else if (statLabel.label === 'STARS') {
+                      val = patchedStats?.totalStars !== undefined ? patchedStats.totalStars : (selectedReport.metadata?.userStats?.totalStars || 0);
+                      if (val === 0 || !val) {
+                        const match = reason.match(/(\d+)\s+total\s+stars/i);
+                        if (match) val = parseInt(match[1]);
+                      }
+                      tooltip = `${val} total stars`;
                     }
-                  ].map((stat, i) => (
+
+                    return { label: statLabel.label, value: val, tooltip };
+                  }).map((stat, i) => (
                     <div
                       key={i}
                       className="stat-card"
@@ -4194,12 +4222,12 @@ function App() {
                   // Use patched stats if available (fetched from client-side GitHub API) for consistency with UI
                   const lastActive = patchedStats?.lastActive || selectedReport.metadata?.lastActive;
 
+                  const reasonText = selectedReport.archetype_reason || selectedReport.metadata?.archetype_reason || '';
                   // For the PDF, use our specific repo count from the analysis session if available
-                  const regexMatch = selectedReport.metadata?.archetype_reason?.match(/(\d+)\s+repositories/);
+                  const repoRegexMatch = reasonText.match(/(\d+)\s+repositories/);
                   let totalRepos = 0;
-
-                  if (regexMatch && regexMatch[1]) {
-                    totalRepos = parseInt(regexMatch[1]);
+                  if (repoRegexMatch && repoRegexMatch[1]) {
+                    totalRepos = parseInt(repoRegexMatch[1]);
                   } else if (patchedStats && patchedStats.totalRepos !== undefined) {
                     totalRepos = patchedStats.totalRepos;
                   } else {
@@ -4207,6 +4235,13 @@ function App() {
                   }
 
                   let totalStars = (patchedStats && patchedStats.totalStars !== undefined) ? patchedStats.totalStars : (userStats.totalStars || 0);
+                  if (totalStars === 0 || !totalStars) {
+                    const starsRegexMatch = reasonText.match(/(\d+)\s+total\s+stars/);
+                    if (starsRegexMatch && starsRegexMatch[1]) {
+                      totalStars = parseInt(starsRegexMatch[1]);
+                    }
+                  }
+
                   const totalCommits = (patchedStats && patchedStats.totalCommits !== undefined) ? patchedStats.totalCommits : (userStats.totalCommits || 0);
 
                   const verifiedSkills = selectedReport.metadata?.verified_skills || [];
@@ -4301,32 +4336,45 @@ function App() {
                           </div>
 
                           {/* Name & Classification */}
-                          <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'nowrap' }}>
-                              <h1 style={{ fontSize: '28px', fontWeight: 700, color: colors.slate900, margin: 0, letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                          {/* Name & Classification Area */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <h1 style={{
+                                fontSize: '24px',
+                                fontWeight: 700,
+                                color: colors.slate900,
+                                margin: 0,
+                                letterSpacing: '-0.5px',
+                                lineHeight: 1.2,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>
                                 {candidateName}
                               </h1>
-                              {/* Archetype Badge */}
-                              <div style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                background: colors.tealBg,
-                                border: `1px solid ${colors.teal}30`,
-                                borderRadius: '8px',
-                                padding: '6px 12px',
-                                flexShrink: 0
-                              }}>
-                                <span style={{ fontSize: '12px', fontWeight: 700, color: colors.teal, letterSpacing: '0.5px' }}>
-                                  {displayArchetype.toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
 
-                            {/* Contact Links */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '12px', fontSize: '13px', color: colors.slate500 }}>
-                              {handle && <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>GitHub</a>}
-                              {linkedinUrl && <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>LinkedIn</a>}
-                              {/* Email removed from PDF for cleaner display */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                {/* Archetype Badge */}
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  background: colors.tealBg,
+                                  border: `1px solid ${colors.teal}30`,
+                                  borderRadius: '6px',
+                                  padding: '4px 10px',
+                                  flexShrink: 0
+                                }}>
+                                  <span style={{ fontSize: '11px', fontWeight: 700, color: colors.teal, letterSpacing: '0.5px' }}>
+                                    {displayArchetype.toUpperCase()}
+                                  </span>
+                                </div>
+
+                                {/* Contact Links */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: colors.slate500 }}>
+                                  {handle && <a href={`https://github.com/${handle}`} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>GitHub</a>}
+                                  {linkedinUrl && <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.teal, fontWeight: 500, textDecoration: 'none' }}>LinkedIn</a>}
+                                </div>
+                              </div>
                             </div>
                           </div>
 
@@ -4345,7 +4393,7 @@ function App() {
                         <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
                           {statsList.map((stat, i) => (
                             <div key={i} style={{ flex: 1, background: colors.slate50, borderRadius: '12px', padding: '16px 8px', textAlign: 'center' }}>
-                              <div style={{ fontSize: '24px', fontWeight: 700, color: colors.slate900 }}>{typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</div>
+                              <div style={{ fontSize: '24px', fontWeight: 700, color: colors.slate900 }}>{formatNumber(stat.value)}</div>
                               <div style={{ fontSize: '10px', fontWeight: 600, color: colors.slate500, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>{stat.label}</div>
                             </div>
                           ))}

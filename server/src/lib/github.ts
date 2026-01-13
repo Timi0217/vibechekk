@@ -773,16 +773,24 @@ export const searchCandidates = async (token: string, criteria: any) => {
   const octokit = new Octokit({ auth: token });
   let { languages, experience, jobTitle, location, jd } = criteria;
 
+  console.log(`[Chekklist Search] RAW INPUT:`, { languages, experience, jobTitle, location, jd: jd ? `${jd.substring(0, 100)}...` : 'none' });
+
   // Auto-extract languages from JD if not provided
   if ((!languages || languages.length === 0) && jd) {
     const detectedLangs = extractLanguagesFromJD(jd);
     if (detectedLangs.length > 0) {
       languages = detectedLangs;
-      console.log(`[Chekklist Search] Auto-detected languages from JD: ${languages.join(', ')}`);
+      console.log(`[Chekklist Search] ✅ Auto-detected languages from JD: ${languages.join(', ')}`);
+    } else {
+      console.log(`[Chekklist Search] ⚠️ JD provided but no languages detected`);
     }
+  } else if (languages && languages.length > 0) {
+    console.log(`[Chekklist Search] ✅ Using manually selected languages: ${languages.join(', ')}`);
+  } else {
+    console.log(`[Chekklist Search] ⚠️ No languages provided and no JD to extract from`);
   }
 
-  console.log(`[Chekklist Search] Starting search with criteria:`, { languages, experience, jobTitle, location });
+  console.log(`[Chekklist Search] FINAL SEARCH CRITERIA:`, { languages, experience, jobTitle, location });
 
   // Helper to run a search query
   const runSearch = async (q: string, description: string): Promise<any[]> => {
