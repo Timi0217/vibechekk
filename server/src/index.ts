@@ -513,10 +513,16 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
     try {
         const { searchCandidates, analyzeGitHubProfile } = await import('./lib/github.js');
 
-        sendEvent('status', { message: 'Searching GitHub...', progress: 0 });
-
         // Parse languages array from query string
         const languagesArray = languages ? (Array.isArray(languages) ? languages : [languages]) : [];
+
+        // Show what we're searching for
+        const searchCriteria: string[] = [];
+        if (languagesArray.length > 0) searchCriteria.push(languagesArray.slice(0, 3).join(', '));
+        if (jobTitle) searchCriteria.push(String(jobTitle));
+        const criteriaStr = searchCriteria.length > 0 ? searchCriteria.join(' • ') : 'developers';
+
+        sendEvent('status', { message: `🔍 Searching GitHub for ${criteriaStr}...`, progress: 0 });
 
         const allCandidates = await searchCandidates(GITHUB_TOKEN, {
             languages: languagesArray,
@@ -531,20 +537,20 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
         const candidates = allCandidates;
         const totalPool = candidates.length;
 
-        sendEvent('status', {
-            message: `Found ${totalPool} candidates. Analyzing until ${TARGET_RESULTS} quality matches...`,
-            progress: 5,
-            total: TARGET_RESULTS
-        });
-
         if (candidates.length === 0) {
-            sendEvent('complete', { message: 'No candidates found', total: 0 });
+            sendEvent('complete', { message: 'No candidates found matching search criteria', total: 0 });
             res.end();
             return;
         }
 
-        // Process candidates in parallel batches of 5, stop when we hit 50 non-GHOSTs
-        const BATCH_SIZE = 5;
+        sendEvent('status', {
+            message: `✓ Found ${totalPool} GitHub profiles. Now analyzing with AI...`,
+            progress: 5,
+            total: TARGET_RESULTS
+        });
+
+        // Process candidates in parallel batches of 10 for faster results
+        const BATCH_SIZE = 10;
         let analyzed = 0;
         let nonGhosts = 0;
         let currentIndex = 0;
@@ -573,7 +579,7 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
 
                     if (archetype === 'GHOST' || tier === 'GHOST') {
                         sendEvent('status', {
-                            message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
+                            message: `🔎 ${nonGhosts}/${TARGET_RESULTS} matches • Analyzed ${analyzed} profiles (${candidate.login} - insufficient data)`,
                             progress,
                             analyzed,
                             nonGhosts,
@@ -611,7 +617,7 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         );
                         if (!matchesReach) {
                             sendEvent('status', {
-                                message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
+                                message: `🔎 ${nonGhosts}/${TARGET_RESULTS} matches • ${candidate.login} (${archetype}, ${reachabilityResult.label} reachability - filtered)`,
                                 progress,
                                 analyzed,
                                 nonGhosts,
@@ -630,7 +636,7 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         );
                         if (!matchesArchetype) {
                             sendEvent('status', {
-                                message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
+                                message: `🔎 ${nonGhosts}/${TARGET_RESULTS} matches • ${candidate.login} (${archetype} - doesn't match filters)`,
                                 progress,
                                 analyzed,
                                 nonGhosts,
@@ -647,7 +653,7 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                         );
                         if (!matchesTier) {
                             sendEvent('status', {
-                                message: `Searching... ${nonGhosts}/${TARGET_RESULTS} found (${analyzed} analyzed)`,
+                                message: `🔎 ${nonGhosts}/${TARGET_RESULTS} matches • ${candidate.login} (${tier} tier - doesn't match filters)`,
                                 progress,
                                 analyzed,
                                 nonGhosts,
@@ -658,6 +664,15 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
                     }
 
                     nonGhosts++;
+
+                    // Send status for successful match
+                    sendEvent('status', {
+                        message: `✨ ${nonGhosts}/${TARGET_RESULTS} matches • Found ${candidate.login} (${archetype})`,
+                        progress,
+                        analyzed,
+                        nonGhosts,
+                        total: TARGET_RESULTS
+                    });
 
                     const bioLower = (candidate.bio || '').toLowerCase();
                     const warmthReasons: string[] = [];
