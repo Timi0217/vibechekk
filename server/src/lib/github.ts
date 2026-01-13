@@ -806,7 +806,7 @@ export const searchCandidates = async (token: string, criteria: any) => {
         // No sort parameter - returns mixed results, better for finding hidden gems
       });
 
-      console.log(`[Chekklist Search] Found ${response.data.items.length} users`);
+      console.log(`[Chekklist Search] ✅ REST API Success: Found ${response.data.items.length} users (total_count: ${response.data.total_count})`);
 
       // Fetch detailed data in batches of 20 to avoid rate limits
       // We need to analyze diverse candidates to find ones matching archetype/tier filters
@@ -874,7 +874,8 @@ export const searchCandidates = async (token: string, criteria: any) => {
       console.log(`[Chekklist Search] Fetched details for ${detailedUsers.length} users`);
       return detailedUsers;
     } catch (error: any) {
-      console.error(`[Chekklist Search] Query failed:`, error.message);
+      console.error(`[Chekklist Search] ❌ REST API Error for query "${q}":`, error.message);
+      if (error.status) console.error(`[Chekklist Search] HTTP Status: ${error.status}`);
       return [];
     }
   };
@@ -904,34 +905,38 @@ export const searchCandidates = async (token: string, criteria: any) => {
     });
   };
 
-  // Strategy 1: Language + Recent activity + Medium followers + Location (LOWERED from 50 to 20)
-  const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20${locationFilter}`;
-  results = await runSearch(q1, "Primary language + recent + followers>20" + (location ? ` + ${location}` : ''));
+  console.log(`[Chekklist Search] Date filter: pushed:>${dateStr} (6 months ago from now)`);
 
-  // Strategy 2: Language + Recent activity + Low followers (LOWERED from 20 to 5)
-  const q2 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>5`;
-  mergeResults(await runSearch(q2, "Primary language + recent + followers>5"));
+  // Strategy 1: Start simple - just language + repos (guaranteed to work)
+  const q1 = `type:user language:${primaryLang} repos:>5`;
+  results = await runSearch(q1, "Primary language + repos>5 (broad search)");
 
-  // Strategy 3: Language + Good repos (LOWERED threshold)
-  if (languages && languages.length > 0) {
-    const q3 = `type:user language:${primaryLang} repos:>10 followers:>3`;
-    mergeResults(await runSearch(q3, "Primary language + repos>10 + followers>3"));
+  // Strategy 2: Language + Recent activity + Medium followers + Location (if we have few results)
+  if (results.length < 50) {
+    const q2 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20${locationFilter}`;
+    mergeResults(await runSearch(q2, "Primary language + recent + followers>20" + (location ? ` + ${location}` : '')));
   }
 
-  // Strategy 4: Second language if provided (LOWERED from 20 to 5)
-  if (languages && languages.length > 1) {
-    const q4 = `type:user language:${languages[1]} pushed:>${dateStr} followers:>5`;
-    mergeResults(await runSearch(q4, `${languages[1]} + recent + followers>5`));
+  // Strategy 3: Language + Recent activity + Low followers
+  if (results.length < 100) {
+    const q3 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>5`;
+    mergeResults(await runSearch(q3, "Primary language + recent + followers>5"));
+  }
+
+  // Strategy 4: Second language if provided
+  if (languages && languages.length > 1 && results.length < 150) {
+    const q4 = `type:user language:${languages[1]} repos:>5`;
+    mergeResults(await runSearch(q4, `${languages[1]} + repos>5`));
   }
 
   // Strategy 5: Third language if provided
-  if (languages && languages.length > 2) {
-    const q5 = `type:user language:${languages[2]} pushed:>${dateStr} repos:>5`;
-    mergeResults(await runSearch(q5, `${languages[2]} + recent + repos>5`));
+  if (languages && languages.length > 2 && results.length < 200) {
+    const q5 = `type:user language:${languages[2]} repos:>5`;
+    mergeResults(await runSearch(q5, `${languages[2]} + repos>5`));
   }
 
-  // Strategy 6: Improved job title/company extraction
-  if (jobTitle) {
+  // Strategy 6: Improved job title/company extraction (if still need more)
+  if (jobTitle && results.length < 250) {
     // Extract company name from brackets [CompanyName]
     const companyMatch = jobTitle.match(/\[([^\]]+)\]/);
     const company = companyMatch ? companyMatch[1] : '';
@@ -966,46 +971,7 @@ export const searchCandidates = async (token: string, criteria: any) => {
     }
   }
 
-  // Strategy 7: Popular devs in primary lang (keep high threshold for quality)
-  const q8 = `type:user language:${primaryLang} followers:>50`;
-  mergeResults(await runSearch(q8, `${primaryLang} + followers>50`));
-
-  console.log(`[Chekklist Search] Total raw candidates: ${results.length}`);
-
-  // FALLBACK STRATEGIES: If we have very few results, try broader searches
-  if (results.length < 50) {
-    console.log(`[Chekklist Search] Low result count (${results.length}), trying fallback strategies...`);
-
-    // Fallback 1: Remove date filter, just language + repos
-    if (languages && languages.length > 0) {
-      const fallback1 = `type:user language:${primaryLang} repos:>5`;
-      mergeResults(await runSearch(fallback1, `FALLBACK: ${primaryLang} + repos>5 (no date filter)`));
-    }
-
-    // Fallback 2: Try all languages without strict filters
-    if (languages && languages.length > 1) {
-      for (let i = 1; i < Math.min(languages.length, 3); i++) {
-        const fallback2 = `type:user language:${languages[i]} repos:>5`;
-        mergeResults(await runSearch(fallback2, `FALLBACK: ${languages[i]} + repos>5`));
-      }
-    }
-
-    // Fallback 3: If still low, try without language filter but with location
-    if (results.length < 30 && location) {
-      const fallback3 = `type:user location:"${location}" repos:>10`;
-      mergeResults(await runSearch(fallback3, `FALLBACK: location only + repos>10`));
-    }
-
-    // Fallback 4: Last resort - just language, no other filters
-    if (results.length < 20 && primaryLang) {
-      const fallback4 = `type:user language:${primaryLang}`;
-      const fallbackResults = await runSearch(fallback4, `FALLBACK: ${primaryLang} only (no filters)`);
-      // Limit fallback results to prevent flooding with low-quality matches
-      mergeResults(fallbackResults.slice(0, 100));
-    }
-
-    console.log(`[Chekklist Search] After fallbacks: ${results.length} candidates`);
-  }
+  console.log(`[Chekklist Search] Total raw candidates after all strategies: ${results.length}`);
 
   // Prepare candidates with quality metrics (but don't over-bias by popularity)
   results = results
