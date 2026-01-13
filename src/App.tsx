@@ -3318,6 +3318,36 @@ function App() {
               ) : (
                 /* History Tab */
                 <div style={{ minHeight: '150px' }}>
+                  {/* Clear Button */}
+                  {bulkHistory.length > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                      <button
+                        onClick={async () => {
+                          if (confirm('Clear all bulk import history? This cannot be undone.')) {
+                            setBulkHistory([]);
+                            chrome.storage.local.set({ bulk_history: [] });
+                          }
+                        }}
+                        style={{
+                          background: 'var(--bg-gray)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '6px',
+                          color: 'var(--text-dim)',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textTransform: 'uppercase',
+                          padding: '4px 10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Trash2 size={12} />
+                        Clear History
+                      </button>
+                    </div>
+                  )}
                   {bulkHistory.length === 0 ? (
                     <div style={{
                       display: 'flex',
