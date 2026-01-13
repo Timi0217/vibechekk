@@ -66,6 +66,32 @@ export const fetchUserStats = async (token: string, username: string) => {
 
     const repos = response.user.repositories.nodes;
 
+    // Find truly last active date from contribution calendar (includes private commits if user allows)
+    const calendar = response.user.contributionsCollection.contributionCalendar;
+    let lastContributionDate = null;
+    if (calendar && calendar.weeks) {
+      // Traverse weeks backwards
+      for (let i = calendar.weeks.length - 1; i >= 0; i--) {
+        const week = calendar.weeks[i];
+        if (week.contributionDays) {
+          // Traverse days backwards
+          for (let j = week.contributionDays.length - 1; j >= 0; j--) {
+            const day = week.contributionDays[j];
+            if (day.contributionCount > 0) {
+              lastContributionDate = day.date;
+              break;
+            }
+          }
+        }
+        if (lastContributionDate) break;
+      }
+    }
+
+    const lastPushedAt = repos.length > 0 ? repos.reduce((latest: string, r: any) => {
+      if (!r.pushedAt) return latest;
+      return !latest || new Date(r.pushedAt) > new Date(latest) ? r.pushedAt : latest;
+    }, '') : null;
+
     return {
       totalStars: repos.reduce((sum: number, r: any) => sum + r.stargazerCount, 0),
       totalRepos: response.user.repositories.totalCount || response.search.repositoryCount,
@@ -79,13 +105,11 @@ export const fetchUserStats = async (token: string, username: string) => {
       pullRequests: response.user.pullRequests.totalCount,
       issues: response.user.issues.totalCount,
       starredRepositories: response.user.starredRepositories.totalCount,
-      contributionCalendar: response.user.contributionsCollection.contributionCalendar,
+      contributionCalendar: calendar,
       languages: [...new Set(repos.map((r: any) => r.primaryLanguage?.name).filter(Boolean))],
       forkRatio: repos.length > 0 ? repos.filter((r: any) => r.isFork).length / repos.length : 0,
-      lastPushedAt: repos.length > 0 ? repos.reduce((latest: string, r: any) => {
-        if (!r.pushedAt) return latest;
-        return !latest || new Date(r.pushedAt) > new Date(latest) ? r.pushedAt : latest;
-      }, '') : null
+      lastPushedAt: lastPushedAt,
+      lastActive: lastContributionDate || lastPushedAt || response.user.updatedAt
     };
   } catch (error) {
     console.error('[GitHub] fetchUserStats failed:', error);
@@ -644,7 +668,8 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
     contributionCalendar: null,
     languages: [],
     forkRatio: 0,
-    lastPushedAt: null
+    lastPushedAt: null,
+    lastActive: null
   };
 
   // Sync operations (no API calls)

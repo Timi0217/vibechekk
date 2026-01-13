@@ -163,6 +163,15 @@ const pluralizeArchetype = (name: string) => {
   return cleaned + 'S';
 }
 
+const formatNumber = (num: number | string | undefined): string => {
+  if (num === undefined || num === null) return '0';
+  const n = typeof num === 'string' ? parseInt(num) : num;
+  if (isNaN(n)) return '0';
+  if (n < 1000) return n.toString();
+  if (n < 1000000) return (Math.floor(n / 100) / 10).toString() + 'K';
+  return (Math.floor(n / 100000) / 10).toString() + 'M';
+};
+
 const stripThe = (name: string) => {
   if (!name) return name;
   return name.replace(/^THE\s+/i, '');
@@ -3921,7 +3930,9 @@ function App() {
                         cursor: stat.tooltip ? 'help' : 'default',
                         position: 'relative'
                       }}>
-                      <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', lineHeight: '1' }}>{stat.value}</span>
+                      <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', lineHeight: '1' }}>
+                        {formatNumber(stat.value)}
+                      </span>
                       <span style={{ fontSize: '8px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', textAlign: 'center', whiteSpace: 'nowrap', letterSpacing: '0.5px' }}>{stat.label}</span>
                       {stat.tooltip && (
                         <div className="stat-tooltip" style={{
@@ -3929,19 +3940,25 @@ function App() {
                           bottom: '100%',
                           left: '50%',
                           transform: 'translateX(-50%)',
-                          marginBottom: '8px',
-                          padding: '8px 12px',
-                          background: 'rgba(0,0,0,0.9)',
+                          width: 'max-content',
+                          maxWidth: '180px',
+                          marginBottom: '10px',
+                          padding: '10px 14px',
+                          background: 'rgba(15, 23, 42, 0.98)',
                           color: 'white',
                           fontSize: '11px',
                           fontWeight: 500,
-                          borderRadius: '6px',
-                          whiteSpace: 'nowrap',
+                          borderRadius: '10px',
+                          whiteSpace: 'normal',
+                          textAlign: 'center',
+                          lineHeight: '1.4',
                           opacity: 0,
                           visibility: 'hidden',
-                          transition: 'opacity 0.2s, visibility 0.2s',
+                          transition: 'opacity 0.2s, visibility 0.2s, transform 0.2s',
                           pointerEvents: 'none',
-                          zIndex: 100
+                          zIndex: 100,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(255,255,255,0.1)'
                         }}>
                           {stat.tooltip}
                         </div>

@@ -1565,63 +1565,27 @@ app.get('/api/github/stats/:handle', async (req, res) => {
     }
 
     try {
-        // Fetch profile, repos, and commits in parallel
-        const [profileRes, reposRes, commitsRes] = await Promise.all([
-            fetch(`https://api.github.com/users/${handle}`, { headers }),
-            fetch(`https://api.github.com/users/${handle}/repos?per_page=100&sort=updated`, { headers }),
-            fetch(`https://api.github.com/search/commits?q=author:${handle}`, {
-                headers: { ...headers, 'Accept': 'application/vnd.github.cloak-preview' }
-            })
-        ]);
-
-        // Check if profile fetch succeeded
-        if (!profileRes.ok) {
-            console.log(`[GitHub Stats] Profile fetch failed for ${handle}: ${profileRes.status}`);
-            return res.status(profileRes.status).json({
-                success: false,
-                error: profileRes.status === 404 ? 'User not found' : 'GitHub API error'
-            });
+        const stats = await fetchUserStats(GITHUB_TOKEN || '', handle);
+        if (!stats) {
+            return res.status(404).json({ success: false, error: 'User not found' });
         }
 
-        const profile = await profileRes.json();
-        const repos = reposRes.ok ? await reposRes.json() : [];
-        const commits = commitsRes.ok ? await commitsRes.json() : { total_count: 0 };
-
-        // Calculate stats
-        const totalStars = Array.isArray(repos)
-            ? repos.reduce((acc: number, r: any) => acc + (r.stargazers_count || 0), 0)
-            : 0;
-
-        const languages = Array.isArray(repos)
-            ? [...new Set(repos.map((r: any) => r.language).filter((l: any) => l))]
-            : [];
-
-        // Get last activity date from repos
-        const lastActive = Array.isArray(repos) && repos.length > 0
-            ? repos[0].pushed_at || repos[0].updated_at
-            : profile.updated_at;
-
-        const stats = {
-            name: profile.name || handle,
-            login: profile.login,
-            avatar_url: profile.avatar_url,
-            bio: profile.bio,
-            location: profile.location,
-            blog: profile.blog,
-            public_repos: profile.public_repos || 0,
-            followers: profile.followers || 0,
-            following: profile.following || 0,
-            totalStars,
-            totalCommits: commits.total_count || 0,
-            languages: languages.length,
-            languagesList: languages,
-            lastActive,
-            created_at: profile.created_at
+        // Maintain frontend compatibility
+        const result = {
+            name: stats.name || handle,
+            login: handle,
+            avatar_url: `https://github.com/${handle}.png`,
+            public_repos: stats.totalRepos,
+            totalStars: stats.totalStars,
+            totalCommits: stats.totalCommits,
+            languages: stats.languages.length,
+            languagesList: stats.languages,
+            lastActive: stats.lastActive || stats.lastPushedAt || stats.updatedAt,
+            created_at: stats.createdAt
         };
 
-        console.log(`[GitHub Stats] Fetched stats for ${handle}: ${stats.public_repos} repos, ${stats.totalStars} stars, ${stats.totalCommits} commits`);
-
-        res.json({ success: true, data: stats });
+        console.log(`[GitHub Stats] Fetched stats for ${handle}: ${result.public_repos} repos, ${result.totalStars} stars, ${result.totalCommits} commits`);
+        res.json({ success: true, data: result });
     } catch (error: any) {
         console.error(`[GitHub Stats] Error fetching stats for ${handle}:`, error.message);
         res.status(500).json({ success: false, error: error.message || 'Failed to fetch GitHub stats' });
