@@ -979,6 +979,9 @@ function App() {
               report: data.data,
               timestamp: Date.now()
             })
+
+            // Refresh history from backend to show in History tab in real-time
+            fetchHistory()
           } else {
             console.error(`[BulkChekk] ❌ FAILED: ${handle} - ${data.error || 'Unknown error'}`)
             results.push({
