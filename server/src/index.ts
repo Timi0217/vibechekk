@@ -435,11 +435,6 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 trajectorySummary: reportData.trajectory_summary || 'Trajectory analysis pending.',
                 recruiterSummary: reportData.recruiter_summary || 'Detailed analysis pending.',
                 meritPoints: (reportData.highlights || []) as any,
-                totalStars: profileData.userStats?.totalStars || 0,
-                totalCommits: profileData.userStats?.totalCommits || 0,
-                totalRepos: profileData.userStats?.totalRepos || 0,
-                languages: profileData.userStats?.languages?.length || 0,
-                lastActive: profileData.lastActive || new Date().toISOString(),
                 confidence: 100,
                 repoName: primaryRepo,
                 metadata: {
