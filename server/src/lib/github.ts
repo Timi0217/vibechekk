@@ -792,61 +792,76 @@ export const searchCandidates = async (token: string, criteria: any) => {
 
   console.log(`[Chekklist Search] FINAL SEARCH CRITERIA:`, { languages, experience, jobTitle, location });
 
-  // Helper to run a search query
+  // Helper to run a search query using REST API (more permissive than GraphQL)
   const runSearch = async (q: string, description: string): Promise<any[]> => {
     console.log(`[Chekklist Search] Strategy: ${description}`);
     console.log(`[Chekklist Search] Query: ${q}`);
 
-    const query = `
-      query($q: String!) {
-        search(query: $q, type: USER, first: 100) {
-          userCount
-          nodes {
-            ... on User {
-              login
-              name
-              email
-              avatarUrl
-              bio
-              location
-              url
-              updatedAt
-              followers { totalCount }
-              pullRequests(first: 1) { totalCount }
-              issues(first: 1) { totalCount }
-              starredRepositories(first: 1) { totalCount }
-              contributionsCollection {
-                totalCommitContributions
-                contributionCalendar {
-                  totalContributions
-                  weeks {
-                    contributionDays {
-                      contributionCount
+    try {
+      // Use REST API instead of GraphQL - more permissive for broad queries
+      const response = await octokit.rest.search.users({
+        q,
+        per_page: 100,
+        sort: 'followers',
+        order: 'desc'
+      });
+
+      console.log(`[Chekklist Search] Found ${response.data.items.length} users`);
+
+      // Fetch detailed data for each user (in parallel)
+      const detailedUsers = await Promise.all(
+        response.data.items.slice(0, 30).map(async (user: any) => { // Limit to 30 per query to avoid rate limits
+          try {
+            // Fetch user details with GraphQL for rich data
+            const detailQuery = `
+              query($login: String!) {
+                user(login: $login) {
+                  login
+                  name
+                  email
+                  avatarUrl
+                  bio
+                  location
+                  url
+                  updatedAt
+                  followers { totalCount }
+                  pullRequests(first: 1) { totalCount }
+                  issues(first: 1) { totalCount }
+                  starredRepositories(first: 1) { totalCount }
+                  contributionsCollection {
+                    totalCommitContributions
+                    contributionCalendar {
+                      totalContributions
+                      weeks {
+                        contributionDays {
+                          contributionCount
+                        }
+                      }
+                    }
+                  }
+                  repositories(first: 5, orderBy: {field: PUSHED_AT, direction: DESC}, privacy: PUBLIC) {
+                    nodes {
+                      name
+                      stargazerCount
+                      pushedAt
+                      primaryLanguage { name }
+                      description
                     }
                   }
                 }
               }
-              repositories(first: 5, orderBy: {field: PUSHED_AT, direction: DESC}, privacy: PUBLIC) {
-                nodes {
-                  name
-                  stargazerCount
-                  pushedAt
-                  primaryLanguage { name }
-                  description
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
+            `;
 
-    try {
-      const response: any = await octokit.graphql(query, { q });
-      // Include all users found, email will be captured if public
-      const users = response.search.nodes.filter((n: any) => n && n.login);
-      console.log(`[Chekklist Search] Found ${users.length} users (${response.search.nodes.length} total)`);
-      return users;
+            const details: any = await octokit.graphql(detailQuery, { login: user.login });
+            return details.user;
+          } catch (err) {
+            console.error(`[Chekklist Search] Failed to fetch details for ${user.login}:`, err);
+            return null;
+          }
+        })
+      );
+
+      return detailedUsers.filter((u: any) => u !== null);
     } catch (error: any) {
       console.error(`[Chekklist Search] Query failed:`, error.message);
       return [];
