@@ -343,16 +343,20 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 return res.json({ success: true, data: lastReport, cached: true, isPro });
             }
 
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const twoDaysAgo = new Date();
+            twoDaysAgo.setDate(twoDaysAgo.setDate() - 2);
 
-            // Check if report has old hyperlink format (contains ** or https://)
-            const hasOldFormat = lastReport.trajectorySummary?.includes('**') ||
-                lastReport.trajectorySummary?.includes('https://') ||
-                lastReport.recruiterSummary?.includes('**') ||
-                lastReport.recruiterSummary?.includes('https://');
+            // Force update if:
+            // 1. Report is > 2 days old (was 30 days)
+            // 2. Report doesn't have the new "repositories" stats prefix in reason
+            // 3. Report has markdown/hyperlink artifacts from old models
+            const metadata = lastReport.metadata as any;
+            const needsUpdate = lastReport.createdAt < twoDaysAgo ||
+                !metadata?.archetype_reason?.includes('repositories') ||
+                lastReport.trajectorySummary?.includes('**') ||
+                lastReport.trajectorySummary?.includes('https://');
 
-            if (lastReport.createdAt > thirtyDaysAgo && lastReport.recruiterSummary && !hasOldFormat) {
+            if (!needsUpdate && lastReport.recruiterSummary) {
                 if (user) {
                     await prisma.user.update({
                         where: { id: user.id },
