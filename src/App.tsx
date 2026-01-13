@@ -610,9 +610,17 @@ function App() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/history`)
+      const params = new URLSearchParams();
+      if (user?.id) {
+        params.append('userId', user.id);
+      }
+      const url = `${BACKEND_URL}/api/history${params.toString() ? '?' + params.toString() : ''}`;
+      const res = await fetch(url)
       const data = await res.json()
-      if (data.success) setHistory(data.data)
+      if (data.success) {
+        console.log(`[History] Fetched ${data.data.length} reports`);
+        setHistory(data.data);
+      }
     } catch (e) {
       console.warn('Backend not reachable')
     }
@@ -982,7 +990,8 @@ function App() {
             })
 
             // Refresh history from backend to show in History tab in real-time
-            fetchHistory()
+            await fetchHistory()
+            console.log(`[BulkChekk] History refreshed after analyzing ${handle}`)
           } else {
             console.error(`[BulkChekk] ❌ FAILED: ${handle} - ${data.error || 'Unknown error'}`)
             results.push({
