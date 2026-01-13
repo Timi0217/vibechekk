@@ -948,6 +948,7 @@ function App() {
 
       for (let i = 0; i < allHandles.length; i++) {
         const handle = allHandles[i]
+        console.log(`[BulkChekk] Analyzing ${i+1}/${allHandles.length}: ${handle}`)
         setBulkProgress({
           current: i + 1,
           total: allHandles.length,
@@ -968,8 +969,10 @@ function App() {
           })
 
           const data = await response.json()
+          console.log(`[BulkChekk] Response for ${handle}:`, { success: data.success, error: data.error })
 
           if (data.success && data.data) {
+            console.log(`[BulkChekk] ✅ SUCCESS: ${handle} analyzed as ${data.data.archetype}`)
             results.push({
               handle,
               success: true,
@@ -977,6 +980,7 @@ function App() {
               timestamp: Date.now()
             })
           } else {
+            console.error(`[BulkChekk] ❌ FAILED: ${handle} - ${data.error || 'Unknown error'}`)
             results.push({
               handle,
               success: false,
@@ -985,6 +989,7 @@ function App() {
             })
           }
         } catch (err: any) {
+          console.error(`[BulkChekk] ❌ NETWORK ERROR: ${handle} - ${err.message}`)
           results.push({
             handle,
             success: false,
