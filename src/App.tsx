@@ -906,8 +906,9 @@ function App() {
         const chunkResults = await Promise.all(chunk.map(async (email) => {
           try {
             // Add a timeout race to prevent indefinite hanging
+            // Increased to 20s because GitHub search can be slow for some emails
             const timeoutPromise = new Promise<null>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout')), 8000)
+              setTimeout(() => reject(new Error('Timeout')), 20000)
             );
 
             // Race the lookup against the timeout
