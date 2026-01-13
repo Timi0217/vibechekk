@@ -709,7 +709,10 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
   ) / Math.max(aiCodeAnalysis.length, 1);
 
   const distribution = calculateStarDistribution(topRepos);
-  distribution.total_stars = stats.totalStars || distribution.total_stars;
+  // Ensure we use the most accurate star count (GraphQL repositories vs search count)
+  const totalStars = Math.max(stats.totalStars || 0, distribution.total_stars || 0);
+  stats.totalStars = totalStars;
+  distribution.total_stars = totalStars;
   distribution.highest_single_repo = Math.max(distribution.highest_single_repo, topRepos[0]?.stars || 0);
 
   const trajectoryData = analyzeGlobalTrajectory(topRepos);
@@ -717,11 +720,13 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
 
   console.log(`[GitHub] Total analysis time: ${Date.now() - startTime}ms`);
 
+  const finalLastActive = stats.lastActive || stats.lastPushedAt || (topRepos.length > 0 ? topRepos[0].pushedAt : null) || stats.updatedAt;
+
   return {
     userStats: stats,
     email: stats.email,
     reachability,
-    lastActive: stats.lastPushedAt || (topRepos.length > 0 ? topRepos[0].pushedAt : null),
+    lastActive: finalLastActive,
     topRepos,
     qualitySignals: qualitySignals.filter(Boolean),
     starDistribution: distribution,
@@ -733,9 +738,49 @@ export const analyzeGitHubProfile = async (token: string, username: string) => {
   };
 };
 
+// Extract languages/skills from JD text using keyword matching
+const extractLanguagesFromJD = (jd: string): string[] => {
+  if (!jd) return [];
+
+  const jdLower = jd.toLowerCase();
+  const languageMap: { [key: string]: string[] } = {
+    'Python': ['python', 'django', 'flask', 'fastapi', 'pandas', 'numpy'],
+    'TypeScript': ['typescript', 'ts'],
+    'JavaScript': ['javascript', 'js', 'node.js', 'nodejs', 'node', 'express'],
+    'React': ['react', 'react.js', 'reactjs', 'react native', 'next.js', 'nextjs'],
+    'Go': ['golang', 'go'],
+    'Rust': ['rust'],
+    'Java': ['java', 'spring', 'springboot'],
+    'C++': ['c++', 'cpp'],
+    'Ruby': ['ruby', 'rails', 'ruby on rails'],
+    'PHP': ['php', 'laravel'],
+    'Swift': ['swift', 'ios'],
+    'Kotlin': ['kotlin', 'android']
+  };
+
+  const detected: string[] = [];
+  for (const [language, keywords] of Object.entries(languageMap)) {
+    if (keywords.some(kw => jdLower.includes(kw))) {
+      detected.push(language);
+    }
+  }
+
+  console.log(`[JD Parser] Detected languages: ${detected.join(', ')}`);
+  return detected;
+};
+
 export const searchCandidates = async (token: string, criteria: any) => {
   const octokit = new Octokit({ auth: token });
-  const { languages, experience, jobTitle, location } = criteria;
+  let { languages, experience, jobTitle, location, jd } = criteria;
+
+  // Auto-extract languages from JD if not provided
+  if ((!languages || languages.length === 0) && jd) {
+    const detectedLangs = extractLanguagesFromJD(jd);
+    if (detectedLangs.length > 0) {
+      languages = detectedLangs;
+      console.log(`[Chekklist Search] Auto-detected languages from JD: ${languages.join(', ')}`);
+    }
+  }
 
   console.log(`[Chekklist Search] Starting search with criteria:`, { languages, experience, jobTitle, location });
 
@@ -825,46 +870,108 @@ export const searchCandidates = async (token: string, criteria: any) => {
     });
   };
 
-  // Strategy 1: Language + Recent activity + High followers + Location
-  const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>50${locationFilter}`;
-  results = await runSearch(q1, "Primary language + recent + followers>50" + (location ? ` + ${location}` : ''));
+  // Strategy 1: Language + Recent activity + Medium followers + Location (LOWERED from 50 to 20)
+  const q1 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20${locationFilter}`;
+  results = await runSearch(q1, "Primary language + recent + followers>20" + (location ? ` + ${location}` : ''));
 
-  // Strategy 2: Language + Recent activity + Medium followers
-  const q2 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>20`;
-  mergeResults(await runSearch(q2, "Primary language + recent + followers>20"));
+  // Strategy 2: Language + Recent activity + Low followers (LOWERED from 20 to 5)
+  const q2 = `type:user language:${primaryLang} pushed:>${dateStr} followers:>5`;
+  mergeResults(await runSearch(q2, "Primary language + recent + followers>5"));
 
-  // Strategy 3: Language + Good repos
+  // Strategy 3: Language + Good repos (LOWERED threshold)
   if (languages && languages.length > 0) {
-    const q3 = `type:user language:${primaryLang} repos:>15 followers:>10`;
-    mergeResults(await runSearch(q3, "Primary language + repos>15 + followers>10"));
+    const q3 = `type:user language:${primaryLang} repos:>10 followers:>3`;
+    mergeResults(await runSearch(q3, "Primary language + repos>10 + followers>3"));
   }
 
-  // Strategy 4: Second language if provided
+  // Strategy 4: Second language if provided (LOWERED from 20 to 5)
   if (languages && languages.length > 1) {
-    const q4 = `type:user language:${languages[1]} pushed:>${dateStr} followers:>20`;
-    mergeResults(await runSearch(q4, `${languages[1]} + recent + followers>20`));
+    const q4 = `type:user language:${languages[1]} pushed:>${dateStr} followers:>5`;
+    mergeResults(await runSearch(q4, `${languages[1]} + recent + followers>5`));
   }
 
-  // Strategy 5: Job title keywords + high followers
+  // Strategy 5: Third language if provided
+  if (languages && languages.length > 2) {
+    const q5 = `type:user language:${languages[2]} pushed:>${dateStr} repos:>5`;
+    mergeResults(await runSearch(q5, `${languages[2]} + recent + repos>5`));
+  }
+
+  // Strategy 6: Improved job title/company extraction
   if (jobTitle) {
-    const roleKeywords = jobTitle
+    // Extract company name from brackets [CompanyName]
+    const companyMatch = jobTitle.match(/\[([^\]]+)\]/);
+    const company = companyMatch ? companyMatch[1] : '';
+
+    // Remove company from job title for better keyword extraction
+    const titleWithoutCompany = jobTitle.replace(/\[.*?\]/g, '').trim();
+
+    // Better keyword extraction - focus on technical roles
+    const roleKeywords = titleWithoutCompany
       .toLowerCase()
       .split(/\s+/)
-      .filter((w: string) => w.length > 3 && !['the', 'and', 'for', 'senior', 'junior', 'lead'].includes(w))
-      .slice(0, 2)
+      .filter((w: string) => {
+        // Keep longer technical words
+        if (w.length <= 3) return false;
+        // Filter out common non-technical words
+        const stopWords = ['the', 'and', 'for', 'with', 'this', 'that', 'from'];
+        return !stopWords.includes(w);
+      })
+      .slice(0, 3) // Take top 3 keywords
       .join(' ');
 
     if (roleKeywords) {
-      const q5 = `type:user ${roleKeywords} repos:>5 followers:>25`;
-      mergeResults(await runSearch(q5, `Job keywords: "${roleKeywords}"`));
+      // Don't require followers for job title search
+      const q6 = `type:user ${roleKeywords} repos:>5`;
+      mergeResults(await runSearch(q6, `Job keywords: "${roleKeywords}"`));
+    }
+
+    // If company name exists, search for it
+    if (company && company.toLowerCase() !== 'rilla') {
+      const q7 = `type:user company:"${company}" repos:>5`;
+      mergeResults(await runSearch(q7, `Company: "${company}"`));
     }
   }
 
-  // Strategy 6: Popular devs in primary lang (lower threshold)
-  const q6 = `type:user language:${primaryLang} followers:>100`;
-  mergeResults(await runSearch(q6, `${primaryLang} + followers>100`));
+  // Strategy 7: Popular devs in primary lang (keep high threshold for quality)
+  const q8 = `type:user language:${primaryLang} followers:>50`;
+  mergeResults(await runSearch(q8, `${primaryLang} + followers>50`));
 
   console.log(`[Chekklist Search] Total raw candidates: ${results.length}`);
+
+  // FALLBACK STRATEGIES: If we have very few results, try broader searches
+  if (results.length < 50) {
+    console.log(`[Chekklist Search] Low result count (${results.length}), trying fallback strategies...`);
+
+    // Fallback 1: Remove date filter, just language + repos
+    if (languages && languages.length > 0) {
+      const fallback1 = `type:user language:${primaryLang} repos:>5`;
+      mergeResults(await runSearch(fallback1, `FALLBACK: ${primaryLang} + repos>5 (no date filter)`));
+    }
+
+    // Fallback 2: Try all languages without strict filters
+    if (languages && languages.length > 1) {
+      for (let i = 1; i < Math.min(languages.length, 3); i++) {
+        const fallback2 = `type:user language:${languages[i]} repos:>5`;
+        mergeResults(await runSearch(fallback2, `FALLBACK: ${languages[i]} + repos>5`));
+      }
+    }
+
+    // Fallback 3: If still low, try without language filter but with location
+    if (results.length < 30 && location) {
+      const fallback3 = `type:user location:"${location}" repos:>10`;
+      mergeResults(await runSearch(fallback3, `FALLBACK: location only + repos>10`));
+    }
+
+    // Fallback 4: Last resort - just language, no other filters
+    if (results.length < 20 && primaryLang) {
+      const fallback4 = `type:user language:${primaryLang}`;
+      const fallbackResults = await runSearch(fallback4, `FALLBACK: ${primaryLang} only (no filters)`);
+      // Limit fallback results to prevent flooding with low-quality matches
+      mergeResults(fallbackResults.slice(0, 100));
+    }
+
+    console.log(`[Chekklist Search] After fallbacks: ${results.length} candidates`);
+  }
 
   // Sort by combined signal: followers + stars
   results = results
@@ -874,12 +981,12 @@ export const searchCandidates = async (token: string, criteria: any) => {
       followerCount: user.followers?.totalCount || 0,
       hasRecentRepos: (user.repositories?.nodes || []).length > 0
     }))
-    // Filter out low-quality candidates that will likely be GHOSTs
+    // Filter out low-quality candidates that will likely be GHOSTs (RELAXED filter)
     .filter(user => {
-      // Must have at least some visible activity
-      if (user.totalStars === 0 && user.followerCount < 10) return false;
       // Must have public repos
       if (!user.hasRecentRepos) return false;
+      // Relaxed: Allow users with at least 1 follower OR any stars
+      if (user.totalStars === 0 && user.followerCount < 1) return false;
       return true;
     })
     .sort((a, b) => (b.followerCount + b.totalStars) - (a.followerCount + a.totalStars))

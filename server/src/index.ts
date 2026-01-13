@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { sendProfileViewedEmail } from './lib/email.js';
-import { analyzeGitHubProfile, calculateReachability, resolveGitHubEmail } from './lib/github.js';
+import { analyzeGitHubProfile, calculateReachability, resolveGitHubEmail, fetchUserStats } from './lib/github.js';
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
 import { enrichByEmail as pdlEnrichByEmail } from './lib/pdl.js';
 import { findLinkedInProfile as exaFindLinkedIn, buildSearchContext as exaBuildContext } from './lib/exa.js';
@@ -344,7 +344,7 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
             }
 
             const twoDaysAgo = new Date();
-            twoDaysAgo.setDate(twoDaysAgo.setDate() - 2);
+            twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
 
             // Force update if:
             // 1. Report is > 2 days old (was 30 days)
@@ -435,6 +435,11 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
                 trajectorySummary: reportData.trajectory_summary || 'Trajectory analysis pending.',
                 recruiterSummary: reportData.recruiter_summary || 'Detailed analysis pending.',
                 meritPoints: (reportData.highlights || []) as any,
+                totalStars: profileData.userStats?.totalStars || 0,
+                totalCommits: profileData.userStats?.totalCommits || 0,
+                totalRepos: profileData.userStats?.totalRepos || 0,
+                languages: profileData.userStats?.languages?.length || 0,
+                lastActive: profileData.lastActive || new Date().toISOString(),
                 confidence: 100,
                 repoName: primaryRepo,
                 metadata: {
@@ -517,7 +522,8 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
             languages: languagesArray,
             experience,
             jobTitle,
-            location
+            location,
+            jd: jd as string // Pass JD for auto-extraction of languages
         });
 
         // Use all candidates (up to 500), stop when we have 50 quality results
