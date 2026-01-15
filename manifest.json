@@ -14,7 +14,8 @@
     "storage",
     "sidePanel",
     "identity",
-    "cookies"
+    "cookies",
+    "tabs"
   ],
   "side_panel": {
     "default_path": "index.html",
