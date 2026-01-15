@@ -533,18 +533,6 @@ function App() {
       if (res.bulk_history && Array.isArray(res.bulk_history)) {
         setBulkHistory(res.bulk_history)
       }
-
-      // Detect current GitHub profile and fetch its report
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.url) {
-          const githubMatch = tabs[0].url.match(/github\.com\/([a-zA-Z0-9][-a-zA-Z0-9]*)/i);
-          if (githubMatch) {
-            const currentHandle = githubMatch[1].toLowerCase();
-            console.log(`[Init] Detected GitHub profile: ${currentHandle}`);
-            // fetchHistory() will auto-select this profile's report if it exists
-          }
-        }
-      });
       const userData = res.user_data as User | undefined;
       if (userData) {
         setUser(userData)
@@ -632,30 +620,6 @@ function App() {
       if (data.success && Array.isArray(data.data)) {
         console.log(`[History] Fetched ${data.data.length} reports`);
         setHistory(data.data);
-
-        // Auto-select the report matching the current GitHub profile being viewed
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs[0]?.url) {
-            const githubMatch = tabs[0].url.match(/github\.com\/([a-zA-Z0-9][-a-zA-Z0-9]*)/i);
-            if (githubMatch) {
-              const currentHandle = githubMatch[1].toLowerCase();
-              console.log(`[History] Current GitHub profile: ${currentHandle}`);
-
-              // Find matching report in history
-              const matchingReport = data.data.find((report: any) => {
-                const reportHandle = (report.candidate?.githubHandle || report.githubHandle || '').toLowerCase();
-                return reportHandle === currentHandle;
-              });
-
-              if (matchingReport) {
-                console.log(`[History] Auto-selecting report for ${currentHandle}`);
-                setSelectedReport(matchingReport);
-              } else {
-                console.log(`[History] No report found for ${currentHandle}`);
-              }
-            }
-          }
-        });
       } else {
         setHistory([]);
       }
