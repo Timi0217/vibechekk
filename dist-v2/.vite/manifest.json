@@ -1,0 +1,101 @@
+{
+  "../../../../@crx/manifest": {
+    "file": "assets/crx-manifest.js-BqPp2FLC.js",
+    "name": "crx-manifest.js",
+    "src": "../../../../@crx/manifest",
+    "isEntry": true
+  },
+  "_index-lEw_KWnh.js": {
+    "file": "assets/index-lEw_KWnh.js",
+    "name": "index"
+  },
+  "_jspdf.es.min-Cp-0vEVK.js": {
+    "file": "assets/jspdf.es.min-Cp-0vEVK.js",
+    "name": "jspdf.es.min",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ],
+    "dynamicImports": [
+      "node_modules/html2canvas/dist/html2canvas.esm.js",
+      "node_modules/dompurify/dist/purify.es.mjs",
+      "node_modules/canvg/lib/index.es.js"
+    ]
+  },
+  "_papaparse.min-C740xPGf.js": {
+    "file": "assets/papaparse.min-C740xPGf.js",
+    "name": "papaparse.min",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  },
+  "index.html": {
+    "file": "assets/index.html-DGtl4rzt.js",
+    "name": "index.html",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_index-lEw_KWnh.js"
+    ],
+    "dynamicImports": [
+      "node_modules/html2canvas/dist/html2canvas.esm.js",
+      "node_modules/pdfjs-dist/build/pdf.mjs",
+      "_papaparse.min-C740xPGf.js",
+      "_jspdf.es.min-Cp-0vEVK.js"
+    ],
+    "css": [
+      "assets/index-CVcB98P0.css"
+    ]
+  },
+  "node_modules/canvg/lib/index.es.js": {
+    "file": "assets/index.es-DtPbj5NQ.js",
+    "name": "index.es",
+    "src": "node_modules/canvg/lib/index.es.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_jspdf.es.min-Cp-0vEVK.js",
+      "_index-lEw_KWnh.js"
+    ]
+  },
+  "node_modules/dompurify/dist/purify.es.mjs": {
+    "file": "assets/purify.es-B9ZVCkUG.js",
+    "name": "purify.es",
+    "src": "node_modules/dompurify/dist/purify.es.mjs",
+    "isDynamicEntry": true
+  },
+  "node_modules/html2canvas/dist/html2canvas.esm.js": {
+    "file": "assets/html2canvas.esm-CBrSDip1.js",
+    "name": "html2canvas.esm",
+    "src": "node_modules/html2canvas/dist/html2canvas.esm.js",
+    "isDynamicEntry": true
+  },
+  "node_modules/pdfjs-dist/build/pdf.mjs": {
+    "file": "assets/pdf-D9U_qkVv.js",
+    "name": "pdf",
+    "src": "node_modules/pdfjs-dist/build/pdf.mjs",
+    "isDynamicEntry": true
+  },
+  "src/background.ts": {
+    "file": "assets/background.ts-Cxo30yKe.js",
+    "name": "background.ts",
+    "src": "src/background.ts",
+    "isEntry": true,
+    "imports": [
+      "_index-lEw_KWnh.js"
+    ]
+  },
+  "src/content.tsx": {
+    "file": "assets/content.tsx-BzC1bMzz.js",
+    "name": "content.tsx",
+    "src": "src/content.tsx",
+    "isEntry": true
+  },
+  "src/sniffer.ts": {
+    "file": "assets/sniffer.ts-7dox3xTg.js",
+    "name": "sniffer.ts",
+    "src": "src/sniffer.ts",
+    "isEntry": true
+  }
+}

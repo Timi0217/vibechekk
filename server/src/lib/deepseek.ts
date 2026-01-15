@@ -478,110 +478,355 @@ export const analyzeWithDeepSeek = async (apiKey: string, globalMetadata: any, c
         return `• ${r.name} (${r.language || 'Unknown'}, updated ${ageLabel}) ${markers}`;
     };
 
-    const prompt = `You are writing a developer assessment for a technical recruiter and engineering manager.
+    // Generate tier-specific gap analysis for smarter negative highlights
+    const tierExpectations: Record<string, string[]> = {
+        'LEGENDARY': ['Multiple high-impact projects', 'Strong OSS leadership', 'Documentation excellence', 'Test coverage', 'CI/CD', 'Architectural decisions'],
+        'ULTRA RARE': ['System design patterns', 'Scalable architecture', 'Test coverage', 'CI/CD', 'Technical leadership signals'],
+        'RARE': ['Professional code quality', 'Test coverage', 'Domain specialization', 'Consistent activity'],
+        'UNCOMMON': ['Testing practices', 'CI/CD setup', 'Code organization', 'Active contributions'],
+        'COMMON': ['Basic testing', 'Code structure', 'Learning progression']
+    };
 
-## CRITICAL: PRIORITIZE RECENT WORK
-⚠️ **This developer has work spanning ${accountAgeYears.toFixed(0)} years. Focus on their CURRENT skills, not their history.**
-- Recent work (last 2 years): ${reposByAge.recent.length} repos - ${recentLanguages.join(', ') || 'None'}
-- Old work (5+ years ago): ${reposByAge.old.length} repos - ${oldLanguages.join(', ') || 'None'}
-${reposByAge.old.length > reposByAge.recent.length ? '⚠️ More old repos than recent - likely academic/historical work. Focus on recent activity!' : ''}
+    const identifyGapsForTier = () => {
+        const expectations = tierExpectations[tier] || [];
+        const gaps: string[] = [];
 
-## CANDIDATE CLASSIFICATION
-**Archetype:** ${archetype}
-**Tier:** ${tier} ${tierBadge} (${percentile})
-**Why:** ${classificationReason}
+        if (expectations.includes('Test coverage') && !qualitySignals.hasTests) {
+            gaps.push(`lacks automated testing despite being classified as ${tier} tier`);
+        }
+        if (expectations.includes('CI/CD') && !qualitySignals.hasCI) {
+            gaps.push(`no CI/CD pipelines detected for ${tier}-level work`);
+        }
+        if (expectations.includes('Documentation excellence') && !qualitySignals.hasDocs) {
+            gaps.push('limited documentation for projects at this impact level');
+        }
+        if (tier === 'RARE' || tier === 'ULTRA RARE' || tier === 'LEGENDARY') {
+            if (!hasSpecialization && primaryDomain[1] < 4) {
+                gaps.push('broad but shallow technical breadth without deep specialization');
+            }
+        }
+        if (tier !== 'COMMON' && experienceSignals.recentlyActive === 'dormant') {
+            gaps.push('low recent activity despite strong historical work');
+        }
+        if (tier === 'UNCOMMON' || tier === 'RARE') {
+            if (externalContribs < 5) {
+                gaps.push('limited open-source collaboration for this experience level');
+            }
+        }
 
-## GITHUB PROFILE SUMMARY
-- **Account Age:** ${accountAgeYears.toFixed(1)} years
-- **Total Stars:** ${totalStars} across ${repoCount} repositories
-- **Current Focus (last 2 years):** ${recentLanguages.slice(0, 4).join(', ') || 'Low recent activity'}
-- **Historical Languages:** ${oldLanguages.slice(0, 4).join(', ') || 'None'}
-- **Recent Activity:** ${last90DaysCommits} commits in last 90 days (${experienceSignals.recentlyActive})
-- **Code Quality:** ${qualityTier} (Tests: ${qualitySignals.hasTests ? 'Yes' : 'No'}, CI: ${qualitySignals.hasCI ? 'Yes' : 'No'})
+        return gaps.length > 0 ? gaps[0] : null; // Return most critical gap
+    };
 
-## REPOSITORIES BY TIMELINE
+    const tierSpecificGap = identifyGapsForTier();
 
-**Recent (Last 2 Years) - PRIORITIZE THESE:**
-${reposByAge.recent.length > 0 ? reposByAge.recent.slice(0, 5).map(formatRepoWithAge).join('\n') : 'No recent public repositories'}
+    // Smart code sample truncation - prioritize recent repos
+    const truncateCodeSamples = (samples: string, maxLength: number = 6000): string => {
+        if (samples.length <= maxLength) return samples;
 
-**Historical (5+ Years Ago) - Context only, may be academic:**
-${reposByAge.old.length > 0 ? reposByAge.old.slice(0, 3).map(formatRepoWithAge).join('\n') : 'None'}
+        // Split by repo sections if they exist (assuming samples are structured)
+        const lines = samples.split('\n');
+        const recentRepoNames = reposByAge.recent.map((r: any) => r.name.toLowerCase());
 
-## AI TOOL USAGE
-- **Level:** ${aiAssessment.level}
-- **Summary:** ${aiAssessment.summary}
+        let truncated = '';
+        let currentLength = 0;
+        let recentRepoLines = 0;
+
+        // First pass: collect lines from recent repos
+        for (const line of lines) {
+            const isFromRecentRepo = recentRepoNames.some((name: string) => line.toLowerCase().includes(name));
+            if (isFromRecentRepo || recentRepoLines > 0) {
+                if (isFromRecentRepo) recentRepoLines = 50; // Keep next 50 lines from recent repo
+                truncated += line + '\n';
+                currentLength += line.length + 1;
+                recentRepoLines--;
+
+                if (currentLength >= maxLength * 0.8) break; // Use 80% of budget for recent repos
+            }
+        }
+
+        // Second pass: fill remaining space with any other code
+        if (currentLength < maxLength) {
+            for (const line of lines) {
+                if (!truncated.includes(line)) {
+                    truncated += line + '\n';
+                    currentLength += line.length + 1;
+                    if (currentLength >= maxLength) break;
+                }
+            }
+        }
+
+        const truncatedRepos = reposByAge.recent.slice(0, 3).map((r: any) => r.name).join(', ');
+        return truncated + `\n\n[Truncated at ${currentLength} chars - showing recent repos: ${truncatedRepos}]`;
+    };
+
+    const processedCodeSamples = truncateCodeSamples(codeSamples);
+
+    const prompt = `⚠️⚠️⚠️ CRITICAL INSTRUCTION - READ FIRST ⚠️⚠️⚠️
+
+This developer has ${accountAgeYears.toFixed(0)} years of GitHub history. Your assessment MUST prioritize RECENT work (last 2 years) as their CURRENT skill level.
+
+**Timeline Breakdown:**
+→ RECENT (Last 2 years): ${reposByAge.recent.length} repos using ${recentLanguages.join(', ') || 'None'}
+→ MID (2-5 years ago): ${reposByAge.mid.length} repos
+→ OLD (5+ years): ${reposByAge.old.length} repos using ${oldLanguages.join(', ') || 'None'}
+
+${reposByAge.old.length > reposByAge.recent.length ?
+`⚠️ WARNING: More old repos than recent! This developer's historical work (${oldLanguages.slice(0, 3).join(', ')}) may NOT reflect their current expertise. Lead with recent ${recentLanguages.slice(0, 3).join(', ')} work.`
+:
+`✓ Good activity balance. Recent work shows current direction.`}
+
+**Critical Rules:**
+- If they coded C++ 6 years ago but now use TypeScript → they are a TypeScript developer
+- Old repos provide context but do NOT define current skill level
+- Mark historical skills (5+ years old) as "Historical" explicitly in evidence
+
+════════════════════════════════════════════════════════════════
+
+## CLASSIFICATION GUIDANCE
+Based on composite analysis, this developer's profile suggests:
+
+**${archetype}** (${tier} ${tierBadge} - ${percentile})
+
+Your task: Validate or challenge this classification using specific evidence from their code and repos. If evidence contradicts this classification, note it explicitly in your assessment. You are the final judge.
+
+---
+
+## GITHUB PROFILE DATA
+
+**Activity Metrics:**
+- Account age: ${accountAgeYears.toFixed(1)} years | Total repos: ${repoCount} | Total stars: ${totalStars}
+- Recent activity: ${last90DaysCommits} commits (last 90 days) - ${experienceSignals.recentlyActive}
+- External contributions: ${externalContribs} contributions to other projects
+- Code quality tier: ${qualityTier}
+
+**Quality Indicators:**
+- Tests: ${qualitySignals.hasTests ? '✓ Yes' : '✗ No'} | CI/CD: ${qualitySignals.hasCI ? '✓ Yes' : '✗ No'}
+- TypeScript: ${qualitySignals.hasTypeScript ? '✓ Yes' : '✗ No'} | Linting: ${qualitySignals.hasLinting ? '✓ Yes' : '✗ No'}
+- Documentation: ${qualitySignals.hasDocs ? '✓ Yes' : '✗ No'}
+- Avg file count: ${qualitySignals.avgFileCount.toFixed(0)} files per repo
+
+---
+
+## REPOSITORIES (PRIORITIZED BY RECENCY)
+
+**RECENT (Last 2 Years) - Focus here for current skills:**
+${reposByAge.recent.length > 0 ? reposByAge.recent.slice(0, 5).map(formatRepoWithAge).join('\n') : '❌ No recent public repositories'}
+
+${reposByAge.mid.length > 0 ? `**MID-CAREER (2-5 Years Ago) - Career trajectory context:**
+${reposByAge.mid.slice(0, 3).map(formatRepoWithAge).join('\n')}` : ''}
+
+${reposByAge.old.length > 0 ? `**HISTORICAL (5+ Years Ago) - Background only:**
+${reposByAge.old.slice(0, 2).map(formatRepoWithAge).join('\n')}` : ''}
+
+---
+
+## AI TOOL USAGE ANALYSIS
+
+**Pattern Detection Results:**
+- AI likelihood score: ${avgAILikelihood.toFixed(1)}% (${aiAssessment.level})
+- Detected tools: ${detectedTools.length > 0 ? detectedTools.join(', ') : 'None detected'}
+- Assessment: ${aiAssessment.summary}
+- Recommendation: ${aiAssessment.recommendation}
+
+**Interpretation Guide:**
+${avgAILikelihood > 70 ? '⚠️ High AI patterns detected. Address this in your assessment - is there evidence of understanding vs copy-paste?' : avgAILikelihood > 30 ? '✓ Moderate AI usage with human oversight evident' : '✓ Primarily hand-written code'}
+
+---
 
 ## CODE SAMPLES
-${codeSamples.length > 8000 ? codeSamples.substring(0, 8000) + '\n[truncated]' : codeSamples}
+
+The code below shows excerpts from their top repositories, prioritized by recency. Analyze patterns across repos including: code style consistency, complexity progression, architectural choices, and problem-solving approach.
+
+${processedCodeSamples}
+
+---
+
+## TIER EXPECTATIONS & GAP ANALYSIS
+
+For **${tier}** tier developers, we typically expect:
+${tierExpectations[tier] ? tierExpectations[tier].map((exp: string) => `• ${exp}`).join('\n') : '• Professional code practices'}
+
+${tierSpecificGap ? `\n⚠️ **Preliminary Assessment:** Based on the data above, this developer ${tierSpecificGap}. Verify this in your analysis and include it in negative highlights if confirmed.\n` : ''}
 
 ---
 
 ## YOUR TASK
 
-Write a professional assessment following this EXACT structure:
+Write a professional assessment following this structure. Reference the EXAMPLES below for quality standards.
 
-### 0. archetype_reason (3-4 sentences) - REQUIRED
-Explain WHY this specific developer got their archetype based on THEIR repos and behavior. Be extremely specific about what you saw in their code, commit history, and technical choices.
-Examples:
-- "Classified as CRAFTSPERSON because 80% of their repos have comprehensive test suites and consistent code style patterns. Their attention to detail in the payments-backend repo specifically reveals a strong grasp of defensive coding and error boundary implementation."
-- "Earned ARCHITECT status through designing scalable systems in their payment-gateway and microservices-template repos. The use of event-driven architecture and persistent message queues indicates high-level systems design proficiency."
-- "Identified as HIDDEN GEM: low star count but exceptionally clean React code with TypeScript and proper error handling. Their UI component abstraction in 'design-system-v2' shows professional-grade architecture often missed in public profiles."
+### Required Output Fields:
 
-### 1. trajectory_summary (2-3 sentences)
-Describe their developer EVOLUTION - how they've changed over time. If they have old C/systems work but recent TypeScript/Python, lead with the recent focus. Example: "Started with systems programming in C during university, now focuses on modern web development with TypeScript and React."
+**archetype_reason** (3-4 sentences, ~60-80 words)
+Explain WHY they earned this classification with specific evidence from repos and code.
 
-### 2. recruiter_summary (3 paragraphs)
-**Paragraph 1 - Current Technical Strengths:** What can they build TODAY based on RECENT work? Lead with their current focus, not historical skills. Mention historical background briefly if relevant context.
+**trajectory_summary** (2-3 sentences, ~40-50 words)
+Their evolution over time, prioritizing recent direction. Show how they've changed.
 
-**Paragraph 2 - Development Practices:** How do they approach code quality? ${aiAssessment.level === 'concerning' ? 'NOTE: Address the AI usage concern - recommend hands-on coding assessment.' : ''} What does their testing/documentation look like?
+**recruiter_summary** (3 paragraphs, ~120-180 words total)
+1. **Current Technical Strengths** (3-4 sentences): What they can build TODAY based on recent work
+2. **Development Practices** (2-3 sentences): Code quality, testing, documentation${aiAssessment.level === 'concerning' ? ' ⚠️ Address AI concern' : ''}
+3. **Team Fit & Seniority** (2-3 sentences): Best team environment, likely experience level
 
-**Paragraph 3 - Team Fit & Collaboration:** What kind of team would they thrive on based on their CURRENT trajectory? What's their likely seniority level?
+**highlights** (3-7 items)
+- 2-4 positive (recent achievements with specific repo evidence)
+- 1-3 negative (tier-specific gaps${tierSpecificGap ? ', verify: ' + tierSpecificGap : ''})
 
-### 3. highlights (3-7 items, dynamic)
-Provide highlights with concrete evidence from their repos:
-- **2-4 positive highlights** (type: "positive") - prioritize RECENT achievements
-- **1-3 concerns** (type: "negative") - gaps, missing practices, areas for growth
-- **MANDATORY**: Mention AI tool usage trends (detected via LLM likelihood) if significant (e.g., heavy usage in recent repos, or a healthy mix).
+**technical_signal** (1 sentence, ~20-30 words)
+One concrete example from recent work proving current ability.
 
-Do NOT treat old academic projects as current expertise. If someone has C from 7 years ago but TypeScript now, the highlight should be about TypeScript.
+**technical_signal_detailed** (2-3 paragraphs, ~150-200 words total)
+Deep dive: architectural choices, code patterns, complexity handling, areas for growth.
 
-Each highlight must have a "title" (short label) and "detail" (1-2 sentence explanation with specific evidence).
-
-### 4. technical_signal (1 sentence)
-One specific, concrete example that proves their CURRENT technical ability. Reference a RECENT repo if possible.
-
-### 5. technical_signal_detailed (2-3 paragraphs)  
-Deep dive into their technical approach based on the code samples. Focus on recent work. If analyzing old code, note the time period.
-
-### 6. verified_skills (5-8 skills)
-List their verified skills with:
-- name: The skill (e.g., "React", "PostgreSQL")
-- level: "Beginner" | "Intermediate" | "Advanced" | "Expert"
-- evidence: Brief proof from their repos
-- Mark skills from 5+ year old projects as "Historical" in evidence
+**verified_skills** (5-8 skills)
+Each with: name, level (Beginner/Intermediate/Advanced/Expert), specific evidence.
 
 ---
 
+## EDGE CASE HANDLING
 
-Return ONLY valid JSON matching this structure:
+**If evidence is limited:**
+- Empty/minimal code samples → Focus on repo structure, commit patterns, README quality
+- Only forked repos → State explicitly: "All repos are forks; no original work visible to assess"
+- Very low activity (<5 commits total) → Be honest: "Insufficient activity for confident skill assessment"
+- Only old repos (5+ years) → "No recent activity; assessment based on historical work only"
+
+**Confidence calibration:**
+- Strong evidence → Confident language ("demonstrates", "shows mastery")
+- Mixed/limited evidence → Hedged language ("suggests", "appears to", "based on available code")
+- Insufficient data → Never extrapolate or fabricate skills
+
+---
+
+## EXAMPLE OUTPUTS (for reference - match this quality):
+
+### Example 1: UNCOMMON Tier (Full-stack Builder)
+
 {
-  "label": "${archetype}",
-  "rarity": "${tier}",
-  "rarity_badge": "${tierBadge}",
-  "rarity_percentile": "${percentile}",
-  "archetype_reason": "1-2 sentences explaining why this specific developer got this archetype based on their repos and behavior",
-  "trajectory_summary": "...",
-  "recruiter_summary": "...",
+  "label": "THE BUILDER",
+  "rarity": "UNCOMMON",
+  "rarity_badge": "◆",
+  "rarity_percentile": "Top 30%",
+  "archetype_reason": "Classified as BUILDER because ships consistently with strong development momentum across 12 repositories. Their e-commerce-platform repo (updated this year) demonstrates full-stack capability with React frontend, Node.js backend, and PostgreSQL integration. The sustained commit activity (47 commits in last 90 days) and focus on shipping complete features shows a pragmatic, product-focused mindset.",
+
+  "trajectory_summary": "Currently focused on modern full-stack development with TypeScript and React over the past 2 years. Historical work includes Python automation scripts (3-5 years ago), showing evolution from scripting to full application development. Recent trajectory indicates growing into mid-level product engineering roles.",
+
+  "recruiter_summary": "This candidate is a full-stack developer currently working with React, TypeScript, Node.js, and PostgreSQL based on their recent public repositories. Their e-commerce-platform and admin-dashboard projects demonstrate ability to build complete features end-to-end, including authentication, API integration, and responsive UI components. While they have Python experience from 3-4 years ago, their current technical focus is firmly in the modern web stack.\\n\\nCode quality practices show room for growth. Testing coverage is minimal across most repositories, with no automated test suites detected. No CI/CD pipelines are configured, suggesting development workflow maturity is still developing. Documentation exists but is basic - mostly setup instructions without architectural explanations. However, code organization is clean and TypeScript usage shows attention to type safety.\\n\\nBest suited for a product-focused team where they can continue building full features under senior guidance. Likely mid-level (2-4 years experience) based on code complexity and repo maturity. Would benefit from mentorship around testing practices and DevOps workflows. Strong candidate for startups or small teams where shipping velocity matters and learning opportunities are available.",
+
   "highlights": [
-    {"title": "...", "detail": "...", "type": "positive"},
-    {"title": "...", "detail": "...", "type": "negative"}
+    {
+      "title": "Full-Stack Shipping Velocity",
+      "detail": "Built and maintains e-commerce-platform with complete auth flow, payment integration, and admin dashboard. Shows ability to deliver end-to-end features.",
+      "type": "positive"
+    },
+    {
+      "title": "Modern Stack Proficiency",
+      "detail": "Strong TypeScript adoption across recent projects with proper type definitions and React hooks patterns. Code is clean and follows current best practices.",
+      "type": "positive"
+    },
+    {
+      "title": "Active Development Momentum",
+      "detail": "47 commits in last 90 days with consistent contribution pattern. Regularly ships updates and bug fixes to active projects.",
+      "type": "positive"
+    },
+    {
+      "title": "Testing Gaps for UNCOMMON Tier",
+      "detail": "No automated testing despite being classified as UNCOMMON tier. Adding Jest/Vitest test coverage would strengthen production readiness.",
+      "type": "negative"
+    },
+    {
+      "title": "Missing CI/CD Infrastructure",
+      "detail": "No continuous integration pipelines detected. Automated builds and deployments would improve development workflow for this experience level.",
+      "type": "negative"
+    }
   ],
-  "technical_signal": "...",
-  "technical_signal_detailed": "...",
+
+  "technical_signal": "The e-commerce-platform repo demonstrates production-ready patterns including JWT authentication, Stripe payment integration, and proper error handling middleware in Express.",
+
+  "technical_signal_detailed": "Code analysis reveals a developer comfortable with modern full-stack patterns. The React components show understanding of hooks, context API for state management, and proper component composition. Backend code uses Express with well-organized route handlers and middleware, though error handling could be more comprehensive. Database queries use Sequelize ORM with proper associations defined.\\n\\nArchitectural choices are pragmatic - monorepo structure, clear separation between client and server, environment-based configuration. No over-engineering detected; solutions are appropriate for the project scale. The payment integration code shows attention to security with proper webhook validation and idempotency handling.\\n\\nAreas for growth include test coverage (currently absent), more sophisticated state management (currently using Context which may not scale), and database migration strategies. The code is readable and maintainable, suggesting they'd integrate well into an existing codebase. Overall technical approach is solid for a mid-level developer building production features.",
+
   "verified_skills": [
-    {"name": "...", "level": "...", "evidence": "..."}
+    {"name": "React", "level": "Intermediate", "evidence": "Used extensively in e-commerce-platform and admin-dashboard with hooks and context patterns"},
+    {"name": "TypeScript", "level": "Intermediate", "evidence": "Consistent usage across 5 recent repos with proper type definitions"},
+    {"name": "Node.js", "level": "Intermediate", "evidence": "Backend development in e-commerce-platform with Express and middleware"},
+    {"name": "PostgreSQL", "level": "Intermediate", "evidence": "Database design and Sequelize ORM usage in recent projects"},
+    {"name": "REST API Design", "level": "Intermediate", "evidence": "Well-structured API endpoints with proper HTTP methods and status codes"},
+    {"name": "Python", "level": "Intermediate", "evidence": "Historical - automation scripts from 3-4 years ago, not current focus"},
+    {"name": "Git", "level": "Intermediate", "evidence": "Clean commit history with descriptive messages across all repos"}
   ]
-}`;
+}
+
+### Example 2: RARE Tier (ML Specialist)
+
+{
+  "label": "THE SPECIALIST",
+  "rarity": "RARE",
+  "rarity_badge": "⭐",
+  "rarity_percentile": "Top 15%",
+  "archetype_reason": "Classified as SPECIALIST due to deep expertise in machine learning and computer vision, demonstrated across 8 repositories with consistent focus. The object-detection-pipeline repo showcases advanced understanding of YOLOv8, custom training loops, and model optimization. Publications linked in profile and conference talk contributions indicate research-level depth in this domain.",
+
+  "trajectory_summary": "Focused exclusively on ML/CV for the past 4 years with clear specialization progression. Started with Keras tutorials (historical), now implements custom PyTorch architectures and model serving infrastructure. Recent work shows shift toward production ML systems rather than pure research.",
+
+  "recruiter_summary": "This candidate is a machine learning specialist with deep expertise in computer vision and model deployment. Recent repositories demonstrate ability to build end-to-end ML pipelines including data preprocessing, custom model training, and API serving with FastAPI. Their object-detection-pipeline and face-recognition-system repos show production-ready implementations with proper error handling and monitoring.\\n\\nCode quality is strong for ML work. Includes comprehensive Jupyter notebooks documenting experiments, pytest suites for data pipelines, and Docker containerization for reproducibility. However, lacks traditional CI/CD - model versioning and automated testing could be improved. Documentation is excellent with clear mathematical explanations and usage examples.\\n\\nBest fit for ML-focused teams or companies building AI products. Likely senior-level (5-7 years) based on architectural sophistication and domain depth. Would excel in roles requiring both research understanding and production deployment. May need support on large-scale distributed training and MLOps best practices.",
+
+  "highlights": [
+    {"title": "Deep ML Specialization", "detail": "Consistently works in CV/ML domain with custom PyTorch implementations and SOTA model adaptations. Shows genuine expertise beyond using pre-trained models.", "type": "positive"},
+    {"title": "Production-Ready ML Systems", "detail": "object-detection-pipeline includes FastAPI serving, proper preprocessing pipelines, and monitoring hooks. Code is deployment-focused, not just notebooks.", "type": "positive"},
+    {"title": "Strong Technical Communication", "detail": "Excellent README documentation with mathematical explanations, performance benchmarks, and clear usage examples. Conference talk experience evident.", "type": "positive"},
+    {"title": "Limited MLOps Infrastructure", "detail": "No model versioning systems (MLflow/Weights&Biases) or automated retraining pipelines detected. This is expected for RARE tier production ML work.", "type": "negative"}
+  ],
+
+  "technical_signal": "The custom attention mechanism implementation in vision-transformer-experiments shows deep understanding of transformer architectures with proper gradient handling and memory optimization.",
+
+  "technical_signal_detailed": "Code analysis reveals strong ML engineering fundamentals. PyTorch implementations follow best practices with proper device handling, gradient accumulation for large batches, and mixed-precision training. The custom loss functions in object-detection-pipeline show understanding of detection architectures beyond tutorial-level knowledge.\\n\\nData pipeline code is particularly impressive - uses PyTorch DataLoader efficiently with proper transforms, augmentation strategies, and handles edge cases like corrupted images. The preprocessing is vectorized and memory-efficient. API serving code uses async FastAPI patterns appropriately, though load testing setup is absent.\\n\\nAreas for growth include distributed training (currently single-GPU only), model compression techniques (quantization/pruning), and production monitoring beyond basic metrics. The code suggests someone who deeply understands ML theory and can implement it cleanly, but hasn't scaled to massive production systems yet. This aligns well with RARE tier specialization.",
+
+  "verified_skills": [
+    {"name": "PyTorch", "level": "Advanced", "evidence": "Custom architecture implementations with proper gradient handling across 6 repos"},
+    {"name": "Computer Vision", "level": "Advanced", "evidence": "YOLO/transformer model adaptations with deep understanding of detection/segmentation"},
+    {"name": "Python", "level": "Advanced", "evidence": "Clean, idiomatic code with proper async patterns and type hints"},
+    {"name": "FastAPI", "level": "Intermediate", "evidence": "Model serving APIs with proper validation and error handling"},
+    {"name": "Docker", "level": "Intermediate", "evidence": "Containerized ML applications with multi-stage builds"},
+    {"name": "Keras/TensorFlow", "level": "Intermediate", "evidence": "Historical - early projects from 3-4 years ago, now uses PyTorch"}
+  ]
+}
+
+### Example 3: COMMON Tier (Active Learner)
+
+{
+  "label": "THE GRINDER",
+  "rarity": "COMMON",
+  "rarity_badge": "●",
+  "rarity_percentile": "Top 50%",
+  "archetype_reason": "Classified as GRINDER based on exceptionally high commit activity (87 commits in last 90 days) across multiple learning projects. Profile shows someone actively building skills through consistent practice rather than deep specialization. The variety of tutorial-style repos (todo-app, weather-dashboard, blog-cms) demonstrates learning momentum and exploration of web development fundamentals.",
+
+  "trajectory_summary": "Recent surge in activity over the past 6 months focusing on JavaScript and React ecosystem. Earlier GitHub history is sparse. Currently in rapid learning phase, completing courses and building practice projects. Trajectory suggests early-career developer building foundational portfolio.",
+
+  "recruiter_summary": "This candidate is an early-career developer actively learning full-stack web development with JavaScript, React, and Node.js. Recent projects like todo-app and weather-dashboard demonstrate grasp of fundamental concepts including state management, API integration, and responsive design. The high commit frequency shows strong work ethic and dedication to skill building.\\n\\nCode quality reflects beginner-to-intermediate level. Projects are functional but lack production patterns like error boundaries, loading states, and edge case handling. No testing or CI/CD present. Code organization is basic with some prop-drilling and repeated logic. However, progression is visible - recent projects show cleaner component structure than earlier attempts.\\n\\nBest suited for junior developer roles with strong mentorship and learning opportunities. Likely 0-2 years experience based on project complexity. Would thrive in environments that value growth mindset and provide pair programming. The consistent activity pattern suggests coachability and genuine interest in the craft. Strong potential for rapid growth with proper guidance.",
+
+  "highlights": [
+    {"title": "Exceptional Learning Momentum", "detail": "87 commits in 90 days with steady contribution pattern. Shows dedication and active skill building through consistent practice.", "type": "positive"},
+    {"title": "Full-Stack Foundations", "detail": "Can build complete CRUD applications with React frontend and Node/Express backend. Demonstrates understanding of full application lifecycle.", "type": "positive"},
+    {"title": "Modern Stack Adoption", "detail": "Uses current technologies (React hooks, ES6+, async/await) rather than outdated patterns. Stays current with ecosystem.", "type": "positive"},
+    {"title": "No Testing Practices", "detail": "Zero test files across all repositories. Understanding of testing fundamentals (Jest, React Testing Library) needs development for production readiness.", "type": "negative"},
+    {"title": "Basic Code Organization", "detail": "Monolithic components with prop drilling and repeated logic. Needs to learn component composition patterns and state management libraries.", "type": "negative"}
+  ],
+
+  "technical_signal": "The weather-dashboard repo successfully integrates OpenWeather API with proper async handling and displays dynamic data, showing ability to work with external services.",
+
+  "technical_signal_detailed": "Code reveals a developer in active learning mode with solid grasp of fundamentals but lacking production experience. React components use functional patterns and hooks correctly, though component size suggests unfamiliarity with composition. State management relies on useState/useContext - appropriate for learning projects but would struggle at scale.\\n\\nBackend code uses Express with basic CRUD operations and MongoDB. REST API design is functional but inconsistent (some routes don't follow REST conventions). No authentication beyond basic username/password, no rate limiting, minimal error handling. Database queries work but aren't optimized.\\n\\nPositive indicators include clean variable naming, consistent formatting, and git commit messages that show thought process. The progression from todo-app (3 months ago) to blog-cms (current) shows meaningful improvement in code structure. With mentorship on testing, error handling, and architectural patterns, this developer has strong potential to reach intermediate level within a year.",
+
+  "verified_skills": [
+    {"name": "React", "level": "Beginner", "evidence": "Functional components with hooks across 4 projects, but basic patterns only"},
+    {"name": "JavaScript", "level": "Intermediate", "evidence": "Comfortable with ES6+ features, async/await, array methods"},
+    {"name": "Node.js", "level": "Beginner", "evidence": "Basic Express servers with CRUD operations in todo-app and blog-cms"},
+    {"name": "MongoDB", "level": "Beginner", "evidence": "Basic Mongoose models and queries, no complex aggregations"},
+    {"name": "HTML/CSS", "level": "Intermediate", "evidence": "Responsive layouts with Flexbox/Grid, basic styling patterns"},
+    {"name": "Git", "level": "Beginner", "evidence": "Regular commits but simple workflow, no branching or collaborative patterns"}
+  ]
+}
+
+---
+
+Return ONLY valid JSON for THIS candidate matching the structure and quality shown above:`;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // STEP 7: Call DeepSeek API
@@ -599,24 +844,24 @@ Return ONLY valid JSON matching this structure:
                 messages: [
                     {
                         role: 'system',
-                        content: `You are a senior technical recruiter with 10 years of experience, partnering with an engineering manager to assess developer candidates.
+                        content: `You are a senior technical recruiter assessing developers for hiring decisions.
 
-Your assessments are:
-- **Actionable**: Recruiters know what to discuss, managers know what to probe
-- **Evidence-based**: Every claim references specific repos, commits, or code patterns
-- **Balanced**: You find genuine strengths AND genuine concerns
-- **Professional**: Written for hiring decisions, not social media
+Core principles:
+- Evidence-based: Every claim cites specific repos, code patterns, or commit behavior
+- Balanced: Include genuine strengths AND concerns (never all positive)
+- Actionable: Recruiters know what to probe, managers know technical depth
+- Time-aware: Recent work defines current skill, old work provides context only
 
-Golden rules:
-1. NEVER mention internal scores, percentages, or metrics
-2. Always reference specific technologies and repositories
-3. Highlights must have 3-4 positives and 1-2 negatives (never all positive)
-4. Write as if this assessment goes directly to the hiring manager`
+Quality standards:
+- Reference specific technologies and repository names
+- Mark historical skills (5+ years old) as "Historical" explicitly
+- Never mention internal scores or composite metrics
+- Write for hiring managers, not social media`
                     },
                     { role: 'user', content: prompt }
                 ],
                 response_format: { type: 'json_object' },
-                temperature: 0.2
+                temperature: 0.3
             })
         });
 
@@ -678,31 +923,45 @@ Golden rules:
         const positives = (analysis.highlights || []).filter((h: any) => h.type === 'positive');
         const negatives = (analysis.highlights || []).filter((h: any) => h.type === 'negative');
 
-        // If no negatives, add a default one
+        // If no negatives, add tier-specific ones based on gap analysis
         if (negatives.length === 0) {
             analysis.highlights = analysis.highlights || [];
-            if (!qualitySignals.hasTests) {
+
+            // Priority 1: Use tier-specific gap if identified
+            if (tierSpecificGap) {
+                const gapTitle = tierSpecificGap.includes('testing') ? `Testing Gaps for ${tier} Tier` :
+                                tierSpecificGap.includes('CI/CD') ? `Missing CI/CD for ${tier} Level` :
+                                tierSpecificGap.includes('documentation') ? `Documentation Below ${tier} Standards` :
+                                tierSpecificGap.includes('specialization') ? 'Lacks Deep Specialization' :
+                                tierSpecificGap.includes('activity') ? 'Declining Activity Trend' :
+                                tierSpecificGap.includes('collaboration') ? 'Limited OSS Collaboration' :
+                                `${tier} Tier Expectation Gap`;
+
                 analysis.highlights.push({
-                    title: 'Testing Gaps',
-                    detail: 'Limited automated testing coverage across repositories. Adding tests would strengthen code reliability.',
+                    title: gapTitle,
+                    detail: `This developer ${tierSpecificGap}. This is a concern for their current classification level.`,
                     type: 'negative'
                 });
-            } else if (!qualitySignals.hasCI) {
+            }
+            // Priority 2: AI concerns if high and low quality
+            else if (aiAssessment.level === 'concerning') {
                 analysis.highlights.push({
-                    title: 'CI/CD Automation',
-                    detail: 'No continuous integration pipelines detected. Automated builds and deployments would improve development workflow.',
+                    title: 'AI Dependency Without Validation',
+                    detail: `High AI-generated code patterns (${avgAILikelihood.toFixed(0)}%) without corresponding test coverage or code review evidence. Recommend hands-on coding assessment.`,
                     type: 'negative'
                 });
-            } else if (aiAssessment.level === 'concerning') {
+            }
+            // Priority 3: Generic gaps as last resort
+            else if (!qualitySignals.hasTests) {
                 analysis.highlights.push({
-                    title: 'Heavy AI Dependency',
-                    detail: 'High likelihood of code generated via AI tools without significant evidence of manual testing or verification.',
+                    title: 'Testing Coverage Needed',
+                    detail: 'No automated test suites detected across repositories. Adding tests would strengthen code reliability and maintainability.',
                     type: 'negative'
                 });
             } else {
                 analysis.highlights.push({
-                    title: 'Documentation Coverage',
-                    detail: 'README and inline documentation could be expanded to improve maintainability.',
+                    title: 'Growth Opportunity',
+                    detail: 'While code quality is solid, expanding documentation and exploring new technical domains could accelerate career growth.',
                     type: 'negative'
                 });
             }
@@ -734,28 +993,8 @@ Golden rules:
     } catch (error) {
         console.error('[DeepSeek] Analysis error:', error);
 
-        // Return a fallback response
-        return {
-            label: archetype,
-            rarity: tier,
-            rarity_badge: tierBadge,
-            rarity_percentile: percentile,
-            archetype_reason: `Classified as ${archetype.replace(/^THE\s+/i, '')} based on ${classificationReason}.`,
-            trajectory_summary: `Developer with ${accountAgeYears.toFixed(0)} years on GitHub, primarily working with ${languages.slice(0, 3).join(', ') || 'various technologies'}.`,
-            recruiter_summary: `This candidate shows ${experienceSignals.recentlyActive} activity on GitHub with ${repoCount} public repositories. Their primary focus appears to be ${primaryDomain[0]} development. ${qualityTier === 'production-ready' ? 'Code quality practices are strong with testing and CI present.' : 'Code quality practices could be strengthened.'}`,
-            highlights: [
-                { title: 'Active Developer', detail: `${last90DaysCommits} commits in the last 90 days`, type: 'positive' },
-                { title: 'Multi-language Experience', detail: `Works with ${languages.slice(0, 3).join(', ')}`, type: 'positive' },
-                { title: qualitySignals.hasTests ? 'Testing Present' : 'Testing Gaps', detail: qualitySignals.hasTests ? 'Automated tests detected in repositories' : 'Limited test coverage detected', type: qualitySignals.hasTests ? 'positive' : 'negative' }
-            ],
-            technical_signal: `Works primarily with ${primaryDomain[0]} technologies.`,
-            technical_signal_detailed: 'Unable to generate detailed analysis due to API limitations.',
-            verified_skills: languages.slice(0, 5).map((lang: string) => ({
-                name: lang,
-                level: 'Intermediate',
-                evidence: `Used in ${globalMetadata.topRepos.filter((r: any) => r.language === lang).length} repositories`
-            }))
-        };
+        // Re-throw error to be handled by caller - no fallback mock data
+        throw new Error(`Failed to generate AI assessment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 

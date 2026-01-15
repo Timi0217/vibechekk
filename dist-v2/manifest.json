@@ -1,0 +1,83 @@
+{
+  "manifest_version": 3,
+  "name": "Vibechekk",
+  "short_name": " ",
+  "version": "1.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA10HPMRuFrChUb1yTtZQDSzJAj7ixpO7ZQzS+Pb2thB7xkateHePuxz5Xtxd/wKB1a1kugtlZPpPJo8lsdrSZvduUxIEbU6Sun6D30rigtvKOTRPAgduHnxUN81p/3yUeGVP4YMprVGSvKIvhyzziKZ72q1jo+O7MwKezVMLPEAX2hY/UkO+HokteRxLwn6Dzn1ny4S0bOIf1vSJRcNk/XDYfppFDsj/ECkSdyJpNNBwc/8xpJ3Xzj2F5y3RHqS4lKz26rsZBaEi+7cL2JaZj2xOWyao2CLdIjeDTILEmPkYHt75noYrKRzlTChCmkNw6JKubs+JyVWRfyhe9OZ1dzwIDAQAB",
+  "description": "Trajectory of Merit for Developers",
+  "icons": {
+    "16": "public/icon16.png",
+    "48": "public/icon48.png",
+    "128": "public/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "identity",
+    "cookies"
+  ],
+  "side_panel": {
+    "default_path": "index.html",
+    "default_title": " "
+  },
+  "action": {
+    "default_title": "Open Vibechekk",
+    "default_icon": "public/icon48.png"
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/content.tsx-BzC1bMzz.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    },
+    {
+      "js": [
+        "assets/sniffer.ts-7dox3xTg.js"
+      ],
+      "matches": [
+        "https://*.ashbyhq.com/*",
+        "https://*.greenhouse.io/*"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    }
+  ],
+  "oauth2": {
+    "client_id": "805354256542-4pvevap4b194vtsrdisvmi8u6i5u926j.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "assets/content.tsx-BzC1bMzz.js"
+      ],
+      "use_dynamic_url": false
+    },
+    {
+      "matches": [
+        "https://*.ashbyhq.com/*",
+        "https://*.greenhouse.io/*"
+      ],
+      "resources": [
+        "assets/sniffer.ts-7dox3xTg.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

@@ -58,7 +58,7 @@ export async function searchChekklist(filters: SearchFilters): Promise<SearchRes
   const reports = await prisma.vibeReport.findMany({
     where: {
       // Only include profiles with successful analysis
-      archetype: { not: null },
+      NOT: { archetype: '' },
       confidence: { gte: 50 }
     },
     include: {
@@ -67,7 +67,48 @@ export async function searchChekklist(filters: SearchFilters): Promise<SearchRes
     orderBy: {
       createdAt: 'desc'
     }
-  });
+  }) as Array<{
+    id: string;
+    userId: string | null;
+    createdAt: Date;
+    candidateId: string;
+    guestIp: string | null;
+    archetype: string;
+    tier: string;
+    label: string;
+    trajectorySummary: string;
+    meritPoints: any;
+    confidence: number;
+    repoName: string | null;
+    metadata: any;
+    recruiterSummary: string | null;
+    candidate: {
+      id: string;
+      githubUrl: string;
+      githubHandle: string;
+      name: string | null;
+      email: string | null;
+      emailVerified: boolean;
+      claimed: boolean;
+      userId: string | null;
+      lastEmailedAt: Date | null;
+      lastCheckedAt: Date;
+      linkedinUrl: string | null;
+      photoUrl: string | null;
+      currentTitle: string | null;
+      currentCompany: string | null;
+      companyLogoUrl: string | null;
+      companyLinkedin: string | null;
+      companyIndustry: string | null;
+      companySize: number | null;
+      location: string | null;
+      seniority: string | null;
+      twitterUrl: string | null;
+      workEmail: string | null;
+      enrichedAt: Date | null;
+      enrichmentData: any;
+    };
+  }>;
 
   console.log(`[Chekklist] Found ${reports.length} analyzed profiles in database`);
 

@@ -11,7 +11,11 @@
     "build:ext": "vite build",
     "build:server": "cd server && npm install && npm run build",
     "build": "npm run build:ext && npm run build:server",
-    "start": "cd server && npm run start"
+    "start": "cd server && npm run start",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 50",
+    "lint:fix": "eslint . --ext ts,tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css}\""
   },
   "dependencies": {
     "html2canvas": "^1.4.1",
@@ -20,7 +24,8 @@
     "parse5-htmlparser2-tree-adapter": "^8.0.0",
     "pdfjs-dist": "^5.4.530",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
@@ -33,11 +38,14 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "lucide-react": "^0.562.0",
     "octokit": "^5.0.5",
+    "prettier": "^3.8.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^5.4.10",
