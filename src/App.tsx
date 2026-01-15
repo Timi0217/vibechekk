@@ -442,20 +442,20 @@ function App() {
       if (res.auto_chekk_enabled !== undefined) {
         setAutoChekk(!!res.auto_chekk_enabled)
       }
-      if (res.autochekk_logs) {
-        setAutochekkLogs(res.autochekk_logs as any[])
+      if (res.autochekk_logs && Array.isArray(res.autochekk_logs)) {
+        setAutochekkLogs(res.autochekk_logs)
       }
-      if (res.active_searches) {
+      if (res.active_searches && Array.isArray(res.active_searches)) {
         // Mark any 'running' searches as 'interrupted' since connection was lost on reload
-        const searches = (res.active_searches as any[]).map((s: any) =>
+        const searches = res.active_searches.map((s: any) =>
           s.status === 'running'
             ? { ...s, status: 'interrupted', error: 'Search interrupted - extension was reloaded' }
             : s
         );
         setActiveSearches(searches);
       }
-      if (res.bulk_history) {
-        setBulkHistory(res.bulk_history as any[])
+      if (res.bulk_history && Array.isArray(res.bulk_history)) {
+        setBulkHistory(res.bulk_history)
       }
     })
 
@@ -617,9 +617,11 @@ function App() {
       const url = `${BACKEND_URL}/api/history${params.toString() ? '?' + params.toString() : ''}`;
       const res = await fetch(url)
       const data = await res.json()
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         console.log(`[History] Fetched ${data.data.length} reports`);
         setHistory(data.data);
+      } else {
+        setHistory([]);
       }
     } catch (e) {
       console.warn('Backend not reachable')
@@ -950,18 +952,44 @@ function App() {
         return
       }
 
-      setBulkProgress({ current: 0, total: allHandles.length, status: `Found ${allHandles.length} profiles to analyze` })
+      // Deduplicate: Remove handles that are already in history
+      const existingHandles = new Set(
+        history.map((item: any) =>
+          (item.candidate?.githubHandle || item.githubHandle || '').toLowerCase()
+        )
+      );
+
+      const uniqueHandles = allHandles.filter(
+        handle => !existingHandles.has(handle.toLowerCase())
+      );
+
+      if (uniqueHandles.length === 0) {
+        setBulkProgress({
+          current: 0,
+          total: 0,
+          status: `All ${allHandles.length} profile${allHandles.length === 1 ? ' has' : 's have'} already been analyzed (skipped ${allHandles.length} duplicate${allHandles.length === 1 ? '' : 's'})`
+        })
+        setBulkProcessing(false)
+        return
+      }
+
+      const skippedCount = allHandles.length - uniqueHandles.length;
+      if (skippedCount > 0) {
+        console.log(`[BulkChekk] Skipped ${skippedCount} already-analyzed profiles`);
+      }
+
+      setBulkProgress({ current: 0, total: uniqueHandles.length, status: `Found ${uniqueHandles.length} new profiles to analyze${skippedCount > 0 ? ` (skipped ${skippedCount} duplicates)` : ''}` })
 
       const results: any[] = []
       const batchId = Date.now().toString()
 
-      for (let i = 0; i < allHandles.length; i++) {
-        const handle = allHandles[i]
-        console.log(`[BulkChekk] Analyzing ${i+1}/${allHandles.length}: ${handle}`)
+      for (let i = 0; i < uniqueHandles.length; i++) {
+        const handle = uniqueHandles[i]
+        console.log(`[BulkChekk] Analyzing ${i+1}/${uniqueHandles.length}: ${handle}`)
         setBulkProgress({
           current: i + 1,
-          total: allHandles.length,
-          status: `Analyzing ${handle} (${i + 1}/${allHandles.length})`
+          total: uniqueHandles.length,
+          status: `Analyzing ${handle} (${i + 1}/${uniqueHandles.length})`
         })
 
         try {
@@ -1015,7 +1043,7 @@ function App() {
         setBulkResults([...results])
 
         // Rate limiting - wait 1.5 seconds between requests
-        if (i < allHandles.length - 1) {
+        if (i < uniqueHandles.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 1500))
         }
       }
@@ -1025,9 +1053,9 @@ function App() {
       const batchRecord = {
         id: batchId,
         filename: bulkFile.name,
-        totalProfiles: allHandles.length,
+        totalProfiles: uniqueHandles.length,
         successCount,
-        failedCount: allHandles.length - successCount,
+        failedCount: uniqueHandles.length - successCount,
         results,
         timestamp: Date.now()
       }
@@ -1036,12 +1064,14 @@ function App() {
       setBulkHistory(updatedHistory)
 
       // Save to storage
-      chrome.storage.local.set({ bulk_history: updatedHistory })
+      if (Array.isArray(updatedHistory)) {
+        chrome.storage.local.set({ bulk_history: updatedHistory })
+      }
 
       setBulkProgress({
-        current: allHandles.length,
-        total: allHandles.length,
-        status: `Complete! ${successCount}/${allHandles.length} profiles analyzed successfully`
+        current: uniqueHandles.length,
+        total: uniqueHandles.length,
+        status: `Complete! ${successCount}/${uniqueHandles.length} profiles analyzed successfully${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}`
       })
 
       // Switch to history tab to show results
@@ -3965,7 +3995,7 @@ function App() {
                       tooltip = `${val} total repositories`;
                     } else if (statLabel.label === 'COMMITS') {
                       val = patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (selectedReport.metadata?.userStats?.totalCommits || 0);
-                      tooltip = `${val} total commits`;
+                      tooltip = `${val} total lifetime commits`;
                     } else if (statLabel.label === 'LANGUAGES') {
                       val = patchedStats?.languages !== undefined && patchedStats.languages > 0
                         ? patchedStats.languages

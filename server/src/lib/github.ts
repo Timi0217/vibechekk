@@ -8,7 +8,7 @@ export const fetchUserStats = async (token: string, username: string) => {
   last90Days.setDate(last90Days.getDate() - 90);
 
   const query = `
-    query($username: String!, $from: DateTime!, $searchQuery: String!) {
+    query($username: String!, $from: DateTime!, $lifetimeFrom: DateTime!, $searchQuery: String!) {
       search(query: $searchQuery, type: REPOSITORY) {
         repositoryCount
       }
@@ -35,6 +35,9 @@ export const fetchUserStats = async (token: string, username: string) => {
             }
           }
         }
+        lifetimeContributions: contributionsCollection(from: $lifetimeFrom) {
+          totalCommitContributions
+        }
         recentActivity: contributionsCollection(from: $from) {
           totalCommitContributions
           restrictedContributionsCount
@@ -59,6 +62,7 @@ export const fetchUserStats = async (token: string, username: string) => {
     const response: any = await octokit.graphql(query, {
       username,
       from: last90Days.toISOString(),
+      lifetimeFrom: '2008-01-01T00:00:00Z', // GitHub was founded in 2008
       searchQuery: `user:${username} fork:false`
     });
 
@@ -95,7 +99,7 @@ export const fetchUserStats = async (token: string, username: string) => {
     return {
       totalStars: repos.reduce((sum: number, r: any) => sum + r.stargazerCount, 0),
       totalRepos: response.user.repositories.totalCount || response.search.repositoryCount,
-      totalCommits: response.user.contributionsCollection.totalCommitContributions,
+      totalCommits: response.user.lifetimeContributions.totalCommitContributions,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.contributionCalendar?.totalContributions || response.user.recentActivity.totalCommitContributions,
       createdAt: response.user.createdAt,
