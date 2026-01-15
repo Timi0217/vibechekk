@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Trash2, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus, List } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Trash2, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
 import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
@@ -17,7 +17,6 @@ const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<string> => 
   return text;
 };
 import { BACKEND_URL } from './constants'
-import CheklistTab from './components/tabs/CheklistTab'
 import './App.css'
 
 const rarityColors: Record<string, string> = {
@@ -28,7 +27,7 @@ const rarityColors: Record<string, string> = {
   'COMMON': '#64748b'         // Gray for bottom 50%
 }
 
-type Tab = 'analyze' | 'history' | 'cheklist' | 'analytics' | 'settings'
+type Tab = 'analyze' | 'history' | 'analytics' | 'settings'
 
 const VibeLogo = ({ size = 20, color = 'currentColor', className = '', ...props }) => (
   <svg
@@ -987,7 +986,7 @@ function App() {
 
       for (let i = 0; i < uniqueHandles.length; i++) {
         const handle = uniqueHandles[i]
-        console.log(`[BulkChekk] Analyzing ${i+1}/${uniqueHandles.length}: ${handle}`)
+        console.log(`[BulkChekk] Analyzing ${i + 1}/${uniqueHandles.length}: ${handle}`)
         setBulkProgress({
           current: i + 1,
           total: uniqueHandles.length,
@@ -1844,7 +1843,7 @@ function App() {
               color: 'rgba(255, 255, 255, 0.7)',
               fontWeight: 500
             }}>
-              Find 50 devs for your JD
+              Find 50 reachable devs
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="chekklist-tooltip-wrapper">
@@ -1874,7 +1873,7 @@ function App() {
                   zIndex: 1000,
                   pointerEvents: 'none'
                 }}>
-                  Paste your job description and get 50 matched GitHub profiles
+                  Search your analyzed profiles database to find 50 reachable developers matching your filters
                 </div>
               </div>
               {/* Search toggle icon */}
@@ -2025,42 +2024,18 @@ function App() {
 
             {checklistTab === 'configure' ? (
               <>
-                {/* Job Title */}
+                {/* Reverse Search - Find developers like X */}
                 <div>
                   <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
-                    JOB TITLE
+                    FIND DEVELOPERS LIKE
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Senior Frontend Engineer"
-                    value={checklistForm.jobTitle}
-                    onChange={(e) => setChecklistForm({ ...checklistForm, jobTitle: e.target.value })}
+                    placeholder="e.g. @username or github.com/username"
+                    value={checklistForm.reverseUsername || ''}
+                    onChange={(e) => setChecklistForm({ ...checklistForm, reverseUsername: e.target.value.replace(/^@/, '').replace(/^https?:\/\/github\.com\//, '') })}
                     style={{
                       width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      fontSize: '11px',
-                      fontFamily: 'inherit',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'white',
-                      marginBottom: '10px'
-                    }}
-                  />
-                </div>
-
-                {/* Job Description */}
-                <div>
-                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
-                    JOB DESCRIPTION
-                  </label>
-                  <textarea
-                    placeholder="Paste your job description here..."
-                    value={checklistForm.jd}
-                    onChange={(e) => setChecklistForm({ ...checklistForm, jd: e.target.value })}
-                    style={{
-                      width: '100%',
-                      minHeight: '80px',
                       padding: '10px 12px',
                       borderRadius: '8px',
                       border: '1px solid rgba(255,255,255,0.1)',
@@ -2070,85 +2045,94 @@ function App() {
                       color: 'white'
                     }}
                   />
-                  <label
-                    className="upload-btn"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      marginTop: '8px',
-                      padding: '8px 14px',
-                      borderRadius: '20px',
-                      border: '1.5px dashed #d1d5db',
-                      background: 'white',
-                      fontSize: '10px',
-                      fontWeight: 600,
-                      color: '#6b7280',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      width: 'fit-content'
-                    }}
-                  >
-                    <Upload size={12} />
-                    Upload PDF or TXT
-                    <input
-                      type="file"
-                      accept=".pdf,.txt"
-                      style={{ display: 'none' }}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          let text = '';
-                          if (file.type === 'application/pdf') {
-                            const arrayBuffer = await file.arrayBuffer();
-                            text = await extractTextFromPDF(arrayBuffer);
-                          } else {
-                            text = await file.text();
-                          }
-                          setChecklistForm(prev => ({ ...prev, jd: text }));
-                        } catch (err) {
-                          console.error('File parsing error:', err);
-                        }
-                      }}
-                    />
-                  </label>
+                  <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                    Enter a GitHub username to find similar developers from your database
+                  </div>
                 </div>
 
-                {/* Years of Experience */}
+                {/* Seniority Filter */}
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Years of Experience
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
+                    SENIORITY LEVEL
                   </label>
                   <select
-                    value={checklistForm.experience}
-                    onChange={(e) => setChecklistForm({ ...checklistForm, experience: e.target.value })}
+                    value={checklistForm.seniority || ''}
+                    onChange={(e) => setChecklistForm({ ...checklistForm, seniority: e.target.value })}
                     style={{
                       width: '100%',
-                      padding: '8px 10px',
+                      padding: '10px 12px',
                       borderRadius: '8px',
-                      border: '1px solid var(--border)',
+                      border: '1px solid rgba(255,255,255,0.1)',
                       fontSize: '11px',
                       fontFamily: 'inherit',
-                      background: 'var(--bg-gray)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'white',
                       cursor: 'pointer'
                     }}
                   >
-                    <option value="">Any experience</option>
-                    <option value="0-2">0-2 years</option>
-                    <option value="2-5">2-5 years</option>
-                    <option value="5-10">5-10 years</option>
-                    <option value="10+">10+ years</option>
+                    <option value="">Any seniority</option>
+                    <option value="Junior">Junior (0-2 years)</option>
+                    <option value="Mid">Mid (2-5 years)</option>
+                    <option value="Senior">Senior (5+ years)</option>
+                  </select>
+                </div>
+
+                {/* Archetype Filter */}
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
+                    ARCHETYPE
+                  </label>
+                  <select
+                    value={checklistForm.archetype || ''}
+                    onChange={(e) => setChecklistForm({ ...checklistForm, archetype: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      fontSize: '11px',
+                      fontFamily: 'inherit',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'white',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Any archetype</option>
+                    <optgroup label="🌟 Legendary">
+                      <option value="THE 10X ENGINEER">10X Engineer</option>
+                      <option value="THE PROFESSOR">Professor</option>
+                    </optgroup>
+                    <optgroup label="💎 Ultra Rare">
+                      <option value="THE ARCHITECT">Architect</option>
+                    </optgroup>
+                    <optgroup label="⭐ Rare">
+                      <option value="THE SPECIALIST">Specialist</option>
+                      <option value="THE SYSTEMS THINKER">Systems Thinker</option>
+                      <option value="THE MAINTAINER">Maintainer</option>
+                    </optgroup>
+                    <optgroup label="◆ Uncommon">
+                      <option value="THE BUILDER">Builder</option>
+                      <option value="THE CONTRIBUTOR">Contributor</option>
+                      <option value="THE CRAFTSPERSON">Craftsperson</option>
+                      <option value="THE HIDDEN GEM">Hidden Gem</option>
+                      <option value="THE TINKERER">Tinkerer</option>
+                    </optgroup>
+                    <optgroup label="● Common">
+                      <option value="THE GRINDER">Grinder</option>
+                      <option value="THE HOBBYIST">Hobbyist</option>
+                      <option value="THE EXPLORER">Explorer</option>
+                      <option value="THE APPRENTICE">Apprentice</option>
+                    </optgroup>
                   </select>
                 </div>
 
                 {/* Languages */}
                 <div>
-                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Languages / Skills
+                  <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>
+                    LANGUAGES / SKILLS
                   </label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {['Python', 'TypeScript', 'JavaScript', 'Go', 'Rust', 'Java', 'C++', 'Ruby'].map(lang => (
+                    {['Python', 'TypeScript', 'JavaScript', 'Go', 'Rust', 'Java', 'C++', 'Ruby', 'Swift', 'Kotlin'].map(lang => (
                       <button
                         key={lang}
                         onClick={() => {
@@ -2162,9 +2146,9 @@ function App() {
                           borderRadius: '12px',
                           fontSize: '10px',
                           fontWeight: 600,
-                          border: checklistForm.languages.includes(lang) ? '1px solid #7c3aed' : '1px solid var(--border)',
-                          background: checklistForm.languages.includes(lang) ? 'rgba(124, 58, 237, 0.1)' : 'white',
-                          color: checklistForm.languages.includes(lang) ? '#7c3aed' : 'var(--text-dim)',
+                          border: checklistForm.languages.includes(lang) ? '1px solid #7c3aed' : '1px solid rgba(255,255,255,0.15)',
+                          background: checklistForm.languages.includes(lang) ? 'rgba(124, 58, 237, 0.2)' : 'rgba(255,255,255,0.05)',
+                          color: checklistForm.languages.includes(lang) ? '#a78bfa' : 'rgba(255,255,255,0.7)',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease'
                         }}
@@ -2173,193 +2157,25 @@ function App() {
                       </button>
                     ))}
                   </div>
-                </div>
-
-                {/* Location */}
-                <div>
-                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Location (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. San Francisco, USA or Remote"
-                    value={checklistForm.location}
-                    onChange={(e) => setChecklistForm({ ...checklistForm, location: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border)',
-                      fontSize: '11px',
-                      fontFamily: 'inherit',
-                      background: 'white',
-                      color: 'var(--text-main)'
-                    }}
-                  />
-                </div>
-
-                {/* Archetypes - All 15 from deepseek.ts */}
-                <div>
-                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Preferred Archetypes
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {[
-                      // LEGENDARY - Amber #f59e0b
-                      { name: 'THE 10X ENGINEER', color: '#f59e0b' },
-                      { name: 'THE PROFESSOR', color: '#f59e0b' },
-                      // ULTRA RARE - Purple #a855f7
-                      { name: 'THE ARCHITECT', color: '#a855f7' },
-                      // RARE - Blue #3b82f6
-                      { name: 'THE SPECIALIST', color: '#3b82f6' },
-                      { name: 'THE SYSTEMS THINKER', color: '#3b82f6' },
-                      { name: 'THE MAINTAINER', color: '#3b82f6' },
-                      // UNCOMMON - Green #22c55e
-                      { name: 'THE BUILDER', color: '#22c55e' },
-                      { name: 'THE CONTRIBUTOR', color: '#22c55e' },
-                      { name: 'THE CRAFTSPERSON', color: '#22c55e' },
-                      { name: 'THE HIDDEN GEM', color: '#22c55e' },
-                      { name: 'THE TINKERER', color: '#22c55e' },
-                      // COMMON - Stone #78716c
-                      { name: 'THE GRINDER', color: '#78716c' },
-                      { name: 'THE HOBBYIST', color: '#78716c' },
-                      { name: 'THE EXPLORER', color: '#78716c' },
-                      { name: 'THE APPRENTICE', color: '#78716c' }
-                    ].map(arch => {
-                      const isSelected = checklistForm.archetypes.includes(arch.name);
-                      return (
-                        <button
-                          key={arch.name}
-                          onClick={() => {
-                            const archs = isSelected
-                              ? checklistForm.archetypes.filter(a => a !== arch.name)
-                              : [...checklistForm.archetypes, arch.name];
-                            setChecklistForm({ ...checklistForm, archetypes: archs });
-                          }}
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: '12px',
-                            fontSize: '9px',
-                            fontWeight: 600,
-                            border: `1px solid ${arch.color}`,
-                            background: isSelected ? arch.color : 'white',
-                            color: isSelected ? 'white' : arch.color,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          {arch.name.replace('THE ', '')}
-                        </button>
-                      );
-                    })}
+                  <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                    Results include developers with at least 30% of selected languages
                   </div>
                 </div>
 
-                {/* Tiers - 5 tiers from deepseek.ts */}
-                <div>
-                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Tier Filter
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {[
-                      { name: 'LEGENDARY', badge: '🌟🌟🌟', color: '#f59e0b' },
-                      { name: 'ULTRA RARE', badge: '🌟🌟', color: '#a855f7' },
-                      { name: 'RARE', badge: '⭐', color: '#3b82f6' },
-                      { name: 'UNCOMMON', badge: '◆', color: '#22c55e' },
-                      { name: 'COMMON', badge: '●', color: '#78716c' }
-                    ].map(tier => {
-                      const isSelected = checklistForm.tiers.includes(tier.name);
-                      return (
-                        <button
-                          key={tier.name}
-                          onClick={() => {
-                            const tierArchetypes: Record<string, string[]> = {
-                              'LEGENDARY': ['THE 10X ENGINEER', 'THE PROFESSOR'],
-                              'ULTRA RARE': ['THE ARCHITECT'],
-                              'RARE': ['THE SPECIALIST', 'THE SYSTEMS THINKER', 'THE MAINTAINER'],
-                              'UNCOMMON': ['THE BUILDER', 'THE CONTRIBUTOR', 'THE CRAFTSPERSON', 'THE HIDDEN GEM', 'THE TINKERER'],
-                              'COMMON': ['THE GRINDER', 'THE HOBBYIST', 'THE EXPLORER', 'THE APPRENTICE']
-                            };
-
-                            const associatedArchetypes = tierArchetypes[tier.name] || [];
-                            let newTiers;
-                            let newArchetypes;
-
-                            if (isSelected) {
-                              // Deselecting: Remove tier and its archetypes from selection
-                              newTiers = checklistForm.tiers.filter(t => t !== tier.name);
-                              newArchetypes = checklistForm.archetypes.filter(a => !associatedArchetypes.includes(a));
-                            } else {
-                              // Selecting: Add tier and its archetypes
-                              newTiers = [...checklistForm.tiers, tier.name];
-                              // Add associated archetypes without duplicates
-                              const combined = new Set([...checklistForm.archetypes, ...associatedArchetypes]);
-                              newArchetypes = Array.from(combined);
-                            }
-
-                            setChecklistForm({ ...checklistForm, tiers: newTiers, archetypes: newArchetypes });
-                          }}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '12px',
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            border: `1px solid ${tier.color}`,
-                            background: isSelected ? tier.color : 'white',
-                            color: isSelected ? 'white' : tier.color,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          {tier.badge} {tier.name}
-                        </button>
-                      );
-                    })}
+                {/* Info about reachability */}
+                <div style={{
+                  padding: '10px 12px',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.2)',
+                  borderRadius: '8px',
+                  fontSize: '10px',
+                  color: 'rgba(255,255,255,0.7)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '12px' }}>🟢</span>
+                    <span style={{ fontWeight: 700, color: '#22c55e' }}>REACHABILITY FILTER ACTIVE</span>
                   </div>
-                </div>
-
-                {/* Reachability */}
-                <div>
-                  <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Reachability
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {[
-                      { name: 'HIGH', label: 'HIGH REACHABILITY', signal: '🟢', color: '#16a34a' },
-                      { name: 'MEDIUM', label: 'MEDIUM REACHABILITY', signal: '🟡', color: '#ca8a04' },
-                      { name: 'LOW', label: 'LOW REACHABILITY', signal: '🔴', color: '#dc2626' }
-                    ].map(reach => {
-                      const isSelected = checklistForm.reachability.includes(reach.label);
-                      return (
-                        <button
-                          key={reach.name}
-                          onClick={() => {
-                            const newReach = isSelected
-                              ? checklistForm.reachability.filter(r => r !== reach.label)
-                              : [...checklistForm.reachability, reach.label];
-                            setChecklistForm({ ...checklistForm, reachability: newReach });
-                          }}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '12px',
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            border: `1px solid ${reach.color}40`,
-                            background: isSelected ? `${reach.color}15` : 'white',
-                            color: isSelected ? reach.color : 'var(--text-dim)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          <span style={{ fontSize: '10px' }}>{reach.signal}</span>
-                          {reach.name}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  Only showing developers with email available and reachability score ≥ 60
                 </div>
 
               </>
@@ -3638,8 +3454,7 @@ function App() {
           <div className="tab-slider" style={{
             transform: `translateX(${activeTab === 'analyze' ? '0' :
               activeTab === 'history' ? '100%' :
-                activeTab === 'cheklist' ? '200%' :
-                  activeTab === 'analytics' ? '300%' : '400%'})`
+                activeTab === 'analytics' ? '200%' : '300%'})`
           }} />
           <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
             <Search size={14} strokeWidth={2} />
@@ -3665,9 +3480,6 @@ function App() {
                 </div>
               )}
             </div>
-          </button>
-          <button className={`tab-btn ${activeTab === 'cheklist' ? 'active' : ''}`} onClick={() => { setActiveTab('cheklist'); setSelectedReport(null); }}>
-            <List size={14} strokeWidth={2} />
           </button>
           <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
             <TrendingUp size={14} strokeWidth={2} />
@@ -5080,17 +4892,6 @@ function App() {
                 </div>
               )}
 
-              {activeTab === 'cheklist' && (
-                <CheklistTab
-                  handleManualSearch={(handle) => {
-                    // Trigger analysis for the selected user
-                    setManualUrl(`https://github.com/${handle}`)
-                    setTimeout(() => handleManualSearch(), 100)
-                    setActiveTab('analyze')
-                  }}
-                  handleUpgradeToPro={handleUpgradeToPro}
-                />
-              )}
 
               {activeTab === 'analytics' && (
                 <div className="analytics-view">
