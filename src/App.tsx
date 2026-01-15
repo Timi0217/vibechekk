@@ -335,6 +335,9 @@ function App() {
   const [patchedStats, setPatchedStats] = useState<{ totalRepos?: number; totalCommits?: number; lastActive?: string; totalStars?: number; languages?: number; name?: string; languagesList?: string[] } | null>(null)
 
   useEffect(() => {
+    // Clear patchedStats immediately to prevent showing stale data from previous report
+    setPatchedStats(null);
+
     // Fetch fresh GitHub stats from backend (which uses authenticated API - 5000 req/hour)
     // This repairs stale/missing stats for cached reports
     if (selectedReport && selectedReport.candidate?.githubHandle && selectedReport.candidate.githubHandle !== 'Guest') {
@@ -415,8 +418,6 @@ function App() {
           setPatchedStats(updates);
         })
         .catch(err => console.error('[GitHub Stats] Error:', err));
-    } else {
-      setPatchedStats(null);
     }
   }, [selectedReport]);
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
