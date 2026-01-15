@@ -3992,10 +3992,8 @@ function App() {
                         const match = reason.match(/(\d+)\s+repositories/i);
                         if (match) val = parseInt(match[1]);
                       }
-                      tooltip = `${val} total repositories`;
                     } else if (statLabel.label === 'COMMITS') {
                       val = patchedStats?.totalCommits !== undefined ? patchedStats.totalCommits : (selectedReport.metadata?.userStats?.totalCommits || 0);
-                      tooltip = `${val} total lifetime commits`;
                     } else if (statLabel.label === 'LANGUAGES') {
                       val = patchedStats?.languages !== undefined && patchedStats.languages > 0
                         ? patchedStats.languages
@@ -4011,7 +4009,6 @@ function App() {
                         const match = reason.match(/(\d+)\s+total\s+stars/i);
                         if (match) val = parseInt(match[1]);
                       }
-                      tooltip = `${val} total stars`;
                     }
 
                     return { label: statLabel.label, value: val, tooltip };
