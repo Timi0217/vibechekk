@@ -9,7 +9,30 @@ import { analyzeGitHubProfile, calculateReachability, resolveGitHubEmail, fetchU
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
 import { enrichByEmail as pdlEnrichByEmail } from './lib/pdl.js';
 import { findLinkedInProfile as exaFindLinkedIn, buildSearchContext as exaBuildContext } from './lib/exa.js';
+import { searchChekklist, SearchFilters } from './lib/chekklist.js';
+import { checkCheklistLimit, getCheklistSearchesRemaining, recordCheklistSearch } from './middleware/cheklistRateLimit.js';
 import Stripe from 'stripe';
+import { validate } from './validation/middleware.js';
+import {
+  analyzeSchema,
+  emailLookupSchema,
+  enrichCandidateSchema,
+  bulkEnrichSchema,
+  googleAuthSchema,
+  referralApplySchema,
+  setTierSchema,
+  chekklistSearchSchema
+} from './validation/schemas.js';
+import { getRateLimitTracker } from './lib/rateLimitTracker.js';
+import { requestIdMiddleware } from './middleware/requestId.js';
+import {
+  RATE_LIMIT_WINDOW_MS,
+  RATE_LIMIT_MAX_REQUESTS,
+  TIER_LIMITS,
+  CACHE_DURATIONS,
+  JWT_EXPIRY,
+  STRIPE_PRICE_ID_DEFAULT
+} from './constants/index.js';
 
 dotenv.config();
 
@@ -39,6 +62,10 @@ const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const PDL_API_KEY = process.env.PDL_API_KEY;
 const EXA_API_KEY = process.env.EXA_API_KEY || '';
+
+// Configuration from environment
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID || STRIPE_PRICE_ID_DEFAULT; // Fallback to prod price
+const BACKEND_URL = process.env.BACKEND_URL || 'https://vibechekk-production.up.railway.app';
 
 // Validate critical API keys
 if (!GITHUB_TOKEN) {
@@ -103,8 +130,6 @@ const corsOptions = {
 // SECURITY: Simple Rate Limiting (in-memory, consider Redis for production)
 // ═══════════════════════════════════════════════════════════════════════════
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
 
 const rateLimiter = (req: any, res: any, next: any) => {
     const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
@@ -168,12 +193,12 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
                 where: { guestIp: typeof ip === 'string' ? ip : 'unknown-ip', userId: null }
             });
 
-            if (guestCount >= 2) {
+            if (guestCount >= TIER_LIMITS.GUEST) {
                 return res.status(429).json({
                     success: false,
                     error: 'You\'ve used your 2 free Vibechekks! Sign in with GitHub to unlock 3 more, or upgrade to Pro for unlimited checks.',
                     code: 'GUEST_LIMIT_REACHED',
-                    limit: 2,
+                    limit: TIER_LIMITS.GUEST,
                     used: guestCount
                 });
             }
@@ -207,8 +232,7 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
             user.usageCount = 0;
         }
 
-        const limits: Record<string, number> = { GUEST: 2, AUTHENTICATED: 3, PRO: Infinity };
-        const userLimit = limits[user.tier] || 2;
+        const userLimit = TIER_LIMITS[user.tier as keyof typeof TIER_LIMITS] || TIER_LIMITS.GUEST;
 
         if (user.usageCount >= userLimit) {
             const resetTime = 'at the start of next week';
@@ -245,7 +269,9 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
 
 // Apply middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Limit request body size to prevent DoS
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(requestIdMiddleware); // Add unique ID to each request for tracking
 app.use(rateLimiter);
 
 // Explicitly handle OPTIONS for all routes
@@ -267,18 +293,12 @@ app.post('/api/auth/ats', async (req, res) => {
         }
     });
 
-    const vibeToken = jwt.sign({ userId: user.id }, SECURE_JWT_SECRET, { expiresIn: '30d' });
+    const vibeToken = jwt.sign({ userId: user.id }, SECURE_JWT_SECRET, { expiresIn: JWT_EXPIRY });
     res.json({ success: true, token: vibeToken, user });
 });
 
-app.post('/api/auth/google', async (req, res) => {
+app.post('/api/auth/google', validate(googleAuthSchema), async (req, res) => {
     const { token, email, name, picture, referralCode } = req.body;
-    if (!token) return res.status(401).json({ success: false, error: 'No token provided' });
-
-    // Use real Google profile data sent from extension
-    if (!email) {
-        return res.status(400).json({ success: false, error: 'Email is required' });
-    }
 
     // Resolve referral code if provided
     let referredById = undefined;
@@ -308,7 +328,7 @@ app.post('/api/auth/google', async (req, res) => {
         }
     });
 
-    const vibeToken = jwt.sign({ userId: user.id }, SECURE_JWT_SECRET, { expiresIn: '30d' });
+    const vibeToken = jwt.sign({ userId: user.id }, SECURE_JWT_SECRET, { expiresIn: JWT_EXPIRY });
     res.json({ success: true, token: vibeToken, user });
 });
 
@@ -316,12 +336,41 @@ app.get('/', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.post('/api/analyze', checkTierLimit, async (req, res) => {
+// Health check endpoint with database connectivity test
+app.get('/health', async (req, res) => {
+    const healthCheck = {
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        status: 'healthy',
+        database: 'unknown',
+        services: {
+            github: !!GITHUB_TOKEN,
+            deepseek: !!DEEPSEEK_KEY,
+            stripe: !!stripe,
+        }
+    };
+
+    try {
+        // Test database connection
+        await prisma.$queryRaw`SELECT 1`;
+        healthCheck.database = 'connected';
+
+        res.status(200).json(healthCheck);
+    } catch (error: any) {
+        healthCheck.status = 'unhealthy';
+        healthCheck.database = 'disconnected';
+
+        res.status(503).json({
+            ...healthCheck,
+            error: 'Database connection failed'
+        });
+    }
+});
+
+app.post('/api/analyze', validate(analyzeSchema), checkTierLimit, async (req, res) => {
     const { githubUrl } = req.body;
     const user = (req as any).user;
     const isPro = user?.tier === 'PRO';
-
-    if (!githubUrl) return res.status(400).json({ success: false, error: 'githubUrl is required' });
 
     console.log(`[API] Received analyze request for: ${githubUrl} (userId: ${user?.id || req.body.userId || 'guest'})`);
 
@@ -333,25 +382,25 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
 
         if (candidate && candidate.reports && candidate.reports.length > 0) {
             const lastReport = candidate.reports[0];
-            const thirtyMinAgo = new Date();
-            thirtyMinAgo.setMinutes(thirtyMinAgo.getMinutes() - 30);
+            const freshReportThreshold = new Date();
+            freshReportThreshold.setMinutes(freshReportThreshold.getMinutes() - CACHE_DURATIONS.FRESH_REPORT);
 
-            // If the report was created less than 30 minutes ago, return it immediately
+            // If the report was created less than CACHE_DURATIONS.FRESH_REPORT minutes ago, return it immediately
             // This prevents rapid-fire duplicate analysis
-            if (lastReport.createdAt > thirtyMinAgo) {
+            if (lastReport.createdAt > freshReportThreshold) {
                 console.log(`[Deduplication] Returning fresh report for ${githubUrl} (Created ${Math.floor((new Date().getTime() - lastReport.createdAt.getTime()) / 1000)}s ago)`);
                 return res.json({ success: true, data: lastReport, cached: true, isPro });
             }
 
-            const twoDaysAgo = new Date();
-            twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+            const staleReportThreshold = new Date();
+            staleReportThreshold.setMinutes(staleReportThreshold.getMinutes() - CACHE_DURATIONS.STALE_REPORT);
 
             // Force update if:
-            // 1. Report is > 2 days old (was 30 days)
+            // 1. Report is older than CACHE_DURATIONS.STALE_REPORT minutes
             // 2. Report doesn't have the new "repositories" stats prefix in reason
             // 3. Report has markdown/hyperlink artifacts from old models
             const metadata = lastReport.metadata as any;
-            const needsUpdate = lastReport.createdAt < twoDaysAgo ||
+            const needsUpdate = lastReport.createdAt < staleReportThreshold ||
                 !metadata?.archetype_reason?.includes('repositories') ||
                 lastReport.trajectorySummary?.includes('**') ||
                 lastReport.trajectorySummary?.includes('https://');
@@ -369,6 +418,22 @@ app.post('/api/analyze', checkTierLimit, async (req, res) => {
         }
 
         if (!GITHUB_TOKEN || !DEEPSEEK_KEY) throw new Error('API keys missing');
+
+        // Check GitHub API rate limit before starting analysis
+        const rateLimitTracker = getRateLimitTracker(GITHUB_TOKEN);
+        await rateLimitTracker.logStatus();
+
+        // Ensure we have enough quota (analysis typically uses ~50 requests)
+        const hasQuota = await rateLimitTracker.hasQuota(50);
+        if (!hasQuota) {
+            const status = await rateLimitTracker.getStatus();
+            return res.status(429).json({
+                success: false,
+                error: 'GitHub API rate limit exceeded',
+                code: 'RATE_LIMIT_EXCEEDED',
+                resetTime: status.reset.toISOString()
+            });
+        }
 
         let normalizedUrl = githubUrl.trim().replace(/^@/, '');
         if (!normalizedUrl.includes('github.com')) normalizedUrl = `github.com/${normalizedUrl}`;
@@ -989,39 +1054,88 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
     }
 });
 
-// Legacy endpoint (keep for backwards compatibility)
-app.post('/api/chekklist/search', checkTierLimit, async (req, res) => {
-    const { jobTitle, jd, experience, languages, archetypes, tiers, location } = req.body;
+// Chekklist Phase 2: Smart developer search from internal database
+app.post('/api/chekklist/search', checkTierLimit, checkCheklistLimit, async (req, res) => {
+    const { languages, seniority, archetype, reverseUsername } = req.body;
     const user = (req as any).user;
+    const cheklistStats = (req as any).cheklistStats;
 
-    console.log(`[Chekklist] Search request from ${user?.email || 'guest'}: ${jobTitle}`);
-
-    if (!GITHUB_TOKEN) return res.status(500).json({ success: false, error: 'GitHub Token missing' });
+    console.log(`[Chekklist] Search request from ${user?.email || 'unknown'}:`, {
+        languages,
+        seniority,
+        archetype,
+        reverseUsername
+    });
 
     try {
-        const { searchCandidates } = await import('./lib/github.js');
+        const filters: SearchFilters = {
+            languages: languages || undefined,
+            seniority: seniority || undefined,
+            archetype: archetype || undefined,
+            reverseUsername: reverseUsername || undefined
+        };
 
-        const candidates = await searchCandidates(GITHUB_TOKEN, { languages, experience, jobTitle, location });
+        const results = await searchChekklist(filters);
 
-        console.log(`[Chekklist] Found ${candidates.length} candidates.`);
+        // Record this search in database
+        await recordCheklistSearch(user.id, filters, results.length);
 
-        // Return basic results without full analysis (client can use SSE for progressive)
-        const results = candidates.map((c: any) => ({
-            handle: c.login,
-            name: c.name || c.login,
-            avatar: c.avatarUrl,
-            bio: c.bio,
-            location: c.location || null,
-            topRepo: c.repositories?.nodes?.[0]?.name || 'Unknown',
-            topRepoDesc: c.repositories?.nodes?.[0]?.description,
-            followers: c.followerCount || 0,
-            totalStars: c.totalStars || 0
-        }));
+        console.log(`[Chekklist] Returning ${results.length} results to ${user.email}`);
 
-        res.json({ success: true, candidates: results, useSSE: true });
+        res.json({
+            success: true,
+            results,
+            searchesRemaining: cheklistStats?.remaining || 0
+        });
 
     } catch (e: any) {
-        console.error(e);
+        console.error('[Chekklist] Search error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Get remaining Chekklist searches for current user
+app.get('/api/chekklist/searches-remaining', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({
+            success: false,
+            error: 'Authentication required'
+        });
+    }
+
+    try {
+        const decoded: any = jwt.verify(token, SECURE_JWT_SECRET);
+        const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        if (user.tier !== 'PRO') {
+            return res.json({
+                success: true,
+                limit: 0,
+                used: 0,
+                remaining: 0,
+                message: 'Chekklist is a PRO feature'
+            });
+        }
+
+        const stats = await getCheklistSearchesRemaining(user.id);
+
+        res.json({
+            success: true,
+            ...stats
+        });
+
+    } catch (e: any) {
+        console.error('[Chekklist] Error fetching remaining searches:', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -1310,9 +1424,8 @@ app.get('/api/auth/github/callback', async (req, res) => {
 });
 
 // Email to GitHub username lookup
-app.post('/api/lookup/email', async (req, res) => {
+app.post('/api/lookup/email', validate(emailLookupSchema), async (req, res) => {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ success: false, error: 'Email required' });
 
     if (!GITHUB_TOKEN) return res.status(500).json({ success: false, error: 'GitHub Token missing' });
 
@@ -1583,16 +1696,39 @@ app.post('/api/enrich/bulk', checkTierLimit, async (req, res) => {
 });
 
 app.get('/api/history', async (req, res) => {
-    const { userId } = req.query;
+    const { userId, limit = '50', cursor } = req.query;
+
     try {
+        // Parse and validate pagination params
+        const take = Math.min(parseInt(limit as string) || 50, 100); // Max 100 per page
+        const where = userId ? { userId: String(userId) } : {};
+
+        // Cursor-based pagination for better performance
         const history = await prisma.vibeReport.findMany({
-            where: userId ? { userId: String(userId) } : {},
+            where,
             include: { candidate: true },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            take: take + 1, // Fetch one extra to check if there are more results
+            ...(cursor && { cursor: { id: cursor as string }, skip: 1 }) // Skip the cursor itself
         });
-        res.json({ success: true, data: history });
+
+        // Check if there are more results
+        const hasMore = history.length > take;
+        const results = hasMore ? history.slice(0, take) : history;
+        const nextCursor = hasMore ? results[results.length - 1].id : null;
+
+        res.json({
+            success: true,
+            data: results,
+            pagination: {
+                hasMore,
+                nextCursor,
+                count: results.length
+            }
+        });
     } catch (error) {
-        res.status(500).json({ success: false, error: 'Failed' });
+        console.error('[History] Error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch history' });
     }
 });
 
@@ -1908,12 +2044,12 @@ app.get('/api/usage', async (req, res) => {
             return res.json({
                 success: true,
                 used: guestCount,
-                limit: 2,
+                limit: TIER_LIMITS.GUEST,
                 tier: 'GUEST',
-                remaining: Math.max(0, 2 - guestCount)
+                remaining: Math.max(0, TIER_LIMITS.GUEST - guestCount)
             });
         } catch (e) {
-            return res.json({ success: true, used: 0, limit: 2, tier: 'GUEST', remaining: 2 });
+            return res.json({ success: true, used: 0, limit: TIER_LIMITS.GUEST, tier: 'GUEST', remaining: TIER_LIMITS.GUEST });
         }
     }
 
@@ -1938,8 +2074,7 @@ app.get('/api/usage', async (req, res) => {
             });
         }
 
-        const baseLimits: Record<string, number> = { GUEST: 2, AUTHENTICATED: 3, PRO: Infinity };
-        const baseLimit = baseLimits[user.tier] || 2;
+        const baseLimit = TIER_LIMITS[user.tier as keyof typeof TIER_LIMITS] || TIER_LIMITS.GUEST;
         const totalLimit = baseLimit + bonusChekks;
 
         res.json({
@@ -2048,15 +2183,15 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
             mode: 'subscription',
             payment_method_types: ['card'],
             line_items: [{
-                price: 'price_1SkDqDLd8BonO0ZWPrwvJDL1', // Vibechekk Pro - $29/month
+                price: STRIPE_PRICE_ID, // Vibechekk Pro - $29/month
                 quantity: 1,
             }],
             customer_email: user.email,
             metadata: {
                 userId: user.id,
             },
-            success_url: `${process.env.BACKEND_URL || 'https://vibechekk-production.up.railway.app'}/api/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.BACKEND_URL || 'https://vibechekk-production.up.railway.app'}/api/stripe/cancel`,
+            success_url: `${BACKEND_URL}/api/stripe/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${BACKEND_URL}/api/stripe/cancel`,
         });
 
         console.log(`[Stripe] Created checkout session for user ${user.email}`);
@@ -2165,10 +2300,17 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     let event: Stripe.Event;
 
     try {
+        // SECURITY: Always verify signatures in production
+        if (process.env.NODE_ENV === 'production' && !webhookSecret) {
+            console.error('[Stripe Webhook] FATAL: STRIPE_WEBHOOK_SECRET not set in production!');
+            return res.status(500).send('Webhook configuration error');
+        }
+
         if (webhookSecret) {
             event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
         } else {
-            // For testing without webhook signature verification
+            // For development/testing only - log warning
+            console.warn('[Stripe Webhook] ⚠️  WARNING: Webhook signature verification disabled (development mode)');
             event = JSON.parse(req.body.toString());
         }
     } catch (err: any) {
@@ -2176,24 +2318,75 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    // Handle subscription cancellation
-    if (event.type === 'customer.subscription.deleted') {
-        const subscription = event.data.object as Stripe.Subscription;
+    try {
+        // Handle subscription activation (backup to success URL)
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object as Stripe.Checkout.Session;
 
-        const user = await prisma.user.findFirst({
-            where: { stripeSubscriptionId: subscription.id }
-        });
-
-        if (user) {
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { tier: 'AUTHENTICATED' }
-            });
-            console.log(`[Stripe] User ${user.email} subscription cancelled - downgraded to AUTHENTICATED`);
+            if (session.payment_status === 'paid' && session.metadata?.userId) {
+                await prisma.user.update({
+                    where: { id: session.metadata.userId },
+                    data: {
+                        tier: 'PRO',
+                        stripeCustomerId: session.customer as string,
+                        stripeSubscriptionId: session.subscription as string,
+                    },
+                });
+                console.log(`[Stripe Webhook] User ${session.metadata.userId} upgraded to PRO via webhook`);
+            }
         }
-    }
 
-    res.json({ received: true });
+        // Handle subscription renewal
+        if (event.type === 'customer.subscription.updated') {
+            const subscription = event.data.object as Stripe.Subscription;
+
+            const user = await prisma.user.findFirst({
+                where: { stripeSubscriptionId: subscription.id }
+            });
+
+            if (user) {
+                // If subscription becomes active/trialing, ensure PRO tier
+                if (subscription.status === 'active' || subscription.status === 'trialing') {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { tier: 'PRO' }
+                    });
+                    console.log(`[Stripe Webhook] User ${user.email} subscription activated`);
+                }
+                // If subscription is past_due, incomplete, etc., downgrade
+                else if (['past_due', 'unpaid', 'incomplete', 'canceled'].includes(subscription.status)) {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { tier: 'AUTHENTICATED' }
+                    });
+                    console.log(`[Stripe Webhook] User ${user.email} subscription ${subscription.status} - downgraded`);
+                }
+            }
+        }
+
+        // Handle subscription cancellation
+        if (event.type === 'customer.subscription.deleted') {
+            const subscription = event.data.object as Stripe.Subscription;
+
+            const user = await prisma.user.findFirst({
+                where: { stripeSubscriptionId: subscription.id }
+            });
+
+            if (user) {
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { tier: 'AUTHENTICATED' }
+                });
+                console.log(`[Stripe Webhook] User ${user.email} subscription deleted - downgraded to AUTHENTICATED`);
+            }
+        }
+
+        res.json({ received: true });
+    } catch (err: any) {
+        console.error('[Stripe Webhook] Processing error:', err);
+        // Return 200 to acknowledge receipt, but log the error
+        res.status(500).json({ error: 'Webhook processing failed' });
+    }
 });
 
 app.use((req, res) => {

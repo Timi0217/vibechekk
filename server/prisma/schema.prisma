@@ -31,6 +31,7 @@ model User {
   
   reports              VibeReport[]
   candidate            Candidate?
+  cheklistSearches     CheklistSearch[]
 }
 
 model Candidate {
@@ -88,6 +89,21 @@ model VibeReport {
   @@index([userId])
   @@index([candidateId])
   @@index([createdAt])
+}
+
+model CheklistSearch {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  searchType      String   // "reverse" | "archetype" | "seniority" | "combined"
+  reverseUsername String?
+  archetype       String?
+  seniority       String?  // "Junior" | "Mid" | "Senior"
+  languages       String[] // Array of language names
+  resultCount     Int
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 enum SubscriptionTier {

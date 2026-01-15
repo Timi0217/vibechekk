@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Trash2, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
+import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Trash2, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus, List } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist';
 import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
@@ -17,6 +17,7 @@ const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<string> => 
   return text;
 };
 import { BACKEND_URL } from './constants'
+import CheklistTab from './components/tabs/CheklistTab'
 import './App.css'
 
 const rarityColors: Record<string, string> = {
@@ -27,7 +28,7 @@ const rarityColors: Record<string, string> = {
   'COMMON': '#64748b'         // Gray for bottom 50%
 }
 
-type Tab = 'analyze' | 'history' | 'analytics' | 'settings'
+type Tab = 'analyze' | 'history' | 'cheklist' | 'analytics' | 'settings'
 
 const VibeLogo = ({ size = 20, color = 'currentColor', className = '', ...props }) => (
   <svg
@@ -3637,7 +3638,8 @@ function App() {
           <div className="tab-slider" style={{
             transform: `translateX(${activeTab === 'analyze' ? '0' :
               activeTab === 'history' ? '100%' :
-                activeTab === 'analytics' ? '200%' : '300%'})`
+                activeTab === 'cheklist' ? '200%' :
+                  activeTab === 'analytics' ? '300%' : '400%'})`
           }} />
           <button className={`tab-btn ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => { setActiveTab('analyze'); setSelectedReport(null); }}>
             <Search size={14} strokeWidth={2} />
@@ -3663,6 +3665,9 @@ function App() {
                 </div>
               )}
             </div>
+          </button>
+          <button className={`tab-btn ${activeTab === 'cheklist' ? 'active' : ''}`} onClick={() => { setActiveTab('cheklist'); setSelectedReport(null); }}>
+            <List size={14} strokeWidth={2} />
           </button>
           <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveTab('analytics'); setSelectedReport(null); }}>
             <TrendingUp size={14} strokeWidth={2} />
@@ -5073,6 +5078,18 @@ function App() {
                     return <>{skeletonCards}{historyCards}</>;
                   })()}
                 </div>
+              )}
+
+              {activeTab === 'cheklist' && (
+                <CheklistTab
+                  handleManualSearch={(handle) => {
+                    // Trigger analysis for the selected user
+                    setManualUrl(`https://github.com/${handle}`)
+                    setTimeout(() => handleManualSearch(), 100)
+                    setActiveTab('analyze')
+                  }}
+                  handleUpgradeToPro={handleUpgradeToPro}
+                />
               )}
 
               {activeTab === 'analytics' && (
