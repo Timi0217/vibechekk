@@ -1,5 +1,46 @@
 import { Octokit } from 'octokit';
 
+// Helper function to fetch lifetime commits year by year (GitHub API limit: 1 year max per query)
+async function fetchLifetimeCommits(octokit: Octokit, username: string, accountCreatedAt: string): Promise<number> {
+  const createdAt = new Date(accountCreatedAt);
+  const now = new Date();
+  let totalCommits = 0;
+
+  const contributionsQuery = `
+    query($username: String!, $from: DateTime!, $to: DateTime!) {
+      user(login: $username) {
+        contributionsCollection(from: $from, to: $to) {
+          totalCommitContributions
+        }
+      }
+    }
+  `;
+
+  let currentDate = new Date(createdAt);
+
+  while (currentDate < now) {
+    const yearEnd = new Date(currentDate);
+    yearEnd.setFullYear(yearEnd.getFullYear() + 1);
+    const endDate = yearEnd > now ? now : yearEnd;
+
+    try {
+      const res: any = await octokit.graphql(contributionsQuery, {
+        username,
+        from: currentDate.toISOString(),
+        to: endDate.toISOString()
+      });
+
+      totalCommits += res.user.contributionsCollection.totalCommitContributions;
+    } catch (error) {
+      console.error(`Error fetching commits for ${username} from ${currentDate.toISOString()} to ${endDate.toISOString()}:`, error);
+    }
+
+    currentDate = yearEnd;
+  }
+
+  return totalCommits;
+}
+
 export const fetchUserStats = async (token: string, username: string) => {
   const octokit = new Octokit({ auth: token });
 
@@ -8,7 +49,7 @@ export const fetchUserStats = async (token: string, username: string) => {
   last90Days.setDate(last90Days.getDate() - 90);
 
   const query = `
-    query($username: String!, $from: DateTime!, $lifetimeFrom: DateTime!, $searchQuery: String!) {
+    query($username: String!, $from: DateTime!, $searchQuery: String!) {
       search(query: $searchQuery, type: REPOSITORY) {
         repositoryCount
       }
@@ -35,9 +76,6 @@ export const fetchUserStats = async (token: string, username: string) => {
             }
           }
         }
-        lifetimeContributions: contributionsCollection(from: $lifetimeFrom) {
-          totalCommitContributions
-        }
         recentActivity: contributionsCollection(from: $from) {
           totalCommitContributions
           restrictedContributionsCount
@@ -62,13 +100,19 @@ export const fetchUserStats = async (token: string, username: string) => {
     const response: any = await octokit.graphql(query, {
       username,
       from: last90Days.toISOString(),
-      lifetimeFrom: '2008-01-01T00:00:00Z', // GitHub was founded in 2008
       searchQuery: `user:${username} fork:false`
     });
 
     if (!response.user) return null;
 
     const repos = response.user.repositories.nodes;
+    const accountCreatedAt = response.user.createdAt;
+
+    // Fetch lifetime commits year by year (GitHub's API only allows 1-year queries max)
+    console.log(`[GitHub Stats] Fetching lifetime commits for ${username}...`);
+    const lifetimeCommits = await fetchLifetimeCommits(octokit, username, accountCreatedAt);
+    console.log(`[GitHub Stats] ${username} has ${lifetimeCommits} lifetime commits`);
+
 
     // Find truly last active date from contribution calendar (includes private commits if user allows)
     const calendar = response.user.contributionsCollection.contributionCalendar;
@@ -99,7 +143,7 @@ export const fetchUserStats = async (token: string, username: string) => {
     return {
       totalStars: repos.reduce((sum: number, r: any) => sum + r.stargazerCount, 0),
       totalRepos: response.user.repositories.totalCount || response.search.repositoryCount,
-      totalCommits: response.user.lifetimeContributions.totalCommitContributions,
+      totalCommits: lifetimeCommits,
       externalContributions: response.user.contributionsCollection.totalRepositoriesWithContributedCommits,
       last90DaysCommits: response.user.recentActivity.contributionCalendar?.totalContributions || response.user.recentActivity.totalCommitContributions,
       createdAt: response.user.createdAt,
