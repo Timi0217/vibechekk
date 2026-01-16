@@ -35,6 +35,8 @@ export function timeout(ms?: number) {
       timeoutMs = TIMEOUTS.bulk;
     } else if (req.path.includes('/webhook')) {
       timeoutMs = TIMEOUTS.webhook;
+    } else if (req.path.includes('/analyze') || req.path.includes('/chekklist')) {
+      timeoutMs = TIMEOUTS.bulk; // Use 3min timeout for analysis
     }
 
     const timeoutId = setTimeout(() => {
