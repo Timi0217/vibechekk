@@ -2162,22 +2162,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Info about reachability */}
-                <div style={{
-                  padding: '10px 12px',
-                  background: 'rgba(34, 197, 94, 0.1)',
-                  border: '1px solid rgba(34, 197, 94, 0.2)',
-                  borderRadius: '8px',
-                  fontSize: '10px',
-                  color: 'rgba(255,255,255,0.7)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '12px' }}>🟢</span>
-                    <span style={{ fontWeight: 700, color: '#22c55e' }}>REACHABILITY FILTER ACTIVE</span>
-                  </div>
-                  Only showing developers with email available and reachability score ≥ 60
-                </div>
-
               </>
             ) : (
               activeSearches.length > 0 ? (
