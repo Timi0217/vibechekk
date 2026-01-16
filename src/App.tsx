@@ -2643,7 +2643,7 @@ function App() {
                   const searchId = Date.now();
                   const newSearch = {
                     id: searchId,
-                    title: checklistForm.jobTitle || 'Untitled Search',
+                    title: 'Developer Search',
                     status: 'running',
                     progressMessage: '🔍 Initializing search...',
                     timestamp: Date.now(),
@@ -2779,7 +2779,7 @@ function App() {
                   boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)'
                 }}
               >
-                {checklistForm.loading ? 'SEARCHING...' : 'FIND QUALITY DEVS'}
+                {checklistForm.loading ? 'SEARCHING...' : 'FIND DEVS'}
               </button>
             </div>
           )}
