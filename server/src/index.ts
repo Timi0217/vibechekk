@@ -315,7 +315,7 @@ app.post('/api/auth/ats', validate(atsAuthSchema), async (req, res) => {
     res.json({ success: true, token: vibeToken, user });
 });
 
-app.post('/api/auth/google', validate(googleAuthSchema), async (req, res) => {
+app.post('/api/auth/google', async (req, res) => {
     const { token, email, name, picture, referralCode } = req.body;
 
     // Resolve referral code if provided
