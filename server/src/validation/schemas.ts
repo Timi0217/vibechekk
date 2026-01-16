@@ -43,6 +43,12 @@ export const paginationSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0)
 })
 
+export const historyQuerySchema = z.object({
+  userId: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  cursor: z.string().optional()
+})
+
 // API Schemas
 export const analyzeSchema = z.object({
   githubUrl: githubUrlSchema,
@@ -58,10 +64,30 @@ export const enrichCandidateSchema = z.object({
   githubUrl: githubUrlSchema
 })
 
+export const enrichCandidateRequestSchema = z.object({
+  candidateId: z.string().optional(),
+  githubHandle: githubHandleSchema.optional(),
+  email: emailSchema.optional(),
+  name: z.string().max(200).optional()
+}).refine(
+  data => data.candidateId || data.githubHandle || data.email,
+  { message: 'At least one of candidateId, githubHandle, or email is required' }
+)
+
 export const bulkEnrichSchema = z.object({
   handles: z.array(githubHandleSchema)
     .min(1, 'At least one handle required')
     .max(100, 'Maximum 100 handles per request')
+})
+
+export const bulkEnrichCandidatesSchema = z.object({
+  candidates: z.array(z.object({
+    candidateId: z.string().optional(),
+    email: emailSchema.optional(),
+    name: z.string().max(200).optional()
+  }))
+    .min(1, 'At least one candidate required')
+    .max(10, 'Maximum 10 candidates per request')
 })
 
 export const googleAuthSchema = z.object({
@@ -73,8 +99,14 @@ export const referralApplySchema = z.object({
   code: referralCodeSchema
 })
 
+export const applyReferralSchema = z.object({
+  referralCode: referralCodeSchema,
+  userId: z.string().min(1, 'User ID is required')
+})
+
 export const setTierSchema = z.object({
-  tier: tierSchema
+  tier: tierSchema,
+  resetUsage: z.boolean().optional()
 })
 
 export const chekklistSearchSchema = z.object({
@@ -94,6 +126,58 @@ export const deleteHistorySchema = z.object({
   id: z.string().min(1, 'ID is required')
 })
 
+export const idParamSchema = z.object({
+  id: z.string().min(1, 'ID is required')
+})
+
+export const userIdBodySchema = z.object({
+  userId: z.string().optional()
+})
+
+// Additional endpoint schemas
+export const reportIdParamSchema = z.object({
+  id: z.string().cuid('Invalid report ID format')
+})
+
+export const handleParamSchema = z.object({
+  handle: githubHandleSchema
+})
+
+export const updateRecruiterSummarySchema = z.object({
+  recruiterSummary: z.string().min(10, 'Summary too short').max(5000, 'Summary too long')
+})
+
+export const bulkAnalyzeSchema = z.object({
+  handles: z.array(githubHandleSchema)
+    .min(1, 'At least one handle required')
+    .max(50, 'Maximum 50 handles for bulk analysis')
+})
+
+export const atsLoginSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1, 'Password is required')
+})
+
+export const atsAuthSchema = z.object({
+  token: z.string().min(1, 'ATS token is required'),
+  type: z.enum(['ashby', 'greenhouse'], { message: 'Type must be ashby or greenhouse' })
+})
+
+export const githubCallbackSchema = z.object({
+  code: z.string().min(1, 'Authorization code required'),
+  state: z.string().optional()
+})
+
+export const cheklistSearchSchemaV2 = z.object({
+  reverseUsername: githubHandleSchema.optional(),
+  archetype: z.string().max(100).optional(),
+  seniority: z.enum(['Junior', 'Mid', 'Senior']).optional(),
+  languages: z.array(z.string().max(50)).max(20).optional()
+}).refine(
+  data => data.reverseUsername || data.archetype || data.seniority || (data.languages && data.languages.length > 0),
+  { message: 'At least one search criterion required' }
+)
+
 // Type exports for TypeScript
 export type AnalyzeInput = z.infer<typeof analyzeSchema>
 export type EmailLookupInput = z.infer<typeof emailLookupSchema>
@@ -105,3 +189,9 @@ export type SetTierInput = z.infer<typeof setTierSchema>
 export type ChekklistSearchInput = z.infer<typeof chekklistSearchSchema>
 export type DeleteHistoryInput = z.infer<typeof deleteHistorySchema>
 export type PaginationInput = z.infer<typeof paginationSchema>
+export type ReportIdParamInput = z.infer<typeof reportIdParamSchema>
+export type UpdateRecruiterSummaryInput = z.infer<typeof updateRecruiterSummarySchema>
+export type BulkAnalyzeInput = z.infer<typeof bulkAnalyzeSchema>
+export type AtsLoginInput = z.infer<typeof atsLoginSchema>
+export type GithubCallbackInput = z.infer<typeof githubCallbackSchema>
+export type CheklistSearchV2Input = z.infer<typeof cheklistSearchSchemaV2>

@@ -9,10 +9,8 @@
  * Resets daily at midnight UTC
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 import { Request, Response, NextFunction } from 'express';
-
-const prisma = new PrismaClient();
 
 const CHEKKLIST_LIMITS = {
   PRO: 3,

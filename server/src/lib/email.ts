@@ -1,7 +1,5 @@
 import { Resend } from 'resend';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './prisma.js';
 
 // Only initialize Resend if API key is provided (optional)
 const RESEND_API_KEY = process.env.RESEND_API_KEY;

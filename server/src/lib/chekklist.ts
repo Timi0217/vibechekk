@@ -11,11 +11,9 @@
  * Filters out profiles with reachability < 60 OR no email
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma.js';
 import { calculateSeniority, UserStats } from './seniority.js';
 import { calculateReachability, ReachabilityData, getReachabilityBadge } from './reachability.js';
-
-const prisma = new PrismaClient();
 
 export interface SearchFilters {
   languages?: string[];        // e.g., ["TypeScript", "Python"]

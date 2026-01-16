@@ -1,10 +1,16 @@
-console.log(">>> VIBECHEKK SERVER STARTING... <<<");
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+
+// Load environment variables FIRST (before any other imports that use process.env)
+dotenv.config();
+
+import { prisma, disconnectPrisma } from './lib/prisma.js';
+import { logger, log } from './lib/logger.js';
 import { sendProfileViewedEmail } from './lib/email.js';
+
+logger.info('>>> VIBECHEKK SERVER STARTING... <<<');
 import { analyzeGitHubProfile, calculateReachability, resolveGitHubEmail, fetchUserStats } from './lib/github.js';
 import { analyzeWithDeepSeek } from './lib/deepseek.js';
 import { enrichByEmail as pdlEnrichByEmail } from './lib/pdl.js';
@@ -17,14 +23,28 @@ import {
   analyzeSchema,
   emailLookupSchema,
   enrichCandidateSchema,
+  enrichCandidateRequestSchema,
   bulkEnrichSchema,
+  bulkEnrichCandidatesSchema,
   googleAuthSchema,
   referralApplySchema,
+  applyReferralSchema,
   setTierSchema,
-  chekklistSearchSchema
+  chekklistSearchSchema,
+  atsAuthSchema,
+  githubCallbackSchema,
+  cheklistSearchSchemaV2,
+  paginationSchema,
+  historyQuerySchema,
+  githubHandleSchema,
+  handleParamSchema,
+  deleteHistorySchema,
+  idParamSchema,
+  userIdBodySchema
 } from './validation/schemas.js';
 import { getRateLimitTracker } from './lib/rateLimitTracker.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
+import { timeout } from './middleware/timeout.js';
 import {
   RATE_LIMIT_WINDOW_MS,
   RATE_LIMIT_MAX_REQUESTS,
@@ -34,10 +54,7 @@ import {
   STRIPE_PRICE_ID_DEFAULT
 } from './constants/index.js';
 
-dotenv.config();
-
 const app = express();
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 8080;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -204,7 +221,7 @@ const checkTierLimit = async (req: any, res: any, next: any) => {
             }
             return next();
         } catch (e) {
-            console.error('[Tier Check] Database error:', e);
+            log.error('[Tier Check] Database error', e);
             return next(); // Fallback if DB fails
         }
     }
@@ -272,13 +289,14 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Limit request body size to prevent DoS
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(requestIdMiddleware); // Add unique ID to each request for tracking
+app.use(timeout()); // Timeout protection (30s default, 3min for bulk ops)
 app.use(rateLimiter);
 
 // Explicitly handle OPTIONS for all routes
 app.options('*', cors(corsOptions));
 
 // --- AUTH ROUTES ---
-app.post('/api/auth/ats', async (req, res) => {
+app.post('/api/auth/ats', validate(atsAuthSchema), async (req, res) => {
     const { token, type } = req.body;
     const atsUser = await verifyAtsToken(token, type);
     if (!atsUser) return res.status(401).json({ success: false, error: 'Invalid ATS credentials' });
@@ -357,6 +375,7 @@ app.get('/health', async (req, res) => {
 
         res.status(200).json(healthCheck);
     } catch (error: any) {
+        log.error('[Health Check] Database connection failed', error);
         healthCheck.status = 'unhealthy';
         healthCheck.database = 'disconnected';
 
@@ -541,7 +560,7 @@ app.post('/api/analyze', validate(analyzeSchema), checkTierLimit, async (req, re
 
         res.json({ success: true, data: report, isPro });
     } catch (error: any) {
-        console.error('Analysis error:', error);
+        log.error('[Analysis] Error analyzing GitHub profile', error);
         res.status(500).json({ success: false, error: error.message || 'Internal server error' });
     }
 });
@@ -1049,13 +1068,13 @@ app.get('/api/chekklist/stream', checkTierLimit, async (req, res) => {
         */
 
     } catch (e: any) {
-        console.error('[Chekklist SSE Error]', e);
+        log.error('[Chekklist SSE] Stream error', e);
         sendEvent('error', { message: e.message });
     }
 });
 
 // Chekklist Phase 2: Smart developer search from internal database
-app.post('/api/chekklist/search', checkTierLimit, checkCheklistLimit, async (req, res) => {
+app.post('/api/chekklist/search', validate(cheklistSearchSchemaV2), checkTierLimit, checkCheklistLimit, async (req, res) => {
     const { languages, seniority, archetype, reverseUsername } = req.body;
     const user = (req as any).user;
     const cheklistStats = (req as any).cheklistStats;
@@ -1089,7 +1108,7 @@ app.post('/api/chekklist/search', checkTierLimit, checkCheklistLimit, async (req
         });
 
     } catch (e: any) {
-        console.error('[Chekklist] Search error:', e);
+        log.error('[Chekklist] Search error', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -1135,13 +1154,13 @@ app.get('/api/chekklist/searches-remaining', async (req, res) => {
         });
 
     } catch (e: any) {
-        console.error('[Chekklist] Error fetching remaining searches:', e);
+        log.error('[Chekklist] Error fetching remaining searches', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
 // Public endpoint for growth loop claim previews
-app.get('/api/public/report/:handle', async (req, res) => {
+app.get('/api/public/report/:handle', validate(handleParamSchema, 'params'), async (req, res) => {
     const { handle } = req.params;
     try {
         const candidate = await prisma.candidate.findFirst({
@@ -1169,14 +1188,13 @@ app.get('/api/public/report/:handle', async (req, res) => {
             }
         });
     } catch (e: any) {
-        console.error('[Public API Error]', e);
+        log.error('[Public API] Error fetching report', e);
         res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });
 
-app.get('/api/auth/github/callback', async (req, res) => {
+app.get('/api/auth/github/callback', validate(githubCallbackSchema, 'query'), async (req, res) => {
     const { code } = req.query;
-    if (!code) return res.status(400).send('No code provided');
 
     try {
         console.log('[Auth] Exchanging code for token...');
@@ -1260,7 +1278,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
                 console.log(`[GrowthLoop] Marked candidate ${githubUser.login} as claimed by user ${user.email}`);
             }
         } catch (claimErr) {
-            console.error('[GrowthLoop] Failed to auto-claim candidate:', claimErr);
+            log.error('[GrowthLoop] Failed to auto-claim candidate', claimErr);
         }
 
         const token = jwt.sign({ userId: user.id, email: user.email, tier: user.tier }, SECURE_JWT_SECRET);
@@ -1418,7 +1436,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
         `);
 
     } catch (e: any) {
-        console.error('[Auth Error]', e);
+        log.error('[Auth] GitHub callback failed', e);
         res.status(500).send(`Authentication Failed: ${e.message}`);
     }
 });
@@ -1439,7 +1457,7 @@ app.post('/api/lookup/email', validate(emailLookupSchema), async (req, res) => {
             res.json({ success: false, error: 'No GitHub user found for this email' });
         }
     } catch (e: any) {
-        console.error('[Email Lookup Error]', e);
+        log.error('[Email Lookup] Error searching for user', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -1447,13 +1465,9 @@ app.post('/api/lookup/email', validate(emailLookupSchema), async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 // CANDIDATE ENRICHMENT: Clearout.io for LinkedIn & professional data
 // ═══════════════════════════════════════════════════════════════════════════
-app.post('/api/enrich/candidate', checkTierLimit, async (req, res) => {
+app.post('/api/enrich/candidate', validate(enrichCandidateRequestSchema), checkTierLimit, async (req, res) => {
     const { candidateId, githubHandle, email, name } = req.body;
     const user = (req as any).user;
-
-    if (!candidateId && !githubHandle && !email) {
-        return res.status(400).json({ success: false, error: 'candidateId, githubHandle, or email required' });
-    }
 
     if (!PDL_API_KEY) {
         return res.status(503).json({ success: false, error: 'Enrichment service not configured' });
@@ -1614,19 +1628,15 @@ app.post('/api/enrich/candidate', checkTierLimit, async (req, res) => {
         });
 
     } catch (e: any) {
-        console.error('[Enrich Error]', e);
+        log.error('[Enrich] Candidate enrichment failed', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
 // Bulk enrichment endpoint (up to 10 candidates)
-app.post('/api/enrich/bulk', checkTierLimit, async (req, res) => {
+app.post('/api/enrich/bulk', validate(bulkEnrichCandidatesSchema), checkTierLimit, async (req, res) => {
     const { candidates } = req.body; // Array of { candidateId?, email?, name? }
     const user = (req as any).user;
-
-    if (!candidates || !Array.isArray(candidates) || candidates.length === 0) {
-        return res.status(400).json({ success: false, error: 'candidates array required' });
-    }
 
     if (!PDL_API_KEY) {
         return res.status(503).json({ success: false, error: 'Enrichment service not configured' });
@@ -1690,12 +1700,12 @@ app.post('/api/enrich/bulk', checkTierLimit, async (req, res) => {
         });
 
     } catch (e: any) {
-        console.error('[Bulk Enrich Error]', e);
+        log.error('[Bulk Enrich] Bulk enrichment failed', e);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-app.get('/api/history', async (req, res) => {
+app.get('/api/history', validate(historyQuerySchema, 'query'), async (req, res) => {
     const { userId, limit = '50', cursor } = req.query;
 
     try {
@@ -1727,13 +1737,13 @@ app.get('/api/history', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('[History] Error:', error);
+        log.error('[History] Failed to fetch history', error);
         res.status(500).json({ success: false, error: 'Failed to fetch history' });
     }
 });
 
 // Check if a handle exists in history (for deduplication)
-app.get('/api/history/check/:handle', async (req, res) => {
+app.get('/api/history/check/:handle', validate(handleParamSchema, 'params'), async (req, res) => {
     const { handle } = req.params;
     try {
         const candidate = await prisma.candidate.findFirst({
@@ -1746,11 +1756,12 @@ app.get('/api/history/check/:handle', async (req, res) => {
         const exists = candidate && candidate.reports.length > 0;
         res.json({ success: true, exists, handle });
     } catch (error) {
+        log.error('[History] Handle check failed', error);
         res.status(500).json({ success: false, error: 'Check failed' });
     }
 });
 // Clear all history
-app.post('/api/history/clear', async (req, res) => {
+app.post('/api/history/clear', validate(userIdBodySchema), async (req, res) => {
     const { userId } = req.body;
     try {
         await prisma.vibeReport.deleteMany({
@@ -1758,12 +1769,13 @@ app.post('/api/history/clear', async (req, res) => {
         });
         res.json({ success: true, message: 'History cleared' });
     } catch (error) {
+        log.error('[History] Clear history failed', error);
         res.status(500).json({ success: false, error: 'Clear failed' });
     }
 });
 
 // Clear only "GHOST" entries from history
-app.post('/api/history/clear-ghosts', async (req, res) => {
+app.post('/api/history/clear-ghosts', validate(userIdBodySchema), async (req, res) => {
     const { userId } = req.body;
     try {
         await prisma.vibeReport.deleteMany({
@@ -1778,17 +1790,19 @@ app.post('/api/history/clear-ghosts', async (req, res) => {
         });
         res.json({ success: true, message: 'Ghosts cleared' });
     } catch (error) {
+        log.error('[History] Clear ghosts failed', error);
         res.status(500).json({ success: false, error: 'Clear ghosts failed' });
     }
 });
 
 // Delete specific history item
-app.delete('/api/history/:id', async (req, res) => {
+app.delete('/api/history/:id', validate(idParamSchema, 'params'), async (req, res) => {
     const { id } = req.params;
     try {
         await prisma.vibeReport.delete({ where: { id } });
         res.json({ success: true, message: 'Item deleted' });
     } catch (error) {
+        log.error('[History] Delete item failed', error);
         res.status(500).json({ success: false, error: 'Delete failed' });
     }
 });
@@ -1796,12 +1810,8 @@ app.delete('/api/history/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 // GITHUB STATS ENDPOINT - Authenticated GitHub API calls for accurate stats
 // ═══════════════════════════════════════════════════════════════════════════
-app.get('/api/github/stats/:handle', async (req, res) => {
+app.get('/api/github/stats/:handle', validate(handleParamSchema, 'params'), async (req, res) => {
     const { handle } = req.params;
-
-    if (!handle) {
-        return res.status(400).json({ success: false, error: 'Handle is required' });
-    }
 
     const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
@@ -1836,7 +1846,7 @@ app.get('/api/github/stats/:handle', async (req, res) => {
         console.log(`[GitHub Stats] Fetched stats for ${handle}: ${result.public_repos} repos, ${result.totalStars} stars, ${result.totalCommits} commits`);
         res.json({ success: true, data: result });
     } catch (error: any) {
-        console.error(`[GitHub Stats] Error fetching stats for ${handle}:`, error.message);
+        log.error(`[GitHub Stats] Error fetching stats for ${handle}`, error);
         res.status(500).json({ success: false, error: error.message || 'Failed to fetch GitHub stats' });
     }
 });
@@ -1880,6 +1890,7 @@ app.get('/api/analytics', async (req, res) => {
             }
         });
     } catch (error) {
+        log.error('[Analytics] Failed to fetch analytics', error);
         res.status(500).json({ success: false, error: 'Failed' });
     }
 });
@@ -1944,17 +1955,14 @@ app.get('/api/referral/info', async (req, res) => {
             }
         });
     } catch (error) {
+        log.error('[Referral] Invalid or expired token', error);
         return res.status(401).json({ success: false, error: 'Invalid token' });
     }
 });
 
 // Apply referral code (for new sign-ups)
-app.post('/api/referral/apply', async (req, res) => {
+app.post('/api/referral/apply', validate(applyReferralSchema), async (req, res) => {
     const { referralCode, userId } = req.body;
-
-    if (!referralCode || !userId) {
-        return res.status(400).json({ success: false, error: 'Referral code and user ID required' });
-    }
 
     try {
         // Find the referrer by their referral code
@@ -1983,7 +1991,7 @@ app.post('/api/referral/apply', async (req, res) => {
             referrerName: referrer.name
         });
     } catch (error) {
-        console.error('[Referral Apply] Error:', error);
+        log.error('[Referral] Failed to apply referral code', error);
         res.status(500).json({ success: false, error: 'Failed to apply referral code' });
     }
 });
@@ -2026,7 +2034,7 @@ const processReferralBonus = async (userId: string) => {
             console.log(`[Referral] User ${referrer.email} earned a week of unlimited chekks!`);
         }
     } catch (error) {
-        console.error('[Referral Bonus] Error:', error);
+        log.error('[Referral] Failed to process referral bonus', error);
     }
 };
 
@@ -2049,6 +2057,7 @@ app.get('/api/usage', async (req, res) => {
                 remaining: Math.max(0, TIER_LIMITS.GUEST - guestCount)
             });
         } catch (e) {
+            log.error('[Usage] Failed to fetch guest usage count', e);
             return res.json({ success: true, used: 0, limit: TIER_LIMITS.GUEST, tier: 'GUEST', remaining: TIER_LIMITS.GUEST });
         }
     }
@@ -2089,6 +2098,7 @@ app.get('/api/usage', async (req, res) => {
             resetTime: user.tier === 'PRO' ? 'monthly' : 'hourly'
         });
     } catch (error) {
+        log.error('[Usage] Invalid or expired token', error);
         return res.status(401).json({ success: false, error: 'Invalid token' });
     }
 });
@@ -2098,7 +2108,7 @@ app.get('/api/usage', async (req, res) => {
 const ADMIN_EMAIL = 'timidayokayode@gmail.com';
 
 // Admin: Set tier for testing
-app.post('/api/admin/set-tier', async (req, res) => {
+app.post('/api/admin/set-tier', validate(setTierSchema), async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
         return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -2119,9 +2129,6 @@ app.post('/api/admin/set-tier', async (req, res) => {
         }
 
         const { tier, resetUsage } = req.body;
-        if (!['GUEST', 'AUTHENTICATED', 'PRO'].includes(tier)) {
-            return res.status(400).json({ success: false, error: 'Invalid tier' });
-        }
 
         // Update user tier in database (optionally reset usage for testing)
         const updatedUser = await prisma.user.update({
@@ -2141,6 +2148,7 @@ app.post('/api/admin/set-tier', async (req, res) => {
             message: `Tier changed to ${tier}`
         });
     } catch (error) {
+        log.error('[Admin] Invalid or expired token', error);
         return res.status(401).json({ success: false, error: 'Invalid token' });
     }
 });
@@ -2198,7 +2206,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
         res.json({ success: true, url: session.url });
 
     } catch (error: any) {
-        console.error('[Stripe] Checkout error:', error);
+        log.error('[Stripe] Checkout session creation failed', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -2259,7 +2267,7 @@ app.get('/api/stripe/success', async (req, res) => {
             res.status(400).send('Payment not completed');
         }
     } catch (error: any) {
-        console.error('[Stripe] Success page error:', error);
+        log.error('[Stripe] Success page error', error);
         res.status(500).send('Error processing payment confirmation');
     }
 });
@@ -2314,8 +2322,41 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
             event = JSON.parse(req.body.toString());
         }
     } catch (err: any) {
-        console.error('[Stripe Webhook] Signature verification failed:', err.message);
+        log.error('[Stripe Webhook] Signature verification failed', err);
         return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IDEMPOTENCY CHECK: Prevent replay attacks and duplicate processing
+    // ═══════════════════════════════════════════════════════════════════════════
+    try {
+        const existingEvent = await prisma.stripeWebhookEvent.findUnique({
+            where: { eventId: event.id }
+        });
+
+        if (existingEvent) {
+            if (existingEvent.processed) {
+                log.warn('[Stripe Webhook] Duplicate event received (already processed)', { eventId: event.id });
+                return res.json({ received: true, duplicate: true });
+            }
+            // Event exists but not processed - continue with processing
+        } else {
+            // Create new event record with 24 hour TTL
+            const expiresAt = new Date();
+            expiresAt.setHours(expiresAt.getHours() + 24);
+
+            await prisma.stripeWebhookEvent.create({
+                data: {
+                    eventId: event.id,
+                    eventType: event.type,
+                    processed: false,
+                    expiresAt
+                }
+            });
+        }
+    } catch (err: any) {
+        log.error('[Stripe Webhook] Idempotency check failed', err);
+        // Continue with processing - better to risk duplicate than block legitimate webhook
     }
 
     try {
@@ -2381,10 +2422,17 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
             }
         }
 
+        // Mark event as processed
+        await prisma.stripeWebhookEvent.updateMany({
+            where: { eventId: event.id },
+            data: { processed: true }
+        });
+
+        log.stripe(`Webhook processed successfully: ${event.type}`, { eventId: event.id });
         res.json({ received: true });
     } catch (err: any) {
-        console.error('[Stripe Webhook] Processing error:', err);
-        // Return 200 to acknowledge receipt, but log the error
+        log.error('[Stripe Webhook] Processing error', err);
+        // Return 500 to signal error (Stripe will retry)
         res.status(500).json({ error: 'Webhook processing failed' });
     }
 });
@@ -2393,6 +2441,46 @@ app.use((req, res) => {
     res.status(404).json({ success: false, error: `Route ${req.method} ${req.url} not found on this server.` });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Vibechekk Backend v3.5 (Recruiter Summary + Multi-Repo) running on port ${PORT}`);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GRACEFUL SHUTDOWN: Handle SIGTERM and SIGINT
+// ═══════════════════════════════════════════════════════════════════════════
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal: string) {
+    if (isShuttingDown) {
+        console.log(`[Shutdown] Already shutting down, ignoring ${signal}`);
+        return;
+    }
+
+    isShuttingDown = true;
+    console.log(`\n[Shutdown] Received ${signal}, starting graceful shutdown...`);
+
+    // Stop accepting new connections
+    server.close(async () => {
+        console.log('[Shutdown] HTTP server closed');
+
+        try {
+            // Close database connection
+            await disconnectPrisma();
+
+            console.log('[Shutdown] Graceful shutdown complete');
+            process.exit(0);
+        } catch (error) {
+            log.error('[Shutdown] Error during graceful shutdown', error);
+            process.exit(1);
+        }
+    });
+
+    // Force shutdown after 30 seconds
+    setTimeout(() => {
+        console.error('[Shutdown] Forcing shutdown after 30s timeout');
+        process.exit(1);
+    }, 30000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

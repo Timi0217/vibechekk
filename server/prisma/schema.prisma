@@ -12,26 +12,26 @@ model User {
   email                String           @unique
   name                 String?
   picture              String?
-  githubLogin          String?          // GitHub username (e.g. 'timi0217')
+  githubLogin          String? // GitHub username (e.g. 'timi0217')
   tier                 SubscriptionTier @default(GUEST)
   usageCount           Int              @default(0)
   lastResetAt          DateTime         @default(now())
   createdAt            DateTime         @default(now())
   stripeCustomerId     String?
   stripeSubscriptionId String?
-  
+
   // Referral system
-  referralCode         String?          @unique @default(cuid())
-  referredById         String?
-  referredBy           User?            @relation("Referrals", fields: [referredById], references: [id])
-  referrals            User[]           @relation("Referrals")
-  bonusChekks          Int              @default(0)       // Extra chekks earned from referrals
-  bonusExpiresAt       DateTime?                          // When bonus expires (for time-limited promotions)
-  referralCount        Int              @default(0)       // Number of successful referrals (friends who ran a chekk)
-  
-  reports              VibeReport[]
-  candidate            Candidate?
-  cheklistSearches     CheklistSearch[]
+  referralCode   String?   @unique @default(cuid())
+  referredById   String?
+  referredBy     User?     @relation("Referrals", fields: [referredById], references: [id])
+  referrals      User[]    @relation("Referrals")
+  bonusChekks    Int       @default(0) // Extra chekks earned from referrals
+  bonusExpiresAt DateTime? // When bonus expires (for time-limited promotions)
+  referralCount  Int       @default(0) // Number of successful referrals (friends who ran a chekk)
+
+  reports          VibeReport[]
+  candidate        Candidate?
+  cheklistSearches CheklistSearch[]
 }
 
 model Candidate {
@@ -47,22 +47,22 @@ model Candidate {
   lastEmailedAt DateTime?
   lastCheckedAt DateTime     @default(now())
   reports       VibeReport[]
-  
+
   // Apollo Enrichment Data
-  linkedinUrl       String?
-  photoUrl          String?
-  currentTitle      String?
-  currentCompany    String?
-  companyLogoUrl    String?
-  companyLinkedin   String?
-  companyIndustry   String?
-  companySize       Int?
-  location          String?
-  seniority         String?
-  twitterUrl        String?
-  workEmail         String?
-  enrichedAt        DateTime?
-  enrichmentData    Json?      // Full Apollo response stored for reference
+  linkedinUrl     String?
+  photoUrl        String?
+  currentTitle    String?
+  currentCompany  String?
+  companyLogoUrl  String?
+  companyLinkedin String?
+  companyIndustry String?
+  companySize     Int?
+  location        String?
+  seniority       String?
+  twitterUrl      String?
+  workEmail       String?
+  enrichedAt      DateTime?
+  enrichmentData  Json? // Full Apollo response stored for reference
 
   @@index([githubHandle])
   @@index([email])
@@ -95,15 +95,27 @@ model CheklistSearch {
   id              String   @id @default(cuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id])
-  searchType      String   // "reverse" | "archetype" | "seniority" | "combined"
+  searchType      String // "reverse" | "archetype" | "seniority" | "combined"
   reverseUsername String?
   archetype       String?
-  seniority       String?  // "Junior" | "Mid" | "Senior"
+  seniority       String? // "Junior" | "Mid" | "Senior"
   languages       String[] // Array of language names
   resultCount     Int
   createdAt       DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+model StripeWebhookEvent {
+  id        String   @id @default(cuid())
+  eventId   String   @unique // Stripe event ID (evt_xxx)
+  eventType String
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime // TTL for cleanup (24 hours)
+
+  @@index([eventId])
+  @@index([expiresAt]) // For cleanup queries
 }
 
 enum SubscriptionTier {
