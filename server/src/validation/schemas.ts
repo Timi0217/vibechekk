@@ -92,6 +92,9 @@ export const bulkEnrichCandidatesSchema = z.object({
 
 export const googleAuthSchema = z.object({
   token: z.string().min(1, 'Token is required'),
+  email: emailSchema,
+  name: z.string().min(1, 'Name is required').max(200),
+  picture: z.string().url('Invalid picture URL').optional(),
   referralCode: referralCodeSchema.optional()
 })
 
