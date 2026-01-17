@@ -4,10 +4,8 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
 
-// Disable worker for Chrome extension compatibility
-if (pdfjsLib.GlobalWorkerOptions) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-}
+// Set worker path to bundled file
+pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('public/pdf.worker.js');
 
 const extractTextFromPDF = async (file: File | ArrayBuffer): Promise<string> => {
   let arrayBuffer: ArrayBuffer;
@@ -18,7 +16,12 @@ const extractTextFromPDF = async (file: File | ArrayBuffer): Promise<string> => 
     arrayBuffer = file;
   }
 
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  // Configure PDF.js to not use workers (required for Chrome extension)
+  const pdf = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    disableWorker: true,
+    verbosity: 0
+  }).promise;
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
@@ -1541,7 +1544,13 @@ function App() {
       if (selectedReportId) {
         payload.reportId = selectedReportId;
       } else {
-        payload.githubHandle = githubHandle;
+        // Extract handle from URL if user pasted full GitHub URL
+        let handle = githubHandle.trim();
+        if (handle.includes('github.com/')) {
+          handle = handle.split('github.com/')[1]?.split('/')[0] || handle;
+        }
+        handle = handle.replace('@', ''); // Remove @ if present
+        payload.githubHandle = handle;
       }
 
       // Optional enrichment data

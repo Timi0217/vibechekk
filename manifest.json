@@ -58,5 +58,11 @@
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile"
     ]
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["public/pdf.worker.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

@@ -2311,13 +2311,109 @@ app.post('/api/crosschekk/analyze', validate(crossChekkAnalyzeSchema), checkTier
                 where: { githubHandle: handle },
                 include: { reports: { orderBy: { createdAt: 'desc' }, take: 1 } }
             });
+
             if (candidate) {
                 vibeReport = candidate.reports[0];
             } else {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Candidate not analyzed yet. Please run a Chekk first.'
+                // Auto-analyze candidate if not found
+                log.info('[CrossChekk] Candidate not found, running auto-analysis', { handle });
+
+                if (!GITHUB_TOKEN || !DEEPSEEK_KEY) {
+                    return res.status(500).json({
+                        success: false,
+                        error: 'Analysis service unavailable'
+                    });
+                }
+
+                // Check GitHub API rate limit
+                const rateLimitTracker = getRateLimitTracker(GITHUB_TOKEN);
+                const hasQuota = await rateLimitTracker.hasQuota(50);
+                if (!hasQuota) {
+                    const status = await rateLimitTracker.getStatus();
+                    return res.status(429).json({
+                        success: false,
+                        error: 'GitHub API rate limit exceeded',
+                        code: 'RATE_LIMIT_EXCEEDED',
+                        resetTime: status.reset.toISOString()
+                    });
+                }
+
+                // Run full GitHub analysis
+                const githubUrl = `github.com/${handle}`;
+                log.info('[CrossChekk] Analyzing GitHub profile', { handle });
+                const profileData = await analyzeGitHubProfile(GITHUB_TOKEN, handle);
+
+                // Calculate quality score
+                const qualityScore = profileData.qualitySignals.reduce((score: number, q: any) => {
+                    if (!q) return score;
+                    return score
+                        + (q.hasTests ? 2 : 0)
+                        + (q.hasCI ? 2 : 0)
+                        + (q.hasTypeScript ? 1 : 0)
+                        + (q.hasLinting ? 1 : 0)
+                        + (q.complexity === 'high' ? 2 : q.complexity === 'medium' ? 1 : 0);
+                }, 0);
+
+                const reportData = await analyzeWithDeepSeek(DEEPSEEK_KEY, profileData, profileData.codeSamples);
+                const primaryRepo = profileData.topRepos.length > 0 ? profileData.topRepos[0].name : 'No Public Projects';
+
+                // Resolve email
+                let resolvedEmail = profileData.email || null;
+                if (!resolvedEmail && GITHUB_TOKEN) {
+                    resolvedEmail = await resolveGitHubEmail(GITHUB_TOKEN, handle);
+                    if (resolvedEmail) {
+                        profileData.email = resolvedEmail;
+                    }
+                }
+
+                // Create candidate
+                candidate = await prisma.candidate.upsert({
+                    where: { githubUrl },
+                    update: {
+                        lastCheckedAt: new Date(),
+                        name: profileData.userStats?.name || null,
+                        email: profileData.email || null
+                    },
+                    create: {
+                        githubUrl,
+                        githubHandle: handle,
+                        name: profileData.userStats?.name || null,
+                        email: profileData.email || null
+                    }
                 });
+
+                // Create report
+                vibeReport = await prisma.vibeReport.create({
+                    data: {
+                        candidateId: candidate.id,
+                        userId,
+                        archetype: reportData.label || 'THE PRACTICAL BUILDER',
+                        tier: reportData.rarity || 'COMMON',
+                        label: reportData.label || 'THE PRACTICAL BUILDER',
+                        trajectorySummary: reportData.trajectory_summary || 'Trajectory analysis pending.',
+                        recruiterSummary: reportData.recruiter_summary || 'Detailed analysis pending.',
+                        meritPoints: (reportData.highlights || []) as any,
+                        confidence: 100,
+                        repoName: primaryRepo,
+                        metadata: {
+                            userStats: profileData.userStats,
+                            email: profileData.email,
+                            claimed: candidate.claimed,
+                            lastActive: profileData.lastActive,
+                            reachability: profileData.reachability,
+                            starDistribution: profileData.starDistribution,
+                            qualitySignals: profileData.qualitySignals,
+                            qualityScore,
+                            technical_signal: reportData.technical_signal,
+                            technical_signal_detailed: reportData.technical_signal_detailed,
+                            verified_skills: reportData.verified_skills,
+                            highest_repo_stars: reportData.highest_repo_stars,
+                            archetype_reason: reportData.archetype_reason
+                        } as any
+                    } as any
+                });
+
+                log.info('[CrossChekk] Auto-analysis complete', { handle, candidateId: candidate.id });
             }
         } else if (email) {
             // Find candidate by email
