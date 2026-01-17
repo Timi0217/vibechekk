@@ -2105,17 +2105,36 @@ function App() {
                       padding: '12px',
                       borderRadius: '8px',
                       border: 'none',
-                      background: crossChekkForm.loading ? 'rgba(34, 197, 94, 0.5)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                      background: crossChekkForm.loading ? 'rgba(34, 197, 94, 0.3)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                       color: 'white',
                       fontSize: '11px',
                       fontWeight: 800,
                       cursor: crossChekkForm.loading ? 'not-allowed' : 'pointer',
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em',
-                      marginTop: '8px'
+                      marginTop: '8px',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      boxShadow: crossChekkForm.loading ? 'none' : '0 4px 12px rgba(34, 197, 94, 0.3)',
+                      transform: crossChekkForm.loading ? 'scale(0.98)' : 'scale(1)',
+                      transition: 'all 0.2s ease'
                     }}
                   >
-                    {crossChekkForm.loading ? 'ANALYZING...' : 'RUN CROSSCHEKK'}
+                    {crossChekkForm.loading && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
+                        animation: 'shimmer 1.5s infinite',
+                        transformOrigin: 'center'
+                      }} />
+                    )}
+                    <span style={{ position: 'relative', zIndex: 1 }}>
+                      {crossChekkForm.loading ? '⚡ ANALYZING...' : '🎯 RUN CROSSCHEKK'}
+                    </span>
                   </button>
                 </div>
               )}
@@ -2201,16 +2220,61 @@ function App() {
 
                       {/* Header */}
                       <div style={{ marginBottom: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <div style={{ fontSize: '14px', fontWeight: 900, color: 'white' }}>
-                            @{currentCrossChekkResult.candidate?.githubHandle}
-                          </div>
-                          <div style={{
-                            fontSize: '24px',
-                            fontWeight: 900,
-                            color: currentCrossChekkResult.recommendation === 'SEND' ? '#22c55e' : '#ef4444'
-                          }}>
-                            {currentCrossChekkResult.fitScore}%
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                          {/* Circular Score */}
+                          {(() => {
+                            const isGoodFit = currentCrossChekkResult.recommendation === 'SEND';
+                            const scoreColor = isGoodFit ? '#22c55e' : '#ef4444';
+                            const circumference = 2 * Math.PI * 32;
+                            const strokeOffset = circumference - (currentCrossChekkResult.fitScore / 100) * circumference;
+
+                            return (
+                              <div style={{ position: 'relative', width: '72px', height: '72px', flexShrink: 0 }}>
+                                <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
+                                  <circle
+                                    cx="36"
+                                    cy="36"
+                                    r="32"
+                                    fill="none"
+                                    stroke="rgba(255,255,255,0.1)"
+                                    strokeWidth="4"
+                                  />
+                                  <circle
+                                    cx="36"
+                                    cy="36"
+                                    r="32"
+                                    fill="none"
+                                    stroke={scoreColor}
+                                    strokeWidth="4"
+                                    strokeDasharray={circumference}
+                                    strokeDashoffset={strokeOffset}
+                                    strokeLinecap="round"
+                                    style={{
+                                      transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                                      filter: `drop-shadow(0 0 8px ${scoreColor}60)`
+                                    }}
+                                  />
+                                </svg>
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '50%',
+                                  left: '50%',
+                                  transform: 'translate(-50%, -50%)',
+                                  fontSize: '20px',
+                                  fontWeight: 900,
+                                  color: scoreColor,
+                                  textShadow: `0 0 12px ${scoreColor}40`
+                                }}>
+                                  {currentCrossChekkResult.fitScore}%
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '4px' }}>
+                              @{currentCrossChekkResult.candidate?.githubHandle}
+                            </div>
                           </div>
                         </div>
                         <div style={{
@@ -2476,45 +2540,156 @@ function App() {
                     </div>
                   ) : (
                     // Results List
-                    crossChekkResults.map((result: any) => (
-                      <div
-                        key={result.id}
-                        onClick={() => setCurrentCrossChekkResult(result)}
-                        style={{
-                          padding: '12px',
-                          borderRadius: '8px',
-                          background: result.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                          border: `1px solid ${result.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>
-                            @{result.candidate?.githubHandle}
-                          </div>
+                    crossChekkResults.map((result: any) => {
+                      const isGoodFit = result.recommendation === 'SEND';
+                      const scoreColor = isGoodFit ? '#22c55e' : '#ef4444';
+                      const circumference = 2 * Math.PI * 28;
+                      const strokeOffset = circumference - (result.fitScore / 100) * circumference;
+
+                      return (
+                        <div
+                          key={result.id}
+                          onClick={() => setCurrentCrossChekkResult(result)}
+                          style={{
+                            padding: '14px',
+                            borderRadius: '12px',
+                            background: isGoodFit
+                              ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%)'
+                              : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)',
+                            border: `1px solid ${isGoodFit ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                            e.currentTarget.style.boxShadow = isGoodFit
+                              ? '0 8px 24px rgba(34, 197, 94, 0.3)'
+                              : '0 8px 24px rgba(239, 68, 68, 0.3)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                          }}
+                        >
+                          {/* Decorative blob */}
                           <div style={{
-                            fontSize: '16px',
-                            fontWeight: 900,
-                            color: result.recommendation === 'SEND' ? '#22c55e' : '#ef4444'
-                          }}>
-                            {result.fitScore}%
+                            position: 'absolute',
+                            top: '-20px',
+                            right: '-20px',
+                            width: '80px',
+                            height: '80px',
+                            borderRadius: '50%',
+                            background: `radial-gradient(circle, ${scoreColor}20 0%, transparent 70%)`,
+                            pointerEvents: 'none'
+                          }} />
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 1 }}>
+                            {/* Circular Score Indicator */}
+                            <div style={{ position: 'relative', width: '64px', height: '64px', flexShrink: 0 }}>
+                              <svg width="64" height="64" style={{ transform: 'rotate(-90deg)' }}>
+                                {/* Background circle */}
+                                <circle
+                                  cx="32"
+                                  cy="32"
+                                  r="28"
+                                  fill="none"
+                                  stroke="rgba(255,255,255,0.1)"
+                                  strokeWidth="4"
+                                />
+                                {/* Progress circle */}
+                                <circle
+                                  cx="32"
+                                  cy="32"
+                                  r="28"
+                                  fill="none"
+                                  stroke={scoreColor}
+                                  strokeWidth="4"
+                                  strokeDasharray={circumference}
+                                  strokeDashoffset={strokeOffset}
+                                  strokeLinecap="round"
+                                  style={{
+                                    transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    filter: `drop-shadow(0 0 6px ${scoreColor}60)`
+                                  }}
+                                />
+                              </svg>
+                              {/* Score Text */}
+                              <div style={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                fontSize: '18px',
+                                fontWeight: 900,
+                                color: scoreColor,
+                                textShadow: `0 0 8px ${scoreColor}40`
+                              }}>
+                                {result.fitScore}%
+                              </div>
+                            </div>
+
+                            {/* Content */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontSize: '13px',
+                                fontWeight: 800,
+                                color: 'white',
+                                marginBottom: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}>
+                                <span>@{result.candidate?.githubHandle}</span>
+                                <div style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  background: isGoodFit ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+                                  fontSize: '8px',
+                                  fontWeight: 800,
+                                  color: scoreColor,
+                                  letterSpacing: '0.05em'
+                                }}>
+                                  {result.recommendation}
+                                </div>
+                              </div>
+                              <div style={{
+                                fontSize: '10px',
+                                color: 'rgba(255,255,255,0.7)',
+                                marginBottom: '6px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {result.jd?.title || 'Custom JD'}
+                              </div>
+                              {/* Quick stats */}
+                              <div style={{ display: 'flex', gap: '8px', fontSize: '8px', color: 'rgba(255,255,255,0.6)' }}>
+                                {result.skillsMatch?.matched?.length > 0 && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <span style={{ color: '#22c55e' }}>✓</span> {result.skillsMatch.matched.length} skills
+                                  </span>
+                                )}
+                                {result.skillsMatch?.missing?.length > 0 && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <span style={{ color: '#ef4444' }}>✗</span> {result.skillsMatch.missing.length} missing
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Arrow indicator */}
+                            <ChevronRight
+                              size={16}
+                              color="rgba(255,255,255,0.4)"
+                              style={{ flexShrink: 0 }}
+                            />
                           </div>
                         </div>
-                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>
-                          {result.jd?.title || 'Custom JD'}
-                        </div>
-                        <div style={{
-                          fontSize: '9px',
-                          fontWeight: 800,
-                          color: result.recommendation === 'SEND' ? '#22c55e' : '#ef4444',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em'
-                        }}>
-                          {result.recommendation}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
