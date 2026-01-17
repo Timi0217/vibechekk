@@ -32,6 +32,8 @@ model User {
   reports          VibeReport[]
   candidate        Candidate?
   cheklistSearches CheklistSearch[]
+  savedJDs         SavedJD[]
+  crossChekkResults CrossChekkResult[]
 }
 
 model Candidate {
@@ -63,6 +65,8 @@ model Candidate {
   workEmail       String?
   enrichedAt      DateTime?
   enrichmentData  Json? // Full Apollo response stored for reference
+
+  crossChekkResults CrossChekkResult[]
 
   @@index([githubHandle])
   @@index([email])
@@ -116,6 +120,58 @@ model StripeWebhookEvent {
 
   @@index([eventId])
   @@index([expiresAt]) // For cleanup queries
+}
+
+model SavedJD {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String // Job title
+  company     String? // Company name (optional)
+  description String // Full job description text
+
+  // Parsed requirements (extracted by JD parser)
+  requiredSkills    String[] // e.g. ["React", "Node.js", "PostgreSQL"]
+  niceToHaveSkills  String[] // Optional skills
+  minYearsExp       Int? // Minimum years of experience
+  responsibilities  String[] // Key responsibilities
+  parsedData        Json? // Full parsed JD data
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  crossChekkResults CrossChekkResult[]
+
+  @@index([userId, createdAt])
+}
+
+model CrossChekkResult {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  jdId        String
+  jd          SavedJD   @relation(fields: [jdId], references: [id])
+
+  // FitScore calculation
+  fitScore         Int // 0-100 percentage
+  recommendation   String // "SEND" or "SKIP"
+
+  // Detailed breakdown
+  skillsMatch      Json // { matched: [], missing: [], extra: [] }
+  experienceMatch  Json // { candidateYears: X, requiredYears: Y, meets: true/false }
+  strengthsForRole String[] // Why they're a good fit
+  concernsForRole  String[] // Potential red flags
+
+  // AI-generated summary
+  aiSummary        String // Brief explanation of the fit
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([candidateId])
+  @@index([jdId])
 }
 
 enum SubscriptionTier {

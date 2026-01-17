@@ -16,6 +16,8 @@ import { analyzeWithDeepSeek } from './lib/deepseek.js';
 import { enrichByEmail as pdlEnrichByEmail } from './lib/pdl.js';
 import { findLinkedInProfile as exaFindLinkedIn, buildSearchContext as exaBuildContext } from './lib/exa.js';
 import { searchChekklist, SearchFilters } from './lib/chekklist.js';
+import { parseJobDescription } from './lib/jdParser.js';
+import { calculateFitScore } from './lib/fitScoreCalculator.js';
 import { checkCheklistLimit, getCheklistSearchesRemaining, recordCheklistSearch } from './middleware/cheklistRateLimit.js';
 import Stripe from 'stripe';
 import { validate } from './validation/middleware.js';
@@ -40,7 +42,9 @@ import {
   handleParamSchema,
   deleteHistorySchema,
   idParamSchema,
-  userIdBodySchema
+  userIdBodySchema,
+  saveJDSchema,
+  crossChekkAnalyzeSchema
 } from './validation/schemas.js';
 import { getRateLimitTracker } from './lib/rateLimitTracker.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
@@ -2150,6 +2154,279 @@ app.post('/api/admin/set-tier', validate(setTierSchema), async (req, res) => {
     } catch (error) {
         log.error('[Admin] Invalid or expired token', error);
         return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+});
+
+// ============= CROSSCHEKK ENDPOINTS =============
+
+// Save a job description
+app.post('/api/crosschekk/save-jd', validate(saveJDSchema), async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    try {
+        const { title, company, description } = req.body;
+
+        // Parse the JD
+        const parsed = await parseJobDescription(description, title, company);
+
+        // Save to database
+        const savedJD = await prisma.savedJD.create({
+            data: {
+                userId,
+                title,
+                company,
+                description,
+                requiredSkills: parsed.requiredSkills,
+                niceToHaveSkills: parsed.niceToHaveSkills,
+                minYearsExp: parsed.minYearsExp,
+                responsibilities: parsed.responsibilities,
+                parsedData: parsed.rawData as any
+            }
+        });
+
+        log.info('[CrossChekk] Saved JD', { userId, jdId: savedJD.id, title });
+
+        res.json({
+            success: true,
+            data: savedJD
+        });
+    } catch (error) {
+        log.error('[CrossChekk] Failed to save JD', error);
+        res.status(500).json({ success: false, error: 'Failed to save job description' });
+    }
+});
+
+// Get saved JDs for a user
+app.get('/api/crosschekk/jds', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    try {
+        const jds = await prisma.savedJD.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        });
+
+        res.json({ success: true, data: jds });
+    } catch (error) {
+        log.error('[CrossChekk] Failed to fetch JDs', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch job descriptions' });
+    }
+});
+
+// Run CrossChekk analysis
+app.post('/api/crosschekk/analyze', validate(crossChekkAnalyzeSchema), checkTierLimit, async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    try {
+        const { jdId, jdText, jdTitle, jdCompany, githubHandle, candidateId, reportId, email, resumeText } = req.body;
+
+        // Step 1: Get or parse JD
+        let parsedJD;
+        let savedJD;
+
+        if (jdId) {
+            savedJD = await prisma.savedJD.findUnique({ where: { id: jdId } });
+            if (!savedJD) {
+                return res.status(404).json({ success: false, error: 'Job description not found' });
+            }
+            parsedJD = {
+                requiredSkills: savedJD.requiredSkills,
+                niceToHaveSkills: savedJD.niceToHaveSkills,
+                minYearsExp: savedJD.minYearsExp,
+                responsibilities: savedJD.responsibilities,
+                rawData: savedJD.parsedData as any
+            };
+        } else {
+            parsedJD = await parseJobDescription(jdText!, jdTitle!, jdCompany);
+        }
+
+        // Step 2: Get candidate data
+        let candidate;
+        let vibeReport;
+
+        if (reportId) {
+            // Use existing VibeReport
+            vibeReport = await prisma.vibeReport.findUnique({
+                where: { id: reportId },
+                include: { candidate: true }
+            });
+            if (!vibeReport) {
+                return res.status(404).json({ success: false, error: 'Report not found' });
+            }
+            candidate = vibeReport.candidate;
+        } else if (candidateId) {
+            // Use existing Candidate
+            candidate = await prisma.candidate.findUnique({
+                where: { id: candidateId },
+                include: { reports: { orderBy: { createdAt: 'desc' }, take: 1 } }
+            });
+            if (!candidate) {
+                return res.status(404).json({ success: false, error: 'Candidate not found' });
+            }
+            vibeReport = candidate.reports[0];
+        } else if (githubHandle) {
+            // Find or analyze candidate by GitHub handle
+            const handle = githubHandle.replace('@', '').trim();
+            candidate = await prisma.candidate.findFirst({
+                where: { githubHandle: handle },
+                include: { reports: { orderBy: { createdAt: 'desc' }, take: 1 } }
+            });
+            if (candidate) {
+                vibeReport = candidate.reports[0];
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Candidate not analyzed yet. Please run a Chekk first.'
+                });
+            }
+        } else if (email) {
+            // Find candidate by email
+            candidate = await prisma.candidate.findFirst({
+                where: { email },
+                include: { reports: { orderBy: { createdAt: 'desc' }, take: 1 } }
+            });
+            if (!candidate) {
+                return res.status(404).json({ success: false, error: 'Candidate not found' });
+            }
+            vibeReport = candidate.reports[0];
+        } else {
+            return res.status(400).json({ success: false, error: 'No candidate identifier provided' });
+        }
+
+        if (!vibeReport) {
+            return res.status(400).json({ success: false, error: 'No analysis found for candidate' });
+        }
+
+        // Step 3: Calculate FitScore
+        const candidateData = {
+            githubHandle: candidate.githubHandle,
+            name: candidate.name,
+            email: candidate.email,
+            archetype: vibeReport.archetype,
+            tier: vibeReport.tier,
+            trajectorySummary: vibeReport.trajectorySummary,
+            meritPoints: vibeReport.meritPoints as any[],
+            currentTitle: candidate.currentTitle,
+            currentCompany: candidate.currentCompany,
+            seniority: candidate.seniority,
+            location: candidate.location,
+            resumeText: resumeText || null
+        };
+
+        const fitResult = await calculateFitScore(candidateData, parsedJD);
+
+        // Step 4: Save result
+        const result = await prisma.crossChekkResult.create({
+            data: {
+                userId,
+                candidateId: candidate.id,
+                jdId: jdId || null,
+                fitScore: fitResult.fitScore,
+                recommendation: fitResult.recommendation,
+                skillsMatch: fitResult.skillsMatch as any,
+                experienceMatch: fitResult.experienceMatch as any,
+                strengthsForRole: fitResult.strengthsForRole,
+                concernsForRole: fitResult.concernsForRole,
+                aiSummary: fitResult.aiSummary
+            },
+            include: {
+                candidate: true,
+                jd: true
+            }
+        });
+
+        log.info('[CrossChekk] Analysis complete', {
+            userId,
+            candidateId: candidate.id,
+            score: fitResult.fitScore,
+            recommendation: fitResult.recommendation
+        });
+
+        res.json({
+            success: true,
+            data: {
+                ...result,
+                vibeReport
+            }
+        });
+    } catch (error) {
+        log.error('[CrossChekk] Analysis failed', error);
+        res.status(500).json({ success: false, error: 'Failed to analyze candidate fit' });
+    }
+});
+
+// Get CrossChekk results for user
+app.get('/api/crosschekk/results', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    try {
+        const results = await prisma.crossChekkResult.findMany({
+            where: { userId },
+            include: {
+                candidate: true,
+                jd: true
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 100
+        });
+
+        res.json({ success: true, data: results });
+    } catch (error) {
+        log.error('[CrossChekk] Failed to fetch results', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch results' });
     }
 });
 

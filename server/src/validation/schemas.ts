@@ -198,3 +198,35 @@ export type BulkAnalyzeInput = z.infer<typeof bulkAnalyzeSchema>
 export type AtsLoginInput = z.infer<typeof atsLoginSchema>
 export type GithubCallbackInput = z.infer<typeof githubCallbackSchema>
 export type CheklistSearchV2Input = z.infer<typeof cheklistSearchSchemaV2>
+
+// CrossChekk schemas
+export const saveJDSchema = z.object({
+  title: z.string().min(1, 'Job title is required').max(200),
+  company: z.string().max(200).optional(),
+  description: z.string().min(50, 'Job description is too short').max(20000, 'Job description is too long')
+})
+
+export const crossChekkAnalyzeSchema = z.object({
+  jdId: z.string().optional(), // Use saved JD
+  jdText: z.string().min(50).max(20000).optional(), // Or provide JD text directly
+  jdTitle: z.string().min(1).max(200).optional(), // Required if using jdText
+  jdCompany: z.string().max(200).optional(),
+
+  // Candidate input (multiple sources)
+  githubHandle: githubHandleSchema.optional(),
+  candidateId: z.string().optional(), // From existing analysis
+  reportId: z.string().optional(), // From existing VibeReport
+  email: emailSchema.optional(),
+
+  // Optional enrichment data for deeper analysis
+  resumeText: z.string().max(50000).optional()
+}).refine(
+  data => data.jdId || (data.jdText && data.jdTitle),
+  { message: 'Either jdId or (jdText + jdTitle) is required' }
+).refine(
+  data => data.githubHandle || data.candidateId || data.reportId || data.email,
+  { message: 'At least one candidate identifier required (githubHandle, candidateId, reportId, or email)' }
+)
+
+export type SaveJDInput = z.infer<typeof saveJDSchema>
+export type CrossChekkAnalyzeInput = z.infer<typeof crossChekkAnalyzeSchema>

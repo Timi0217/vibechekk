@@ -1,12 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
 import { Clock, Search, TrendingUp, ChevronDown, ChevronRight, ArrowLeft, Copy, AlertTriangle, AlertCircle, BadgeCheck, Zap, FileDown, User, BookOpen, Layers, Plus, Loader2, Heart, Star, Hammer, Code, Cpu, Target, GitPullRequest, Gem, Wrench, Rocket, Coffee, Compass, Ghost, Settings, Lock, Info, Binoculars, LogOut, X, Trash, Trash2, Radio, ClipboardList, Upload, FileSpreadsheet, Shield, Minus } from 'lucide-react'
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import Papa from 'papaparse';
 import html2canvas from 'html2canvas';
-// Disable worker to run PDF parsing in main thread (required for Chrome Extension CSP)
-pdfjsLib.GlobalWorkerOptions.workerSrc = '';
 
-const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<string> => {
+// Disable worker for Chrome extension compatibility
+if (pdfjsLib.GlobalWorkerOptions) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+}
+
+const extractTextFromPDF = async (file: File | ArrayBuffer): Promise<string> => {
+  let arrayBuffer: ArrayBuffer;
+
+  if (file instanceof File) {
+    arrayBuffer = await file.arrayBuffer();
+  } else {
+    arrayBuffer = file;
+  }
+
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -305,6 +316,22 @@ function App() {
   const [showActivityFeed, setShowActivityFeed] = useState(false)
   const [showChecklistForm, setShowChecklistForm] = useState(false)
   const [showBulkChekkForm, setShowBulkChekkForm] = useState(false)
+  const [showCrossChekk, setShowCrossChekk] = useState(false)
+  const [crossChekkTab, setCrossChekkTab] = useState<'new' | 'saved' | 'results'>('new')
+  const [crossChekkForm, setCrossChekkForm] = useState({
+    jdTitle: '',
+    jdCompany: '',
+    jdText: '',
+    selectedJdId: '',
+    githubHandle: '',
+    selectedReportId: '',
+    resumeText: '',
+    saveJD: false,
+    loading: false
+  })
+  const [savedJDs, setSavedJDs] = useState<any[]>([])
+  const [crossChekkResults, setCrossChekkResults] = useState<any[]>([])
+  const [currentCrossChekkResult, setCurrentCrossChekkResult] = useState<any>(null)
   const [bulkChekkTab, setBulkChekkTab] = useState<'import' | 'history'>('import')
   const [bulkHistory, setBulkHistory] = useState<any[]>([])
   const [bulkFile, setBulkFile] = useState<File | null>(null)
@@ -608,6 +635,13 @@ function App() {
       chrome.storage.onChanged.removeListener(storageListener)
     }
   }, [activeTab, tierFilter])
+
+  // Fetch history on app load when user is authenticated
+  useEffect(() => {
+    if (tokens.vibeToken) {
+      fetchHistory()
+    }
+  }, [tokens.vibeToken])
 
   const fetchHistory = async () => {
     try {
@@ -1405,8 +1439,781 @@ function App() {
     }
   }
 
+  // ============= CROSSCHEKK FUNCTIONS =============
+
+  // Fetch saved JDs when CrossChekk opens
+  const fetchSavedJDs = async () => {
+    if (!tokens.vibeToken) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/jds`, {
+        headers: { 'Authorization': `Bearer ${tokens.vibeToken}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSavedJDs(data.data);
+      }
+    } catch (err) {
+      console.error('[CrossChekk] Failed to fetch JDs:', err);
+    }
+  };
+
+  // Fetch CrossChekk results
+  const fetchCrossChekkResults = async () => {
+    if (!tokens.vibeToken) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/results`, {
+        headers: { 'Authorization': `Bearer ${tokens.vibeToken}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCrossChekkResults(data.data);
+      }
+    } catch (err) {
+      console.error('[CrossChekk] Failed to fetch results:', err);
+    }
+  };
+
+  // Run CrossChekk analysis
+  const runCrossChekk = async () => {
+    if (!tokens.vibeToken) {
+      alert('Please sign in to use CrossChekk');
+      return;
+    }
+
+    const { jdTitle, jdCompany, jdText, selectedJdId, githubHandle, selectedReportId, saveJD } = crossChekkForm;
+
+    // Validation
+    if (!selectedJdId && (!jdText || !jdTitle)) {
+      alert('Please provide a job description or select a saved JD');
+      return;
+    }
+
+    if (!githubHandle && !selectedReportId) {
+      alert('Please enter a GitHub handle or select from history');
+      return;
+    }
+
+    setCrossChekkForm(prev => ({ ...prev, loading: true }));
+
+    try {
+      let jdIdToUse = selectedJdId;
+
+      // If saveJD toggle is on and it's a new JD (not already saved), save it first
+      if (saveJD && !selectedJdId && jdText && jdTitle) {
+        try {
+          const saveResponse = await fetch(`${BACKEND_URL}/api/crosschekk/save-jd`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${tokens.vibeToken}`
+            },
+            body: JSON.stringify({
+              title: jdTitle,
+              company: jdCompany,
+              description: jdText
+            })
+          });
+          const saveData = await saveResponse.json();
+          if (saveData.success) {
+            jdIdToUse = saveData.data.id;
+            await fetchSavedJDs(); // Refresh saved JDs list
+          }
+        } catch (err) {
+          console.error('[CrossChekk] Failed to save JD:', err);
+          // Continue with analysis even if save fails
+        }
+      }
+
+      const payload: any = {};
+
+      // JD data
+      if (jdIdToUse) {
+        payload.jdId = jdIdToUse;
+      } else {
+        payload.jdText = jdText;
+        payload.jdTitle = jdTitle;
+        if (jdCompany) payload.jdCompany = jdCompany;
+      }
+
+      // Candidate data
+      if (selectedReportId) {
+        payload.reportId = selectedReportId;
+      } else {
+        payload.githubHandle = githubHandle;
+      }
+
+      // Optional enrichment data
+      if (crossChekkForm.resumeText) {
+        payload.resumeText = crossChekkForm.resumeText;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCurrentCrossChekkResult(data.data);
+        // Refresh results list
+        await fetchCrossChekkResults();
+        // Switch to results tab
+        setCrossChekkTab('results');
+      } else {
+        alert(data.error || 'CrossChekk analysis failed');
+      }
+    } catch (err: any) {
+      console.error('[CrossChekk] Analysis error:', err);
+      alert('Failed to analyze candidate fit');
+    } finally {
+      setCrossChekkForm(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Save JD for reuse
+  const saveCrossCheckkJD = async () => {
+    if (!tokens.vibeToken) {
+      alert('Please sign in to save job descriptions');
+      return;
+    }
+
+    const { jdTitle, jdCompany, jdText } = crossChekkForm;
+
+    if (!jdText || !jdTitle) {
+      alert('Please fill in job title and description');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/save-jd`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        },
+        body: JSON.stringify({
+          title: jdTitle,
+          company: jdCompany,
+          description: jdText
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Job description saved successfully!');
+        await fetchSavedJDs();
+        // Clear form and switch to saved tab
+        setCrossChekkForm({
+          jdTitle: '',
+          jdCompany: '',
+          jdText: '',
+          selectedJdId: data.data.id,
+          githubHandle: '',
+          selectedReportId: '',
+          linkedinUrl: '',
+          resumeText: '',
+          loading: false
+        });
+        setCrossChekkTab('saved');
+      } else {
+        alert(data.error || 'Failed to save job description');
+      }
+    } catch (err) {
+      console.error('[CrossChekk] Save JD error:', err);
+      alert('Failed to save job description');
+    }
+  };
+
+  // Effect to fetch data when CrossChekk opens
+  useEffect(() => {
+    if (showCrossChekk && tokens.vibeToken) {
+      fetchSavedJDs();
+      fetchCrossChekkResults();
+    }
+  }, [showCrossChekk, tokens.vibeToken]);
+
   const proFeaturesContent = (
     <>
+      {/* CROSSCHEKK Card */}
+      <div style={{
+        marginBottom: '12px',
+        borderRadius: '16px',
+        overflow: 'visible',
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: showCrossChekk ? '0 4px 16px rgba(0, 0, 0, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
+        background: 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)',
+        border: showCrossChekk ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid transparent',
+        position: 'relative'
+      }}>
+        {/* Blob container with overflow hidden */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '16px',
+          overflow: 'hidden',
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            position: 'absolute',
+            right: '-40px',
+            top: '-40px',
+            width: '180px',
+            height: '180px',
+            borderRadius: '50% 40% 30% 70% / 60% 30% 70% 40%',
+            background: 'rgba(34, 197, 94, 0.08)',
+            zIndex: 0
+          }} />
+        </div>
+
+        <div
+          onClick={() => {
+            if (user?.tier !== 'PRO') {
+              setProFeaturePaywallOpen('CrossChekk');
+              return;
+            }
+            setShowCrossChekk(!showCrossChekk);
+          }}
+          style={{
+            width: '100%',
+            cursor: 'pointer',
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            padding: '16px 20px'
+          }}
+        >
+          {/* Icon */}
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '12px',
+            background: 'rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+          }}>
+            <Target size={24} color="white" strokeWidth={2.5} />
+          </div>
+
+          {/* Text */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 800,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                color: 'white'
+              }}>
+                CROSSCHEKK
+              </span>
+              <span style={{
+                fontSize: '8px',
+                fontWeight: 900,
+                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+                background: user?.tier === 'PRO'
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                  : 'rgba(255, 255, 255, 0.15)',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                letterSpacing: '0.02em',
+                lineHeight: 1
+              }}>
+                PRO
+              </span>
+            </div>
+            <span style={{
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontWeight: 500
+            }}>
+              Match candidates to jobs
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="crosschekk-tooltip-wrapper">
+                <Info
+                  size={13}
+                  color="rgba(255, 255, 255, 0.5)"
+                  style={{ cursor: 'help' }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className="crosschekk-tooltip" style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '0',
+                  marginBottom: '8px',
+                  background: 'white',
+                  color: '#1a1a1a',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  width: '200px',
+                  textAlign: 'left',
+                  lineHeight: 1.4,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  opacity: 0,
+                  visibility: 'hidden',
+                  transition: 'all 0.2s ease',
+                  zIndex: 1000,
+                  pointerEvents: 'none'
+                }}>
+                  Compare candidates against job descriptions to get a FitScore and SEND/SKIP recommendation
+                </div>
+              </div>
+              {/* Status Dot */}
+              <div style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: showCrossChekk ? '#22c55e' : 'transparent',
+                border: `1.5px solid ${showCrossChekk ? '#22c55e' : 'rgba(255, 255, 255, 0.6)'}`,
+                transition: 'all 0.2s ease',
+                boxShadow: showCrossChekk ? '0 0 8px rgba(34, 197, 94, 0.6)' : 'none'
+              }} />
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <ChevronRight
+            size={18}
+            color="rgba(255, 255, 255, 0.5)"
+            style={{
+              flexShrink: 0,
+              transform: showCrossChekk ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease'
+            }}
+          />
+        </div>
+
+        {/* Form Content */}
+        <div style={{
+          maxHeight: showCrossChekk ? '600px' : '0',
+          opacity: showCrossChekk ? 1 : 0,
+          overflow: 'hidden',
+          transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
+          background: 'rgba(255, 255, 255, 0.03)',
+          borderTop: showCrossChekk ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+        }}>
+          <div style={{ padding: '20px' }}>
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.08)', padding: '2px', borderRadius: '8px', marginBottom: '12px' }}>
+              <button
+                onClick={() => setCrossChekkTab('new')}
+                style={{
+                  flex: 1,
+                  padding: '6px 12px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: crossChekkTab === 'new' ? 'rgba(34, 197, 94, 0.2)' : 'transparent',
+                  color: 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  letterSpacing: '0.02em'
+                }}
+              >
+                NEW JD
+              </button>
+              <button
+                onClick={() => setCrossChekkTab('results')}
+                style={{
+                  flex: 1,
+                  padding: '6px 12px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: crossChekkTab === 'results' ? 'rgba(34, 197, 94, 0.2)' : 'transparent',
+                  color: 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  letterSpacing: '0.02em'
+                }}
+              >
+                RESULTS ({crossChekkResults.length})
+              </button>
+              <button
+                onClick={() => setCrossChekkTab('saved')}
+                style={{
+                  flex: 1,
+                  padding: '6px 12px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: crossChekkTab === 'saved' ? 'rgba(34, 197, 94, 0.2)' : 'transparent',
+                  color: 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  letterSpacing: '0.02em'
+                }}
+              >
+                SAVED ({savedJDs.length})
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div style={{ paddingRight: '4px' }}>
+              {crossChekkTab === 'new' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <input
+                    placeholder="Job Title *"
+                    value={crossChekkForm.jdTitle}
+                    onChange={(e) => setCrossChekkForm(prev => ({ ...prev, jdTitle: e.target.value }))}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'white',
+                      fontSize: '12px',
+                      outline: 'none'
+                    }}
+                  />
+                  <input
+                    placeholder="Company"
+                    value={crossChekkForm.jdCompany}
+                    onChange={(e) => setCrossChekkForm(prev => ({ ...prev, jdCompany: e.target.value }))}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'white',
+                      fontSize: '12px',
+                      outline: 'none'
+                    }}
+                  />
+                  <textarea
+                    placeholder="Job Description * (min 50 chars)"
+                    value={crossChekkForm.jdText}
+                    onChange={(e) => setCrossChekkForm(prev => ({ ...prev, jdText: e.target.value }))}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'white',
+                      fontSize: '11px',
+                      outline: 'none',
+                      minHeight: '70px',
+                      maxHeight: '70px',
+                      fontFamily: 'inherit',
+                      resize: 'none'
+                    }}
+                  />
+
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                    background: 'rgba(34, 197, 94, 0.05)'
+                  }}>
+                    <div style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Select Candidate
+                    </div>
+                    <input
+                      placeholder="GitHub Handle *"
+                      value={crossChekkForm.githubHandle}
+                      onChange={(e) => setCrossChekkForm(prev => ({ ...prev, githubHandle: e.target.value, selectedReportId: '' }))}
+                      disabled={!!crossChekkForm.selectedReportId}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: crossChekkForm.selectedReportId ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)',
+                        color: 'white',
+                        fontSize: '12px',
+                        outline: 'none',
+                        marginBottom: '8px'
+                      }}
+                    />
+                    <select
+                      value={crossChekkForm.selectedReportId}
+                      onChange={(e) => {
+                        const reportId = e.target.value;
+                        setCrossChekkForm(prev => ({ ...prev, selectedReportId: reportId, githubHandle: '' }));
+                      }}
+                      disabled={history.length === 0 || !!crossChekkForm.githubHandle}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: (history.length === 0 || crossChekkForm.githubHandle) ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)',
+                        color: (history.length === 0 || crossChekkForm.githubHandle) ? 'rgba(255,255,255,0.4)' : 'white',
+                        fontSize: '11px',
+                        outline: 'none',
+                        cursor: (history.length === 0 || crossChekkForm.githubHandle) ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      <option value="">{history.length === 0 ? 'No history yet' : crossChekkForm.githubHandle ? 'Clear GitHub handle to use history' : 'Or select from history...'}</option>
+                      {history.slice(0, 20).map((item: any) => (
+                        <option key={item.id} value={item.id} style={{ background: '#1a1a1a' }}>
+                          @{item.candidate.githubHandle} - {item.archetype}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Resume PDF Upload */}
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const text = await extractTextFromPDF(file);
+                            setCrossChekkForm(prev => ({ ...prev, resumeText: text }));
+                          } catch (err) {
+                            console.error('PDF extraction error:', err);
+                            alert('Failed to extract text from PDF');
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'none'
+                      }}
+                      id="resume-upload"
+                    />
+                    <label
+                      htmlFor="resume-upload"
+                      style={{
+                        display: 'block',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: '1px dashed rgba(255,255,255,0.3)',
+                        background: 'rgba(255,255,255,0.03)',
+                        color: 'rgba(255,255,255,0.7)',
+                        fontSize: '11px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                        e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+                      }}
+                    >
+                      {crossChekkForm.resumeText ? (
+                        <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                          ✓ Resume uploaded ({crossChekkForm.resumeText.length} chars)
+                        </span>
+                      ) : (
+                        <span>
+                          📄 Upload Resume PDF
+                        </span>
+                      )}
+                    </label>
+                    {crossChekkForm.resumeText && (
+                      <button
+                        onClick={() => setCrossChekkForm(prev => ({ ...prev, resumeText: '' }))}
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          color: '#ef4444',
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        CLEAR
+                      </button>
+                    )}
+                  </div>
+                  {/* Save JD Toggle */}
+                  <div
+                    onClick={() => setCrossChekkForm(prev => ({ ...prev, saveJD: !prev.saveJD }))}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginTop: '8px',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      background: 'rgba(255,255,255,0.03)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{
+                      width: '36px',
+                      height: '20px',
+                      borderRadius: '10px',
+                      background: crossChekkForm.saveJD ? '#22c55e' : 'rgba(255,255,255,0.2)',
+                      position: 'relative',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
+                        background: 'white',
+                        position: 'absolute',
+                        top: '2px',
+                        left: crossChekkForm.saveJD ? '18px' : '2px',
+                        transition: 'all 0.2s ease'
+                      }} />
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>
+                      Save JD for later use
+                    </span>
+                  </div>
+
+                  {/* Run Button */}
+                  <button
+                    onClick={runCrossChekk}
+                    disabled={crossChekkForm.loading}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: crossChekkForm.loading ? 'rgba(34, 197, 94, 0.5)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                      color: 'white',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      cursor: crossChekkForm.loading ? 'not-allowed' : 'pointer',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      marginTop: '8px'
+                    }}
+                  >
+                    {crossChekkForm.loading ? 'ANALYZING...' : 'RUN CROSSCHEKK'}
+                  </button>
+                </div>
+              )}
+
+              {crossChekkTab === 'saved' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {savedJDs.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'rgba(255,255,255,0.5)' }}>
+                      <span style={{ fontSize: '11px' }}>No saved job descriptions yet.</span>
+                    </div>
+                  ) : (
+                    savedJDs.map((jd: any) => (
+                      <div
+                        key={jd.id}
+                        onClick={() => {
+                          setCrossChekkForm(prev => ({ ...prev, selectedJdId: jd.id, jdTitle: jd.title, jdCompany: jd.company || '', jdText: jd.description }));
+                          setCrossChekkTab('new');
+                        }}
+                        style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                          e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'white', marginBottom: '4px' }}>
+                          {jd.title}
+                        </div>
+                        {jd.company && (
+                          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>
+                            {jd.company}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '9px', color: 'rgba(34, 197, 94, 0.8)' }}>
+                          {jd.requiredSkills?.slice(0, 3).join(', ')}{jd.requiredSkills?.length > 3 && '...'}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {crossChekkTab === 'results' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {crossChekkResults.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'rgba(255,255,255,0.5)' }}>
+                      <span style={{ fontSize: '11px' }}>No CrossChekk results yet. Run an analysis!</span>
+                    </div>
+                  ) : (
+                    crossChekkResults.map((result: any) => (
+                      <div
+                        key={result.id}
+                        onClick={() => setCurrentCrossChekkResult(result)}
+                        style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          background: result.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                          border: `1px solid ${result.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>
+                            @{result.candidate?.githubHandle}
+                          </div>
+                          <div style={{
+                            fontSize: '16px',
+                            fontWeight: 900,
+                            color: result.recommendation === 'SEND' ? '#22c55e' : '#ef4444'
+                          }}>
+                            {result.fitScore}%
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>
+                          {result.jd?.title || 'Custom JD'}
+                        </div>
+                        <div style={{
+                          fontSize: '9px',
+                          fontWeight: 800,
+                          color: result.recommendation === 'SEND' ? '#22c55e' : '#ef4444',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em'
+                        }}>
+                          {result.recommendation}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AUTOCHEKK Card */}
       <div
         style={{
           width: '100%',

@@ -750,6 +750,12 @@ main {
   visibility: visible !important;
 }
 
+/* CrossChekk Tooltip */
+.crosschekk-tooltip-wrapper:hover .crosschekk-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 .history-action-icon {
   opacity: 0.4;
   transition: all 0.2s ease;
