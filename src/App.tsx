@@ -2222,6 +2222,346 @@ function App() {
         </div>
       </div>
 
+      {/* CrossChekk Detail Modal */}
+      {currentCrossChekkResult && (
+        <div
+          onClick={() => setCurrentCrossChekkResult(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+            backdropFilter: 'blur(8px)'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              background: 'linear-gradient(135deg, #020617 0%, #172554 100%)',
+              borderRadius: '16px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              position: 'relative'
+            }}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setCurrentCrossChekkResult(null)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                border: 'none',
+                background: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                fontSize: '18px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+              }}
+            >
+              ×
+            </button>
+
+            <div style={{ padding: '24px' }}>
+              {/* Header */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: 'white' }}>
+                    @{currentCrossChekkResult.candidate?.githubHandle}
+                  </div>
+                  <div style={{
+                    fontSize: '32px',
+                    fontWeight: 900,
+                    color: currentCrossChekkResult.recommendation === 'SEND' ? '#22c55e' : '#ef4444'
+                  }}>
+                    {currentCrossChekkResult.fitScore}%
+                  </div>
+                </div>
+                <div style={{
+                  display: 'inline-block',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  background: currentCrossChekkResult.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  border: `1px solid ${currentCrossChekkResult.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  color: currentCrossChekkResult.recommendation === 'SEND' ? '#22c55e' : '#ef4444',
+                  letterSpacing: '0.05em'
+                }}>
+                  {currentCrossChekkResult.recommendation}
+                </div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>
+                  {currentCrossChekkResult.jd?.title || 'Custom JD'} {currentCrossChekkResult.jd?.company && `• ${currentCrossChekkResult.jd.company}`}
+                </div>
+              </div>
+
+              {/* VibeReport Section */}
+              {currentCrossChekkResult.vibeReport && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e', marginBottom: '12px', letterSpacing: '0.05em' }}>
+                    📊 GITHUB ANALYSIS
+                  </div>
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)'
+                  }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        background: 'rgba(34, 197, 94, 0.2)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        color: '#22c55e'
+                      }}>
+                        {currentCrossChekkResult.vibeReport.archetype}
+                      </div>
+                      <div style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        background: 'rgba(245, 158, 11, 0.2)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        color: '#f59e0b'
+                      }}>
+                        {currentCrossChekkResult.vibeReport.tier}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.8)', lineHeight: '1.5', marginBottom: '8px' }}>
+                      {currentCrossChekkResult.vibeReport.trajectorySummary}
+                    </div>
+                    {currentCrossChekkResult.vibeReport.meritPoints?.slice(0, 3).map((mp: any, idx: number) => (
+                      <div key={idx} style={{
+                        fontSize: '9px',
+                        color: 'rgba(255,255,255,0.7)',
+                        padding: '6px',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '4px',
+                        marginTop: '4px',
+                        borderLeft: '2px solid rgba(34, 197, 94, 0.5)'
+                      }}>
+                        <div style={{ fontWeight: 700, color: '#22c55e', marginBottom: '2px' }}>
+                          {mp.title}
+                        </div>
+                        {mp.detail}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AI Summary */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                  🤖 AI SUMMARY
+                </div>
+                <div style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  fontSize: '10px',
+                  color: 'rgba(255,255,255,0.8)',
+                  lineHeight: '1.5'
+                }}>
+                  {currentCrossChekkResult.aiSummary}
+                </div>
+              </div>
+
+              {/* Skills Match */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                  💡 SKILLS MATCH
+                </div>
+                <div style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                  {currentCrossChekkResult.skillsMatch?.matched?.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '9px', fontWeight: 700, color: '#22c55e', marginBottom: '4px' }}>
+                        ✓ MATCHED
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {currentCrossChekkResult.skillsMatch.matched.map((skill: string, idx: number) => (
+                          <span key={idx} style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            background: 'rgba(34, 197, 94, 0.2)',
+                            border: '1px solid rgba(34, 197, 94, 0.3)',
+                            fontSize: '9px',
+                            color: '#22c55e'
+                          }}>
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {currentCrossChekkResult.skillsMatch?.missing?.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '9px', fontWeight: 700, color: '#ef4444', marginBottom: '4px' }}>
+                        ✗ MISSING
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {currentCrossChekkResult.skillsMatch.missing.map((skill: string, idx: number) => (
+                          <span key={idx} style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            fontSize: '9px',
+                            color: '#ef4444'
+                          }}>
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {currentCrossChekkResult.skillsMatch?.extra?.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '9px', fontWeight: 700, color: '#f59e0b', marginBottom: '4px' }}>
+                        + BONUS SKILLS
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {currentCrossChekkResult.skillsMatch.extra.map((skill: string, idx: number) => (
+                          <span key={idx} style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            background: 'rgba(245, 158, 11, 0.2)',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            fontSize: '9px',
+                            color: '#f59e0b'
+                          }}>
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Experience Match */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                  📈 EXPERIENCE MATCH
+                </div>
+                <div style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  fontSize: '10px',
+                  color: 'rgba(255,255,255,0.8)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Candidate Level:</span>
+                    <span style={{ fontWeight: 700, color: 'white' }}>
+                      {currentCrossChekkResult.experienceMatch?.candidateLevel}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Required Level:</span>
+                    <span style={{ fontWeight: 700, color: 'white' }}>
+                      {currentCrossChekkResult.experienceMatch?.requiredLevel}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Meets Requirement:</span>
+                    <span style={{
+                      fontWeight: 700,
+                      color: currentCrossChekkResult.experienceMatch?.meets ? '#22c55e' : '#ef4444'
+                    }}>
+                      {currentCrossChekkResult.experienceMatch?.meets ? '✓ Yes' : '✗ No'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Strengths */}
+              {currentCrossChekkResult.strengthsForRole?.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                    💪 STRENGTHS FOR ROLE
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {currentCrossChekkResult.strengthsForRole.map((strength: string, idx: number) => (
+                      <div key={idx} style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        border: '1px solid rgba(34, 197, 94, 0.2)',
+                        fontSize: '9px',
+                        color: 'rgba(255,255,255,0.9)',
+                        lineHeight: '1.4'
+                      }}>
+                        • {strength}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Concerns */}
+              {currentCrossChekkResult.concernsForRole?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                    ⚠️ CONCERNS
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {currentCrossChekkResult.concernsForRole.map((concern: string, idx: number) => (
+                      <div key={idx} style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        fontSize: '9px',
+                        color: 'rgba(255,255,255,0.9)',
+                        lineHeight: '1.4'
+                      }}>
+                        • {concern}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* AUTOCHEKK Card */}
       <div
         style={{
