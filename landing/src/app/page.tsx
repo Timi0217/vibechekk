@@ -464,7 +464,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Free Tier */}
             <BlurFade delay={0.2}>
-              <div className="relative bg-card rounded-2xl p-8 border hover:border-primary/30 transition-all duration-300">
+              <div className="relative bg-card rounded-2xl p-8 border border-border hover:border-primary/30 transition-all duration-300">
                 <h3 className="text-xl font-bold mb-2">Free</h3>
                 <p className="text-muted-foreground text-sm mb-6">For getting started</p>
                 <div className="mb-6">
@@ -517,7 +517,7 @@ export default function LandingPage() {
 
             {/* Enterprise Tier */}
             <BlurFade delay={0.4}>
-              <div className="relative bg-card rounded-2xl p-8 border hover:border-primary/30 transition-all duration-300">
+              <div className="relative bg-card rounded-2xl p-8 border border-border hover:border-primary/30 transition-all duration-300">
                 <h3 className="text-xl font-bold mb-2">Enterprise</h3>
                 <p className="text-muted-foreground text-sm mb-6">For teams at scale</p>
                 <div className="mb-6">
