@@ -112,10 +112,15 @@ Analyze the fit and return a JSON object:
   "concernsForRole": [
     "Missing required PostgreSQL experience",
     "May be overqualified based on current Senior role"
-  ],  // 1-3 potential concerns or gaps
+  ],  // IMPORTANT: Must be a flat array of strings (1-5 items), NOT an object with nested arrays
 
   "aiSummary": "Strong fit. Candidate has 80% of required skills with impressive React and Node.js experience. Missing PostgreSQL but has similar database experience. GitHub activity shows consistent quality work. Recommend moving forward with interview."
 }
+
+CRITICAL FORMAT RULES:
+- concernsForRole MUST be a flat array of strings like ["concern1", "concern2"]
+- DO NOT structure it as an object with critical/moderate/minor keys
+- Just list 1-5 concerns in order of severity (most critical first)
 
 SCORING RUBRIC:
 - 90-100: Perfect fit, immediate hire candidate

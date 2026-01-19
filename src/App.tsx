@@ -100,7 +100,7 @@ const ArchetypeIcon = ({ label, rarity, size = 16 }: { label: string, rarity?: s
   const Icon = ArchetypeMap[label?.toLowerCase().trim()] || ArchetypeMap['the ' + normalizedLabel] || ArchetypeMap[normalizedLabel] || Zap
   const color = rarityColors[rarity?.toUpperCase() || ''] || 'var(--brand-blue)'
 
-  return <Icon size={size} color={color} />
+  return <Icon size={size} color={color} strokeWidth={2.5} />
 }
 
 
@@ -349,6 +349,9 @@ function App() {
   const [crossChekkFilter, setCrossChekkFilter] = useState<'ALL' | 'SEND' | 'SKIP'>('ALL')
   const [crossChekkSort, setCrossChekkSort] = useState<'recent' | 'high-low' | 'low-high'>('recent')
   const [crossChekkJdFilter, setCrossChekkJdFilter] = useState<string>('ALL')
+  const [autoChekkActiveJdId, setAutoChekkActiveJdId] = useState<string>('') // Active JD for auto-CrossChekk in AutoChekk
+  const [bulkChekkActiveJdId, setBulkChekkActiveJdId] = useState<string>('') // Active JD for auto-CrossChekk in BulkChekk
+  const [lastViewedCrossChekkResults, setLastViewedCrossChekkResults] = useState<number>(Date.now()) // Timestamp of last viewed results
   const [bulkChekkTab, setBulkChekkTab] = useState<'import' | 'history'>('import')
   const [bulkHistory, setBulkHistory] = useState<any[]>([])
   const [bulkFile, setBulkFile] = useState<File | null>(null)
@@ -556,6 +559,45 @@ function App() {
       setAutoChekk(false);
     }
   }, [autoChekk, user?.tier, authLoading])
+
+  // Auto-CrossChekk: Watch for new AutoChekk analyses and trigger CrossChekk
+  useEffect(() => {
+    if (!autoChekkActiveJdId || !tokens.vibeToken) return;
+
+    // Track which reports we've already auto-CrossChekked to avoid duplicates
+    const processedReportsKey = `autochekk_crosschekk_processed_${autoChekkActiveJdId}`;
+    chrome.storage.local.get([processedReportsKey], async (res) => {
+      const processedReports = new Set<string>(res[processedReportsKey] || []);
+
+      // Find completed AutoChekk analyses (successful ones with reportId)
+      const completedAnalyses = autochekkLogs.filter((log: any) =>
+        log.type === 'analysis' &&
+        !log.data?.analyzing &&
+        log.data?.reportId &&
+        !processedReports.has(log.data.reportId)
+      );
+
+      if (completedAnalyses.length === 0) return;
+
+      console.log(`[AutoChekk Auto-CrossChekk] Found ${completedAnalyses.length} new analyses to process`);
+
+      // Process each new analysis
+      for (const analysis of completedAnalyses) {
+        const reportId = analysis.data.reportId;
+        console.log('[AutoChekk Auto-CrossChekk] Processing report:', reportId);
+
+        await autoCrossChekkAnalysis(reportId, autoChekkActiveJdId);
+
+        // Mark as processed
+        processedReports.add(reportId);
+      }
+
+      // Save updated processed list
+      chrome.storage.local.set({
+        [processedReportsKey]: Array.from(processedReports)
+      });
+    });
+  }, [autochekkLogs, autoChekkActiveJdId, tokens.vibeToken]);
 
   const handleOpenReport = (report: any) => {
     setSelectedReport(report)
@@ -1072,6 +1114,12 @@ function App() {
             // Refresh history from backend to show in History tab in real-time
             await fetchHistory()
             console.log(`[BulkChekk] History refreshed after analyzing ${handle}`)
+
+            // Auto-CrossChekk: If active JD is set, automatically trigger CrossChekk analysis
+            if (bulkChekkActiveJdId && data.data.id) {
+              console.log(`[BulkChekk Auto-CrossChekk] Triggering for ${handle}`);
+              await autoCrossChekkAnalysis(data.data.id, bulkChekkActiveJdId);
+            }
           } else {
             console.error(`[BulkChekk] ❌ FAILED: ${handle} - ${data.error || 'Unknown error'}`)
             results.push({
@@ -1485,20 +1533,29 @@ function App() {
       });
       const data = await response.json();
       if (data.success) {
-        // Enrich results with archetype from history if missing
+        // Enrich results with archetype and archetype_reason from history if missing
         const enrichedResults = data.data.map((result: any) => {
-          if (!result.candidate?.archetype && result.candidate?.githubHandle) {
+          if (result.candidate?.githubHandle) {
             // Look up archetype from history
             const historyItem = history.find((item: any) =>
               item.candidate?.githubHandle?.toLowerCase() === result.candidate.githubHandle.toLowerCase()
             );
-            if (historyItem?.archetype) {
+            if (historyItem) {
+              const enrichedCandidate: any = { ...result.candidate };
+
+              // Add archetype if missing
+              if (!enrichedCandidate.archetype && historyItem.archetype) {
+                enrichedCandidate.archetype = historyItem.archetype;
+              }
+
+              // Add archetype_reason if available
+              if (historyItem.archetype_reason || historyItem.metadata?.archetype_reason) {
+                enrichedCandidate.archetype_reason = historyItem.archetype_reason || historyItem.metadata?.archetype_reason;
+              }
+
               return {
                 ...result,
-                candidate: {
-                  ...result.candidate,
-                  archetype: historyItem.archetype
-                }
+                candidate: enrichedCandidate
               };
             }
           }
@@ -1538,6 +1595,13 @@ function App() {
         resumeText: crossChekkForm.resumeText
       });
     }
+
+    console.log('[CrossChekk] Starting analysis for', candidatesToAnalyze.length, 'candidates');
+    console.log('[CrossChekk] Candidates:', candidatesToAnalyze.map(c => ({
+      name: c.name || c.githubHandle,
+      reportId: c.selectedReportId,
+      hasResume: !!c.resumeText
+    })));
 
     if (candidatesToAnalyze.length === 0) {
       alert('Please add at least one candidate to compare');
@@ -1581,6 +1645,9 @@ function App() {
 
       for (let i = 0; i < candidatesToAnalyze.length; i++) {
         const candidate = candidatesToAnalyze[i];
+        const candidateName = candidate.name || candidate.githubHandle || candidate.selectedReportId;
+
+        console.log(`[CrossChekk] Analyzing candidate ${i + 1}/${candidatesToAnalyze.length}:`, candidateName);
 
         try {
           const payload: any = {};
@@ -1612,6 +1679,8 @@ function App() {
             payload.resumeText = candidate.resumeText;
           }
 
+          console.log(`[CrossChekk] Sending request for ${candidateName}`, payload);
+
           const response = await fetch(`${BACKEND_URL}/api/crosschekk/analyze`, {
             method: 'POST',
             headers: {
@@ -1626,13 +1695,16 @@ function App() {
           if (data.success) {
             successCount++;
             lastResult = data.data;
+            console.log(`[CrossChekk] ✓ Successfully analyzed ${candidateName}`);
           } else {
-            console.error(`[CrossChekk] Failed to analyze ${candidate.githubHandle}:`, data.error);
+            console.error(`[CrossChekk] ✗ Failed to analyze ${candidateName}:`, data.error);
           }
         } catch (err) {
-          console.error(`[CrossChekk] Error analyzing ${candidate.githubHandle}:`, err);
+          console.error(`[CrossChekk] ✗ Error analyzing ${candidateName}:`, err);
         }
       }
+
+      console.log(`[CrossChekk] Analysis complete. Success: ${successCount}/${candidatesToAnalyze.length}`);
 
       // Refresh results and show latest
       await fetchCrossChekkResults();
@@ -1664,6 +1736,39 @@ function App() {
       alert('Failed to analyze candidate fit');
     } finally {
       setCrossChekkForm(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Auto-CrossChekk: Trigger CrossChekk analysis for a report when an active JD is set
+  const autoCrossChekkAnalysis = async (reportId: string, jdId: string) => {
+    if (!jdId || !tokens.vibeToken) return;
+
+    console.log('[Auto-CrossChekk] Triggering analysis for report:', reportId, 'with JD:', jdId);
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        },
+        body: JSON.stringify({
+          jdId: jdId,
+          reportId: reportId
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('[Auto-CrossChekk] ✓ Successfully analyzed report:', reportId);
+        // Refresh CrossChekk results silently in the background
+        await fetchCrossChekkResults();
+      } else {
+        console.error('[Auto-CrossChekk] ✗ Failed to analyze report:', reportId, data.error);
+      }
+    } catch (err) {
+      console.error('[Auto-CrossChekk] ✗ Error analyzing report:', reportId, err);
     }
   };
 
@@ -1824,7 +1929,6 @@ function App() {
       if (data.success) {
         setCurrentCrossChekkResult(null);
         await fetchCrossChekkResults();
-        alert(`Deleted ${data.deletedCount} result(s)`);
       } else {
         alert(data.error || 'Failed to delete results');
       }
@@ -1834,13 +1938,26 @@ function App() {
     }
   };
 
-  // Effect to fetch data when CrossChekk opens
+  // Fetch saved JDs on auth (needed for Auto-CrossChekk in AutoChekk/BulkChekk)
+  useEffect(() => {
+    if (tokens.vibeToken) {
+      fetchSavedJDs();
+    }
+  }, [tokens.vibeToken]);
+
+  // Fetch CrossChekk results when CrossChekk opens
   useEffect(() => {
     if (showCrossChekk && tokens.vibeToken) {
-      fetchSavedJDs();
       fetchCrossChekkResults();
     }
   }, [showCrossChekk, tokens.vibeToken]);
+
+  // Mark results as viewed when user opens CrossChekk or switches to results tab
+  useEffect(() => {
+    if (showCrossChekk && crossChekkTab === 'results' && crossChekkResults.length > 0) {
+      setLastViewedCrossChekkResults(Date.now());
+    }
+  }, [showCrossChekk, crossChekkTab, crossChekkResults.length]);
 
   const proFeaturesContent = (
     <>
@@ -1894,6 +2011,29 @@ function App() {
             padding: '16px 20px'
           }}
         >
+          {/* PRO Badge - Positioned absolutely */}
+          <span style={{
+            fontSize: '8px',
+            fontWeight: 900,
+            color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+            background: user?.tier === 'PRO'
+              ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+              : 'rgba(255, 255, 255, 0.15)',
+            padding: '3px 6px',
+            borderRadius: '3px',
+            letterSpacing: '0.02em',
+            lineHeight: '16px',
+            height: '16px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'absolute',
+            right: '86px',
+            top: '16px'
+          }}>
+            PRO
+          </span>
+
           {/* Icon */}
           <div style={{
             width: '42px',
@@ -1912,35 +2052,26 @@ function App() {
 
           {/* Text */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
               <span style={{
                 fontSize: '13px',
                 fontWeight: 800,
                 letterSpacing: '0.05em',
                 textTransform: 'uppercase',
-                color: 'white'
+                color: 'white',
+                lineHeight: '16px',
+                height: '16px',
+                display: 'inline-flex',
+                alignItems: 'center'
               }}>
                 CROSSCHEKK
-              </span>
-              <span style={{
-                fontSize: '8px',
-                fontWeight: 900,
-                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
-                background: user?.tier === 'PRO'
-                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                  : 'rgba(255, 255, 255, 0.15)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                letterSpacing: '0.02em',
-                lineHeight: 1
-              }}>
-                PRO
               </span>
             </div>
             <span style={{
               fontSize: '11px',
               color: 'rgba(255, 255, 255, 0.7)',
-              fontWeight: 500
+              fontWeight: 500,
+              whiteSpace: 'nowrap'
             }}>
               Match candidates to jobs
             </span>
@@ -1981,10 +2112,45 @@ function App() {
                 width: '10px',
                 height: '10px',
                 borderRadius: '50%',
-                background: showCrossChekk ? '#22c55e' : 'transparent',
-                border: `1.5px solid ${showCrossChekk ? '#22c55e' : 'rgba(255, 255, 255, 0.6)'}`,
+                background: (() => {
+                  // Check if there are NEW unviewed results FIRST (prioritize over loading)
+                  const hasNewResults = crossChekkResults.length > 0 &&
+                    crossChekkResults.some((r: any) => new Date(r.createdAt).getTime() > lastViewedCrossChekkResults);
+
+                  // Flashing green when closed with new unviewed results (takes priority)
+                  if (!showCrossChekk && hasNewResults) return '#22c55e';
+
+                  // Yellow while actively running (only if no new results to show)
+                  if (crossChekkForm.loading) return '#f59e0b';
+
+                  // Solid green when open
+                  if (showCrossChekk) return '#22c55e';
+
+                  // Transparent otherwise
+                  return 'transparent';
+                })(),
+                border: `1.5px solid ${(() => {
+                  const hasNewResults = crossChekkResults.length > 0 &&
+                    crossChekkResults.some((r: any) => new Date(r.createdAt).getTime() > lastViewedCrossChekkResults);
+                  if (!showCrossChekk && hasNewResults) return '#22c55e';
+                  if (crossChekkForm.loading) return '#f59e0b';
+                  if (showCrossChekk) return '#22c55e';
+                  return 'rgba(255, 255, 255, 0.6)';
+                })()}`,
                 transition: 'all 0.2s ease',
-                boxShadow: showCrossChekk ? '0 0 8px rgba(34, 197, 94, 0.6)' : 'none'
+                boxShadow: (() => {
+                  const hasNewResults = crossChekkResults.length > 0 &&
+                    crossChekkResults.some((r: any) => new Date(r.createdAt).getTime() > lastViewedCrossChekkResults);
+                  if (!showCrossChekk && hasNewResults) return '0 0 8px rgba(34, 197, 94, 0.6)';
+                  if (crossChekkForm.loading) return '0 0 8px rgba(245, 158, 11, 0.6)';
+                  if (showCrossChekk) return '0 0 8px rgba(34, 197, 94, 0.6)';
+                  return 'none';
+                })(),
+                animation: (() => {
+                  const hasNewResults = crossChekkResults.length > 0 &&
+                    crossChekkResults.some((r: any) => new Date(r.createdAt).getTime() > lastViewedCrossChekkResults);
+                  return (!showCrossChekk && hasNewResults) ? 'pulse 0.8s infinite' : 'none';
+                })()
               }} />
             </div>
           </div>
@@ -2064,7 +2230,8 @@ function App() {
                   color: 'white',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  letterSpacing: '0.02em'
+                  letterSpacing: '0.02em',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 SAVED JDS
@@ -2460,10 +2627,13 @@ function App() {
                                                   fontSize: '8px',
                                                   fontWeight: 700,
                                                   cursor: 'pointer',
-                                                  textTransform: 'uppercase'
+                                                  textTransform: 'uppercase',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center'
                                                 }}
                                               >
-                                                Remove
+                                                <Trash2 size={10} />
                                               </button>
                                             )}
                                           </div>
@@ -2480,7 +2650,10 @@ function App() {
                               <button
                                 onClick={() => {
                                   // Add all selected to candidates list
-                                  const newCandidates = Array.from(bulkSelectedReports).map(reportId => {
+                                  console.log('[CrossChekk] Selected reports:', bulkSelectedReports.size);
+                                  console.log('[CrossChekk] Existing queue:', crossChekkCandidates.length);
+
+                                  const allMappedCandidates = Array.from(bulkSelectedReports).map(reportId => {
                                     const historyItem = history.find((item: any) => item.id === reportId);
                                     return {
                                       id: `${Date.now()}-${reportId}`,
@@ -2490,12 +2663,22 @@ function App() {
                                       archetype: historyItem?.archetype || '',
                                       name: historyItem?.candidate?.name || ''
                                     };
-                                  }).filter(c => {
+                                  });
+
+                                  console.log('[CrossChekk] Mapped candidates:', allMappedCandidates.length);
+
+                                  const newCandidates = allMappedCandidates.filter(c => {
                                     // Filter out duplicates
-                                    return !crossChekkCandidates.some(existing =>
+                                    const isDuplicate = crossChekkCandidates.some(existing =>
                                       existing.selectedReportId === c.selectedReportId
                                     );
+                                    if (isDuplicate) {
+                                      console.log('[CrossChekk] Filtering out duplicate:', c.name || c.githubHandle, c.selectedReportId);
+                                    }
+                                    return !isDuplicate;
                                   });
+
+                                  console.log('[CrossChekk] New candidates after dedup:', newCandidates.length);
 
                                   if (newCandidates.length === 0) {
                                     alert('All selected candidates are already in the queue');
@@ -2508,8 +2691,6 @@ function App() {
                                   setBulkSelectedReports(new Set());
                                   setBulkResumes(new Map());
                                   setShowBulkHistorySelection(false);
-
-                                  alert(`Added ${newCandidates.length} candidate(s) to queue`);
                                 }}
                                 style={{
                                   width: '100%',
@@ -2655,13 +2836,20 @@ function App() {
                           style={{
                             padding: '3px 6px',
                             borderRadius: '4px',
-                            border: 'none',
-                            background: 'rgba(239, 68, 68, 0.2)',
-                            color: '#ef4444',
+                            border: '1px solid rgba(220, 38, 38, 0.3)',
+                            background: '#ef4444',
+                            color: 'white',
                             fontSize: '8px',
                             fontWeight: 700,
                             cursor: 'pointer',
-                            textTransform: 'uppercase'
+                            textTransform: 'uppercase',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#dc2626';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#ef4444';
                           }}
                         >
                           Clear All
@@ -2688,7 +2876,7 @@ function App() {
                               </div>
                               {candidate.archetype && (
                                 <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.6)', marginBottom: '2px', textTransform: 'uppercase', fontWeight: 600 }}>
-                                  {candidate.archetype}
+                                  {candidate.archetype.replace(/^THE\s+/i, '')}
                                 </div>
                               )}
                               {candidate.resumeText && (
@@ -2702,18 +2890,28 @@ function App() {
                                 setCrossChekkCandidates(prev => prev.filter(c => c.id !== candidate.id));
                               }}
                               style={{
-                                padding: '4px 8px',
+                                padding: '6px 8px',
                                 borderRadius: '4px',
-                                border: 'none',
-                                background: 'rgba(239, 68, 68, 0.15)',
-                                color: '#ef4444',
+                                border: '1px solid rgba(220, 38, 38, 0.3)',
+                                background: '#ef4444',
+                                color: 'white',
                                 fontSize: '9px',
                                 fontWeight: 700,
                                 cursor: 'pointer',
-                                flexShrink: 0
+                                flexShrink: 0,
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = '#dc2626';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '#ef4444';
                               }}
                             >
-                              Remove
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         ))}
@@ -2898,7 +3096,7 @@ function App() {
                             e.currentTarget.style.transform = 'scale(1)';
                           }}
                         >
-                          ×
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     ))
@@ -2991,22 +3189,23 @@ function App() {
                         width: '100%',
                         padding: '8px',
                         borderRadius: '6px',
-                        border: '1px solid rgba(239, 68, 68, 0.4)',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: '#ef4444',
+                        border: '2px solid rgba(220, 38, 38, 0.3)',
+                        background: '#ef4444',
+                        color: 'white',
                         fontSize: '9px',
                         fontWeight: 700,
                         cursor: 'pointer',
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em',
                         transition: 'all 0.2s ease',
-                        marginBottom: '8px'
+                        marginBottom: '8px',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                        e.currentTarget.style.background = '#dc2626';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                        e.currentTarget.style.background = '#ef4444';
                       }}
                     >
                       Clear All Results
@@ -3129,7 +3328,7 @@ function App() {
 
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       {/* Name Row */}
-                                      <div style={{ fontSize: '16px', fontWeight: 900, color: '#1a1a1a', marginBottom: '8px' }}>
+                                      <div style={{ fontSize: '16px', fontWeight: 900, color: '#1a1a1a', marginBottom: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {currentCrossChekkResult.candidate?.name || `@${currentCrossChekkResult.candidate?.githubHandle}`}
                                       </div>
 
@@ -3139,31 +3338,51 @@ function App() {
                                           const archetype = currentCrossChekkResult.candidate.archetype;
                                           const tier = getRarityFromLabel(archetype);
                                           const tierColor = getRarityColor(tier, archetype);
+                                          const archetypeReason = currentCrossChekkResult.candidate?.archetypeReason ||
+                                                                  currentCrossChekkResult.candidate?.archetype_reason ||
+                                                                  'Analysis based on GitHub activity patterns and contribution history.';
 
                                           return (
-                                            <div style={{
-                                              display: 'inline-flex',
-                                              alignItems: 'center',
-                                              gap: '4px',
-                                              padding: '3px 7px',
-                                              borderRadius: '6px',
-                                              background: `${tierColor}12`,
-                                              border: `1px solid ${tierColor}25`,
-                                              flex: 1,
-                                              minWidth: 0
-                                            }}>
-                                              <ArchetypeIcon label={archetype} size={11} />
-                                              <span style={{
-                                                fontSize: '9px',
-                                                color: tierColor,
-                                                fontWeight: 700,
-                                                letterSpacing: '0.02em',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                whiteSpace: 'nowrap'
+                                            <div className="archetype-tooltip-wrapper" style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px',
+                                                padding: '0 9px',
+                                                borderRadius: '6px',
+                                                background: `${tierColor}20`,
+                                                border: `1.5px solid ${tierColor}40`,
+                                                width: '100%',
+                                                cursor: 'pointer',
+                                                height: '22px',
+                                                minHeight: '22px'
                                               }}>
-                                                {archetype.replace(/^THE\s+/i, '')}
-                                              </span>
+                                                <ArchetypeIcon label={archetype} rarity={tier} size={14} />
+                                                <span style={{
+                                                  fontSize: '9px',
+                                                  color: tierColor,
+                                                  fontWeight: 700,
+                                                  letterSpacing: '0.02em',
+                                                  overflow: 'hidden',
+                                                  textOverflow: 'ellipsis',
+                                                  whiteSpace: 'nowrap',
+                                                  lineHeight: '22px',
+                                                  height: '22px',
+                                                  display: 'flex',
+                                                  alignItems: 'center'
+                                                }}>
+                                                  {archetype.replace(/^THE\s+/i, '')}
+                                                </span>
+                                              </div>
+                                              <div className="archetype-tooltip">
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                                  <div>
+                                                    <strong style={{ display: 'block', marginBottom: '4px' }}>{archetype.replace(/^THE\s+/i, '')}</strong>
+                                                    {archetypeReason.replace(/Classified as THE /i, 'Classified as ')}
+                                                  </div>
+                                                </div>
+                                              </div>
                                             </div>
                                           );
                                         })()}
@@ -3195,7 +3414,10 @@ function App() {
                                     textAlign: 'center',
                                     lineHeight: '1.4',
                                     marginBottom: '4px',
-                                    fontWeight: 600
+                                    fontWeight: 600,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
                                   }}>
                                     {currentCrossChekkResult.jd?.title || 'Custom JD'} {currentCrossChekkResult.jd?.company && `• ${currentCrossChekkResult.jd.company}`}
                                   </div>
@@ -3232,22 +3454,23 @@ function App() {
                                 width: '100%',
                                 padding: '10px',
                                 borderRadius: '8px',
-                                border: '1px solid rgba(34, 197, 94, 0.3)',
-                                background: 'rgba(34, 197, 94, 0.1)',
-                                color: '#22c55e',
+                                border: '2px solid rgba(255, 255, 255, 0.2)',
+                                background: '#1a1a1a',
+                                color: 'white',
                                 fontSize: '10px',
                                 fontWeight: 700,
                                 cursor: 'pointer',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.05em',
-                                transition: 'all 0.2s ease'
+                                transition: 'all 0.2s ease',
+                                boxShadow: '0 4px 8px rgba(0, 0, 0, 0.3)'
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
+                                e.currentTarget.style.background = '#2a2a2a';
                                 e.currentTarget.style.transform = 'translateY(-1px)';
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                                e.currentTarget.style.background = '#1a1a1a';
                                 e.currentTarget.style.transform = 'translateY(0)';
                               }}
                             >
@@ -3256,65 +3479,6 @@ function App() {
                           </div>
                         );
                       })()}
-
-                      {/* VibeReport Section */}
-                      {currentCrossChekkResult.vibeReport && (
-                        <div style={{ marginBottom: '16px' }}>
-                          <div style={{ fontSize: '11px', fontWeight: 700, color: 'white', marginBottom: '8px', letterSpacing: '0.05em' }}>
-                            GITHUB ANALYSIS
-                          </div>
-                          <div style={{
-                            padding: '10px',
-                            borderRadius: '6px',
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.1)'
-                          }}>
-                            <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                              <div style={{
-                                padding: '3px 6px',
-                                borderRadius: '3px',
-                                background: 'rgba(34, 197, 94, 0.2)',
-                                border: '1px solid rgba(34, 197, 94, 0.3)',
-                                fontSize: '8px',
-                                fontWeight: 700,
-                                color: '#22c55e'
-                              }}>
-                                {currentCrossChekkResult.vibeReport.archetype}
-                              </div>
-                              <div style={{
-                                padding: '3px 6px',
-                                borderRadius: '3px',
-                                background: 'rgba(245, 158, 11, 0.2)',
-                                border: '1px solid rgba(245, 158, 11, 0.3)',
-                                fontSize: '8px',
-                                fontWeight: 700,
-                                color: '#f59e0b'
-                              }}>
-                                {currentCrossChekkResult.vibeReport.tier}
-                              </div>
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', lineHeight: '1.5', marginBottom: '8px' }}>
-                              {currentCrossChekkResult.vibeReport.trajectorySummary}
-                            </div>
-                            {currentCrossChekkResult.vibeReport.meritPoints?.slice(0, 3).map((mp: any, idx: number) => (
-                              <div key={idx} style={{
-                                fontSize: '10px',
-                                color: 'rgba(255,255,255,0.8)',
-                                padding: '8px',
-                                background: 'rgba(255,255,255,0.03)',
-                                borderRadius: '4px',
-                                marginTop: '6px',
-                                borderLeft: '2px solid rgba(34, 197, 94, 0.5)'
-                              }}>
-                                <div style={{ fontWeight: 700, color: '#22c55e', marginBottom: '3px' }}>
-                                  {mp.title}
-                                </div>
-                                {mp.detail}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
 
                       {/* Summary */}
                       <div style={{ marginBottom: '16px' }}>
@@ -3603,19 +3767,22 @@ function App() {
 
                       return sortedResults;
                     })().map((result: any) => {
-                      // Determine color and background based on score thresholds
+                      // Determine color and background based on recommendation
                       const fitScore = result.fitScore;
                       let scoreColor;
                       let cardBackground;
-                      if (fitScore <= 50) {
-                        scoreColor = '#dc2626'; // Red (more saturated)
-                        cardBackground = 'linear-gradient(135deg, #fca5a5 0%, #fee2e2 100%)'; // Reddish hue - enhanced gradient
-                      } else if (fitScore < 75) {
-                        scoreColor = '#eab308'; // Yellow
-                        cardBackground = 'linear-gradient(135deg, #fef08a 0%, #fefce8 100%)'; // Yellowish hue
-                      } else {
+                      if (result.recommendation === 'SEND') {
                         scoreColor = '#22c55e'; // Green
-                        cardBackground = 'linear-gradient(135deg, #86efac 0%, #dcfce7 100%)'; // Greenish hue - enhanced gradient
+                        cardBackground = 'linear-gradient(135deg, #86efac 0%, #dcfce7 100%)'; // Greenish hue
+                      } else {
+                        // SKIP - differentiate by severity
+                        if (fitScore >= 50) {
+                          scoreColor = '#eab308'; // Yellow
+                          cardBackground = 'linear-gradient(135deg, #fef08a 0%, #fefce8 100%)'; // Yellowish hue
+                        } else {
+                          scoreColor = '#dc2626'; // Red
+                          cardBackground = 'linear-gradient(135deg, #fca5a5 0%, #fee2e2 100%)'; // Reddish hue
+                        }
                       }
 
                       const circumference = 2 * Math.PI * 28;
@@ -3773,7 +3940,7 @@ function App() {
                             }}
                             style={{
                               position: 'absolute',
-                              bottom: '14px',
+                              bottom: '10px',
                               right: '12px',
                               width: '24px',
                               height: '24px',
@@ -3800,7 +3967,7 @@ function App() {
                               e.currentTarget.style.transform = 'scale(1)';
                             }}
                           >
-                            ×
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       );
@@ -3854,6 +4021,29 @@ function App() {
             gap: '14px'
           }}
         >
+          {/* PRO Badge - Positioned absolutely */}
+          <span style={{
+            fontSize: '8px',
+            fontWeight: 900,
+            color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+            background: user?.tier === 'PRO'
+              ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+              : 'rgba(255, 255, 255, 0.15)',
+            padding: '3px 6px',
+            borderRadius: '3px',
+            letterSpacing: '0.02em',
+            lineHeight: '16px',
+            height: '16px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'absolute',
+            right: '86px',
+            top: '16px'
+          }}>
+            PRO
+          </span>
+
           <div style={{
             width: '42px',
             height: '42px',
@@ -3866,38 +4056,28 @@ function App() {
             flexShrink: 0,
             border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
-            <Binoculars size={22} color="white" strokeWidth={2} />
+            <Binoculars size={24} color="white" strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
               <span style={{
                 fontSize: '13px',
                 fontWeight: 800,
                 letterSpacing: '0.05em',
                 textTransform: 'uppercase',
-                color: 'white'
+                color: 'white',
+                lineHeight: '16px',
+                height: '16px',
+                display: 'inline-flex',
+                alignItems: 'center'
               }}>
                 AUTOCHEKK
-              </span>
-              <span style={{
-                fontSize: '8px',
-                fontWeight: 900,
-                color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
-                background: user?.tier === 'PRO'
-                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                  : 'rgba(255, 255, 255, 0.15)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                letterSpacing: '0.02em',
-                lineHeight: 1
-              }}>
-                PRO
               </span>
             </div>
             <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, whiteSpace: 'nowrap' }}>
               Chekk devs as you browse
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} className="autochekk-tooltip-wrapper">
                 <Info
                   size={13}
@@ -4076,6 +4256,99 @@ function App() {
                 )}
               </div>
             </div>
+
+            {/* Active JD for Auto-CrossChekk */}
+            <div style={{
+              padding: '12px',
+              borderRadius: '8px',
+              background: autoChekkActiveJdId ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+              border: `1px solid ${autoChekkActiveJdId ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.08)'}`,
+              transition: 'all 0.2s ease'
+            }}>
+              <div style={{
+                fontSize: '9px',
+                fontWeight: 700,
+                color: 'rgba(255, 255, 255, 0.4)',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                marginBottom: '8px'
+              }}>
+                Auto-CrossChekk
+              </div>
+              {!autoChekkActiveJdId ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setAutoChekkActiveJdId(e.target.value);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="">Select a JD to auto-CrossChekk</option>
+                    {savedJDs.map((jd: any) => (
+                      <option key={jd.id} value={jd.id}>
+                        {jd.title} {jd.company ? `- ${jd.company}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: '#22c55e' }}>
+                      {savedJDs.find((jd: any) => jd.id === autoChekkActiveJdId)?.title}
+                    </div>
+                    {savedJDs.find((jd: any) => jd.id === autoChekkActiveJdId)?.company && (
+                      <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.5)' }}>
+                        {savedJDs.find((jd: any) => jd.id === autoChekkActiveJdId)?.company}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setAutoChekkActiveJdId('')}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: 'none',
+                      borderRadius: '4px',
+                      width: '20px',
+                      height: '20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      transition: 'all 0.2s ease',
+                      flexShrink: 0
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                      e.currentTarget.style.color = '#ef4444';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)';
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div style={{
               display: 'flex',
               flexDirection: 'column',
@@ -4226,7 +4499,11 @@ function App() {
                 fontWeight: 800,
                 letterSpacing: '0.05em',
                 textTransform: 'uppercase',
-                color: 'white'
+                color: 'white',
+                lineHeight: '16px',
+                height: '16px',
+                display: 'inline-flex',
+                alignItems: 'center'
               }}>
                 CHEKKLIST
               </span>
@@ -4237,10 +4514,14 @@ function App() {
                 background: user?.tier === 'PRO'
                   ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
                   : 'rgba(255, 255, 255, 0.15)',
-                padding: '2px 6px',
+                padding: '3px 6px',
                 borderRadius: '3px',
                 letterSpacing: '0.02em',
-                lineHeight: 1
+                lineHeight: '16px',
+                height: '16px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}>
                 PRO
               </span>
@@ -4853,9 +5134,11 @@ function App() {
                                           textTransform: 'uppercase',
                                           letterSpacing: '0.02em',
                                           whiteSpace: 'nowrap',
-                                          display: 'flex',
+                                          display: 'inline-flex',
                                           alignItems: 'center',
-                                          gap: '4px'
+                                          justifyContent: 'center',
+                                          gap: '4px',
+                                          lineHeight: '1'
                                         }}>
                                           {c.reachabilitySignal && <span title="Reachability">{c.reachabilitySignal}</span>}
                                           {c.archetype.replace('THE ', '')}
@@ -5244,6 +5527,29 @@ function App() {
               position: 'relative'
             }}
           >
+            {/* PRO Badge - Positioned absolutely */}
+            <span style={{
+              fontSize: '8px',
+              fontWeight: 900,
+              color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
+              background: user?.tier === 'PRO'
+                ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                : 'rgba(255, 255, 255, 0.15)',
+              padding: '3px 6px',
+              borderRadius: '3px',
+              letterSpacing: '0.02em',
+              lineHeight: '16px',
+              height: '16px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'absolute',
+              right: '86px',
+              top: '16px'
+            }}>
+              PRO
+            </span>
+
             {/* Icon Box */}
             <div style={{
               width: '42px',
@@ -5262,32 +5568,22 @@ function App() {
 
             {/* Text Info */}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{
                   fontSize: '13px',
                   fontWeight: 800,
                   color: 'white',
                   letterSpacing: '0.05em',
-                  textTransform: 'uppercase'
+                  textTransform: 'uppercase',
+                  lineHeight: '16px',
+                  height: '16px',
+                  display: 'inline-flex',
+                  alignItems: 'center'
                 }}>
                   BULKCHEKK
                 </span>
-                <span style={{
-                  fontSize: '8px',
-                  fontWeight: 900,
-                  color: user?.tier === 'PRO' ? '#1a1a1a' : 'rgba(255, 255, 255, 0.9)',
-                  background: user?.tier === 'PRO'
-                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                    : 'rgba(255, 255, 255, 0.15)',
-                  padding: '2px 6px',
-                  borderRadius: '3px',
-                  letterSpacing: '0.02em',
-                  lineHeight: 1
-                }}>
-                  PRO
-                </span>
               </div>
-              <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, display: 'block' }}>
+              <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500, whiteSpace: 'nowrap' }}>
                 Analyze devs via CSV
               </span>
 
@@ -5397,6 +5693,99 @@ function App() {
                     HISTORY
                   </button>
                 </div>
+              </div>
+
+              {/* Active JD for Auto-CrossChekk */}
+              <div style={{
+                padding: '12px',
+                borderRadius: '8px',
+                background: bulkChekkActiveJdId ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                border: `1px solid ${bulkChekkActiveJdId ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.08)'}`,
+                transition: 'all 0.2s ease',
+                marginBottom: '16px'
+              }}>
+                <div style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  marginBottom: '8px'
+                }}>
+                  Auto-CrossChekk
+                </div>
+                {!bulkChekkActiveJdId ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setBulkChekkActiveJdId(e.target.value);
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        fontSize: '10px',
+                        cursor: 'pointer',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="">Select a JD to auto-CrossChekk</option>
+                      {savedJDs.map((jd: any) => (
+                        <option key={jd.id} value={jd.id}>
+                          {jd.title} {jd.company ? `- ${jd.company}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#22c55e' }}>
+                        {savedJDs.find((jd: any) => jd.id === bulkChekkActiveJdId)?.title}
+                      </div>
+                      {savedJDs.find((jd: any) => jd.id === bulkChekkActiveJdId)?.company && (
+                        <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.5)' }}>
+                          {savedJDs.find((jd: any) => jd.id === bulkChekkActiveJdId)?.company}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setBulkChekkActiveJdId('')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        width: '20px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        transition: 'all 0.2s ease',
+                        flexShrink: 0
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                        e.currentTarget.style.color = '#ef4444';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)';
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </div>
 
               {bulkChekkTab === 'import' ? (
@@ -7264,7 +7653,11 @@ function App() {
                                   textTransform: 'uppercase',
                                   color: getRarityColor(item.rarity || item.tier, item.label || item.archetype),
                                   background: `${getRarityColor(item.rarity || item.tier, item.label || item.archetype)}15`,
-                                  border: `1px solid ${getRarityColor(item.rarity || item.tier, item.label || item.archetype)}30`
+                                  border: `1px solid ${getRarityColor(item.rarity || item.tier, item.label || item.archetype)}30`,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  lineHeight: '1'
                                 }}>
                                   {stripThe(item.label || item.archetype) || 'Profile'}
                                 </div>

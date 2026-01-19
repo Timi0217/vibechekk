@@ -635,7 +635,7 @@ main {
 .archetype-badge {
   font-size: 10px;
   font-weight: 800;
-  padding: 3px 8px;
+  padding: 0 8px;
   border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -646,6 +646,9 @@ main {
   justify-content: center;
   flex-shrink: 0;
   border: 1px solid transparent;
+  line-height: 20px;
+  height: 20px;
+  vertical-align: middle;
 }
 
 .archetype-badge.legendary {
