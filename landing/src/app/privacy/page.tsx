@@ -45,7 +45,7 @@ export default function PrivacyPage() {
                                 <p className="text-muted-foreground leading-relaxed">
                                     Welcome to Vibechekk (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your privacy
                                     and ensuring transparency about how we collect, use, and share information. This Privacy Policy
-                                    explains our practices regarding the Vibechekk Chrome extension and web services.
+                                    explains our practices regarding the Vibechekk Chrome extension, web services, and screening features including CrossChekk, AutoChekk, and BulkChekk.
                                 </p>
                             </section>
 
@@ -57,6 +57,9 @@ export default function PrivacyPage() {
                                     <li>Account information (email, name) when you sign in with Google or GitHub</li>
                                     <li>Payment information processed securely through Stripe (we do not store payment details)</li>
                                     <li>GitHub profile URLs you choose to analyze</li>
+                                    <li>Job descriptions and candidate information for CrossChekk matching</li>
+                                    <li>Candidate lists uploaded via BulkChekk (CSV files)</li>
+                                    <li>Resume files uploaded for analysis</li>
                                 </ul>
 
                                 <h3 className="text-xl font-medium mt-6 mb-3">2.2 Information We Collect Automatically</h3>
@@ -84,8 +87,11 @@ export default function PrivacyPage() {
                             <section>
                                 <h2 className="text-2xl font-semibold mb-4">3. How We Use Your Information</h2>
                                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                                    <li>To provide and improve the Vibechekk service</li>
+                                    <li>To provide and improve the Vibechekk service and screening tools</li>
                                     <li>To generate developer archetype classifications and assessments</li>
+                                    <li>To match candidates to job descriptions with CrossChekk AI-powered fit scoring</li>
+                                    <li>To automatically analyze developer profiles with AutoChekk mode</li>
+                                    <li>To batch process candidate lists via BulkChekk</li>
                                     <li>To maintain your analysis history and preferences</li>
                                     <li>To process payments and manage subscriptions</li>
                                     <li>To communicate with you about your account and updates</li>
@@ -194,9 +200,7 @@ export default function PrivacyPage() {
             <footer className="py-8 px-6 border-t">
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                            <span className="text-white font-bold text-xs">V</span>
-                        </div>
+                        <img src="/logo.png" alt="Vibechekk" className="w-6 h-6" />
                         <span className="font-semibold">Vibechekk</span>
                     </div>
                     <p className="text-sm text-muted-foreground">

@@ -52,14 +52,17 @@ export default function TermsPage() {
                             <section>
                                 <h2 className="text-2xl font-semibold mb-4">2. Description of Service</h2>
                                 <p className="text-muted-foreground leading-relaxed">
-                                    Vibechekk is a developer analysis platform that:
+                                    Vibechekk is a developer screening and analysis platform that:
                                 </p>
                                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground mt-4">
-                                    <li>Analyzes publicly available GitHub profiles</li>
+                                    <li>Analyzes publicly available GitHub profiles and resumes</li>
                                     <li>Classifies developers into archetype categories</li>
                                     <li>Provides code quality assessments and insights</li>
                                     <li>Detects usage patterns of AI coding assistants</li>
-                                    <li>Generates recruiter-ready summaries</li>
+                                    <li>Matches candidates to job descriptions with AI-powered fit scoring (CrossChekk)</li>
+                                    <li>Automatically analyzes profiles as you browse GitHub (AutoChekk)</li>
+                                    <li>Batch processes multiple candidates at once (BulkChekk)</li>
+                                    <li>Generates recruiter-ready summaries and assessments</li>
                                 </ul>
                             </section>
 
@@ -74,9 +77,9 @@ export default function TermsPage() {
 
                                 <h3 className="text-xl font-medium mt-6 mb-3">3.2 Account Tiers</h3>
                                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                                    <li><strong>Guest:</strong> Limited to 2 analyses without account</li>
-                                    <li><strong>Authenticated:</strong> 3 analyses per week with free account</li>
-                                    <li><strong>Pro:</strong> Unlimited analyses with paid subscription ($29/month)</li>
+                                    <li><strong>Free:</strong> 2 vibechekks, all 15 archetypes, AI detection, Chrome extension</li>
+                                    <li><strong>Pro ($99/month):</strong> Unlimited vibechekks, everything in Free, CrossChekk & BulkChekk for job matching, AutoChekk mode for automatic analysis, priority support</li>
+                                    <li><strong>Enterprise (Custom pricing):</strong> Everything in Pro, team analytics, ATS integration, custom archetypes, dedicated support, SSO/SAML</li>
                                 </ul>
                             </section>
 
@@ -132,7 +135,7 @@ export default function TermsPage() {
 
                                 <h3 className="text-xl font-medium mt-6 mb-3">7.1 Subscription</h3>
                                 <p className="text-muted-foreground leading-relaxed">
-                                    Pro subscriptions are billed monthly at $29 USD. Payments are processed securely through Stripe.
+                                    Pro subscriptions are billed monthly at $99 USD. Enterprise pricing is custom based on team size and requirements. All payments are processed securely through Stripe.
                                 </p>
 
                                 <h3 className="text-xl font-medium mt-6 mb-3">7.2 Cancellation</h3>
@@ -250,9 +253,7 @@ export default function TermsPage() {
             <footer className="py-8 px-6 border-t">
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                            <span className="text-white font-bold text-xs">V</span>
-                        </div>
+                        <img src="/logo.png" alt="Vibechekk" className="w-6 h-6" />
                         <span className="font-semibold">Vibechekk</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
