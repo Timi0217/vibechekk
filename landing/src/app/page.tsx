@@ -74,6 +74,11 @@ const features = [
     description: "Beyond generic labels. Identify 10x Engineers, Hidden Gems, Architects, and more.",
   },
   {
+    icon: <Code className="w-6 h-6" />,
+    title: "Code-Level Insights",
+    description: "We analyze actual code, not just repo metadata. Real technical signal.",
+  },
+  {
     icon: <Sparkles className="w-6 h-6" />,
     title: "AI Detection",
     description: "Know if candidates use Claude, Copilot, or ChatGPT. Modern hiring signal.",
@@ -81,12 +86,7 @@ const features = [
   {
     icon: <Shield className="w-6 h-6" />,
     title: "Quality First",
-    description: "Tests, CI/CD, TypeScript adoption. We check what actually matters.",
-  },
-  {
-    icon: <Code className="w-6 h-6" />,
-    title: "Code-Level Insights",
-    description: "We analyze actual code, not just repo metadata. Real technical signal.",
+    description: "Tests, CI/CD, code quality standards. We check what actually matters.",
   },
 ];
 
