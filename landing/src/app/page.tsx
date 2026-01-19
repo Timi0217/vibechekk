@@ -464,14 +464,14 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Free Tier */}
             <BlurFade delay={0.2}>
-              <div className="relative bg-card rounded-2xl p-8 border border-border hover:border-primary/30 transition-all duration-300">
+              <div className="relative bg-card rounded-2xl p-8 border border-border hover:border-primary/30 transition-all duration-300 h-full flex flex-col">
                 <h3 className="text-xl font-bold mb-2">Free</h3>
                 <p className="text-muted-foreground text-sm mb-6">For getting started</p>
                 <div className="mb-6">
                   <span className="text-4xl font-bold">$0</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <ul className="space-y-3 mb-8">
+                <ul className="space-y-3 mb-8 flex-1">
                   {["2 vibechekks", "All 15 archetypes", "AI detection", "Chrome extension"].map((feature, i) => (
                     <li key={i} className="flex items-center gap-3 text-sm">
                       <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
@@ -489,7 +489,7 @@ export default function LandingPage() {
 
             {/* Pro Tier */}
             <BlurFade delay={0.3}>
-              <div className="relative bg-card rounded-2xl p-8 border-2 border-primary shadow-lg">
+              <div className="relative bg-card rounded-2xl p-8 border-2 border-primary shadow-lg h-full flex flex-col">
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground px-4 py-1">Most Popular</Badge>
                 </div>
@@ -499,7 +499,7 @@ export default function LandingPage() {
                   <span className="text-4xl font-bold">$99</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <ul className="space-y-3 mb-8">
+                <ul className="space-y-3 mb-8 flex-1">
                   {["Unlimited vibechekks", "Everything in Free", "CrossChekk & BulkChekk", "AutoChekk mode", "Priority support"].map((feature, i) => (
                     <li key={i} className="flex items-center gap-3 text-sm">
                       <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
@@ -517,13 +517,13 @@ export default function LandingPage() {
 
             {/* Enterprise Tier */}
             <BlurFade delay={0.4}>
-              <div className="relative bg-card rounded-2xl p-8 border border-border hover:border-primary/30 transition-all duration-300">
+              <div className="relative bg-card rounded-2xl p-8 border border-border hover:border-primary/30 transition-all duration-300 h-full flex flex-col">
                 <h3 className="text-xl font-bold mb-2">Enterprise</h3>
                 <p className="text-muted-foreground text-sm mb-6">For teams at scale</p>
                 <div className="mb-6">
                   <span className="text-4xl font-bold">Custom</span>
                 </div>
-                <ul className="space-y-3 mb-8">
+                <ul className="space-y-3 mb-8 flex-1">
                   {["Everything in Pro", "Team analytics", "ATS integration", "Custom archetypes", "Dedicated support", "SSO / SAML"].map((feature, i) => (
                     <li key={i} className="flex items-center gap-3 text-sm">
                       <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
