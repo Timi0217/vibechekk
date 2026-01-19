@@ -302,7 +302,7 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, i) => (
-              <BlurFade key={i} delay={i * 0.1} inView={true} inViewMargin="-100px">
+              <BlurFade key={i} delay={i * 0.1} inView={true} inViewMargin="-100px" once={false}>
                 <div className="relative group bg-card rounded-2xl p-6 border hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
                   <BorderBeam size={200} duration={10} delay={i * 2} />
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
@@ -336,7 +336,7 @@ export default function LandingPage() {
 
           <div className="grid lg:grid-cols-3 gap-8">
             {/* CrossChekk - Dark Green theme */}
-            <BlurFade delay={0} inView={true} inViewMargin="-100px">
+            <BlurFade delay={0} inView={true} inViewMargin="-100px" once={false}>
               <div className="relative group h-full">
                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/30 to-emerald-950/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative h-full rounded-3xl p-8 border border-emerald-900/50 hover:border-emerald-800/70 transition-all duration-300" style={{ background: 'linear-gradient(135deg, #1a3d2e 0%, #0f2419 100%)' }}>
@@ -379,7 +379,7 @@ export default function LandingPage() {
             </BlurFade>
 
             {/* AutoChekk - Black/Dark theme */}
-            <BlurFade delay={0.15} inView={true} inViewMargin="-100px">
+            <BlurFade delay={0.15} inView={true} inViewMargin="-100px" once={false}>
               <div className="relative group h-full">
                 <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/20 to-zinc-700/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative h-full bg-zinc-900 rounded-3xl p-8 border border-zinc-700/50 hover:border-zinc-600 transition-all duration-300">
@@ -420,7 +420,7 @@ export default function LandingPage() {
             </BlurFade>
 
             {/* BulkChekk - Navy Blue theme */}
-            <BlurFade delay={0.3} inView={true} inViewMargin="-100px">
+            <BlurFade delay={0.3} inView={true} inViewMargin="-100px" once={false}>
               <div className="relative group h-full">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-900/30 to-blue-950/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative h-full rounded-3xl p-8 border border-blue-900/50 hover:border-blue-800/70 transition-all duration-300" style={{ background: 'linear-gradient(135deg, #1a2744 0%, #0f1929 100%)' }}>
