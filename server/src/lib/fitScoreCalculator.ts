@@ -125,11 +125,21 @@ SCORING RUBRIC:
 - 50-59: Weak fit, likely pass
 - 0-49: Poor fit, definite pass
 
+CRITICAL SCORING GUIDELINES:
+- Use the FULL 0-100 scale with precision - every point matters
+- Avoid clustering scores around round numbers (40, 50, 60, 70, etc.)
+- Be granular: differentiate between 73 vs 75 vs 77 based on specific strengths/gaps
+- Use the entire range within each rubric band (e.g., in 70-79 range, use 71, 73, 76, 78, not just 72)
+- Two similar candidates should still have different scores based on subtle differences
+- Avoid patterns - don't default to scores ending in 2 or 5
+- Consider: If this candidate is slightly better/worse than another at 65, score them at 68 or 63, not 65 again
+
 IMPORTANT:
 - Be realistic about skill matches (check GitHub history for proof)
 - Consider archetype and trajectory for culture/team fit
 - Weight required skills more than nice-to-haves
 - Flag if candidate seems under/over-qualified
+- Every candidate is unique - reflect that in precise scoring
 - Return ONLY valid JSON, no markdown`;
 
     const response = await fetch(DEEPSEEK_API_URL, {
