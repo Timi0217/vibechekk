@@ -347,13 +347,13 @@ export default function LandingPage() {
                       <span className="w-5 h-5 rounded-full bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Save JDs & compare results
+                      AI match scores & skill gap analysis
                     </li>
                     <li className="flex items-center gap-3 text-emerald-200/70">
                       <span className="w-5 h-5 rounded-full bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      AI match scores & skill gap analysis
+                      Save JDs & compare results
                     </li>
                   </ul>
                 </div>
@@ -388,13 +388,13 @@ export default function LandingPage() {
                       <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Live activity feed
+                      Email detection & lookup
                     </li>
                     <li className="flex items-center gap-3 text-zinc-400">
                       <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Email detection & lookup
+                      Live activity feed
                     </li>
                   </ul>
                 </div>
@@ -429,13 +429,13 @@ export default function LandingPage() {
                       <span className="w-5 h-5 rounded-full bg-blue-900/50 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Batch history & progress tracking
+                      Email-to-GitHub resolution
                     </li>
                     <li className="flex items-center gap-3 text-blue-200/70">
                       <span className="w-5 h-5 rounded-full bg-blue-900/50 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Email-to-GitHub resolution
+                      Batch history & progress tracking
                     </li>
                   </ul>
                 </div>
