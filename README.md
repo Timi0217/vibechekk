@@ -12,8 +12,9 @@ Vibechekk is a Chrome extension that analyzes GitHub profiles to reveal develope
 - **AI Detection** - Know if candidates use Copilot, ChatGPT, or Claude in their workflow
 - **Code Quality Analysis** - Tests, CI/CD, TypeScript adoption, and more
 - **Instant Reports** - Get recruiter-ready assessments in seconds
-- **Autochekk Mode** - Automatically analyze profiles as you browse GitHub
-- **Bulk Analysis** - Upload CSV files and analyze multiple candidates at once (Pro)
+- **CrossChekk** - Match candidates to job descriptions with AI-powered fit scores (Pro)
+- **AutoChekk Mode** - Automatically analyze profiles as you browse GitHub (Pro)
+- **BulkChekk** - Upload CSV files and analyze multiple candidates at once (Pro)
 
 ## 🏗️ Architecture
 

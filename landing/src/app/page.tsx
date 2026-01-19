@@ -300,7 +300,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* PRO Features Section - Chekklist, BulkChekk, AutoChekk */}
+      {/* PRO Features Section - CrossChekk, AutoChekk, BulkChekk */}
       <section className="py-24 px-6">
         <div className="max-w-7xl mx-auto">
           <BlurFade delay={0.1}>
@@ -309,10 +309,10 @@ export default function LandingPage() {
                 PRO Features
               </Badge>
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Supercharge your sourcing
+                Supercharge your screening
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Go beyond one-at-a-time analysis. Find, evaluate, and track developers at scale.
+                Go beyond one-at-a-time analysis. Screen, evaluate, and compare candidates at scale.
               </p>
             </div>
           </BlurFade>
@@ -359,45 +359,42 @@ export default function LandingPage() {
               </div>
             </BlurFade>
 
-            {/* Chekklist - Dark Red/Maroon theme */}
+            {/* CrossChekk - Dark Green theme */}
             <BlurFade delay={0.3}>
               <div className="relative group h-full">
-                <div className="absolute inset-0 bg-gradient-to-br from-red-900/30 to-red-950/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="relative h-full rounded-3xl p-8 border border-red-900/50 hover:border-red-800/70 transition-all duration-300" style={{ background: 'linear-gradient(135deg, #3d1a1a 0%, #2a1010 100%)' }}>
-                  <div className="w-14 h-14 rounded-2xl bg-red-950/80 flex items-center justify-center mb-6 border border-red-900/50">
-                    <svg className="w-7 h-7 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M10 10h4" />
-                      <path d="M19 7V4a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3" />
-                      <path d="M20 21a2 2 0 0 0 2-2v-3.851c0-1.39-2-2.962-2-4.829V8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v11a2 2 0 0 0 2 2z" />
-                      <path d="M4 21a2 2 0 0 1-2-2v-3.851c0-1.39 2-2.962 2-4.829V8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2z" />
-                      <path d="M9 7V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v3" />
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/30 to-emerald-950/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-full rounded-3xl p-8 border border-emerald-900/50 hover:border-emerald-800/70 transition-all duration-300" style={{ background: 'linear-gradient(135deg, #1a3d2e 0%, #0f2419 100%)' }}>
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-950/80 flex items-center justify-center mb-6 border border-emerald-900/50">
+                    <svg className="w-7 h-7 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 6v6l4 2" />
                     </svg>
                   </div>
                   <div className="flex items-center gap-3 mb-3">
-                    <h3 className="text-2xl font-bold text-white">Chekklist</h3>
+                    <h3 className="text-2xl font-bold text-white">CrossChekk</h3>
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
                   </div>
-                  <p className="text-red-200/70 mb-6 leading-relaxed">
-                    Find 50 devs for your JD. AI-powered search that finds matching developers worldwide.
+                  <p className="text-emerald-200/70 mb-6 leading-relaxed">
+                    Match candidates to job descriptions. Upload resumes or GitHub handles and get AI-powered fit scores.
                   </p>
                   <ul className="space-y-3 text-sm">
-                    <li className="flex items-center gap-3 text-red-200/70">
-                      <span className="w-5 h-5 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                    <li className="flex items-center gap-3 text-emerald-200/70">
+                      <span className="w-5 h-5 rounded-full bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Search by language, experience, role
+                      Paste JD & add candidate profiles
                     </li>
-                    <li className="flex items-center gap-3 text-red-200/70">
-                      <span className="w-5 h-5 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                    <li className="flex items-center gap-3 text-emerald-200/70">
+                      <span className="w-5 h-5 rounded-full bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Progressive streaming results
+                      AI match scores & skill gap analysis
                     </li>
-                    <li className="flex items-center gap-3 text-red-200/70">
-                      <span className="w-5 h-5 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                    <li className="flex items-center gap-3 text-emerald-200/70">
+                      <span className="w-5 h-5 rounded-full bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
                         <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       </span>
-                      Filter by archetype & warmth score
+                      Save JDs & compare results
                     </li>
                   </ul>
                 </div>
@@ -503,7 +500,7 @@ export default function LandingPage() {
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 <ul className="space-y-3 mb-8">
-                  {["Unlimited vibechekks", "Everything in Free", "Export reports", "Bulk chekk", "Priority support"].map((feature, i) => (
+                  {["Unlimited vibechekks", "Everything in Free", "CrossChekk & BulkChekk", "AutoChekk mode", "Priority support"].map((feature, i) => (
                     <li key={i} className="flex items-center gap-3 text-sm">
                       <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
                         <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
