@@ -59,6 +59,16 @@ const testimonials = [
 // Feature data
 const features = [
   {
+    icon: <Target className="w-6 h-6" />,
+    title: "JD Matching",
+    description: "Match candidates to job requirements with AI-powered fit scores and skill gap analysis.",
+  },
+  {
+    icon: <Zap className="w-6 h-6" />,
+    title: "Instant Analysis",
+    description: "Get recruiter-ready assessments in seconds. No waiting, no manual review.",
+  },
+  {
     icon: <Brain className="w-6 h-6" />,
     title: "15 Archetypes",
     description: "Beyond generic labels. Identify 10x Engineers, Hidden Gems, Architects, and more.",
@@ -69,11 +79,6 @@ const features = [
     description: "Know if candidates use Claude, Copilot, or ChatGPT. Modern hiring signal.",
   },
   {
-    icon: <Zap className="w-6 h-6" />,
-    title: "Instant Analysis",
-    description: "Get recruiter-ready assessments in seconds. No waiting, no manual review.",
-  },
-  {
     icon: <Shield className="w-6 h-6" />,
     title: "Quality First",
     description: "Tests, CI/CD, TypeScript adoption. We check what actually matters.",
@@ -82,11 +87,6 @@ const features = [
     icon: <Code className="w-6 h-6" />,
     title: "Code-Level Insights",
     description: "We analyze actual code, not just repo metadata. Real technical signal.",
-  },
-  {
-    icon: <Target className="w-6 h-6" />,
-    title: "JD Matching",
-    description: "Match candidates to job requirements with AI-powered fit scores and skill gap analysis.",
   },
 ];
 
