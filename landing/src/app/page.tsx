@@ -194,7 +194,7 @@ export default function LandingPage() {
 
               <BlurFade delay={0.2}>
                 <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-                  Hire devs who{" "}
+                  Screen devs who{" "}
                   <AnimatedShinyText className="inline text-primary">
                     actually ship
                   </AnimatedShinyText>
@@ -245,7 +245,7 @@ export default function LandingPage() {
                         <span className="text-amber-500 font-bold">10x</span>
                       </div>
                       <div>
-                        <p className="font-semibold text-sm">Legendary Found</p>
+                        <p className="font-semibold text-sm">Elite Confirmed</p>
                         <p className="text-xs text-muted-foreground">THE 10X ENGINEER</p>
                       </div>
                     </div>
@@ -256,8 +256,8 @@ export default function LandingPage() {
                         <span className="text-emerald-500 font-bold">💎</span>
                       </div>
                       <div>
-                        <p className="font-semibold text-sm">Hidden Gem</p>
-                        <p className="text-xs text-muted-foreground">Underrated talent</p>
+                        <p className="font-semibold text-sm">High Potential</p>
+                        <p className="text-xs text-muted-foreground">Hidden strengths revealed</p>
                       </div>
                     </div>
                   </div>
@@ -312,7 +312,7 @@ export default function LandingPage() {
                 Supercharge your screening
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Go beyond one-at-a-time analysis. Screen, evaluate, and compare candidates at scale.
+                Screen, evaluate, and compare candidates at scale with powerful automation tools.
               </p>
             </div>
           </BlurFade>
