@@ -61,7 +61,7 @@ const features = [
   {
     icon: <Target className="w-6 h-6" />,
     title: "JD Matching",
-    description: "Match candidates to job requirements with AI-powered fit scores and skill gap analysis.",
+    description: "Match candidates to job requirements with comprehensive AI-powered skill fit analyses and scores.",
   },
   {
     icon: <Zap className="w-6 h-6" />,
