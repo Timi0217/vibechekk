@@ -318,56 +318,16 @@ export default function LandingPage() {
           </BlurFade>
 
           <div className="grid lg:grid-cols-3 gap-8">
-            {/* AutoChekk - Black/Dark theme */}
-            <BlurFade delay={0.2}>
-              <div className="relative group h-full">
-                <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/20 to-zinc-700/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="relative h-full bg-zinc-900 rounded-3xl p-8 border border-zinc-700/50 hover:border-zinc-600 transition-all duration-300">
-                  <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center mb-6 border border-zinc-700">
-                    <svg className="w-7 h-7 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <h3 className="text-2xl font-bold text-white">AutoChekk</h3>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
-                  </div>
-                  <p className="text-zinc-400 mb-6 leading-relaxed">
-                    Chekk devs as you browse. Automatic analysis on every email and GitHub account you visit.
-                  </p>
-                  <ul className="space-y-3 text-sm">
-                    <li className="flex items-center gap-3 text-zinc-400">
-                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                      </span>
-                      Zero-click passive analysis
-                    </li>
-                    <li className="flex items-center gap-3 text-zinc-400">
-                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                      </span>
-                      Live activity feed
-                    </li>
-                    <li className="flex items-center gap-3 text-zinc-400">
-                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                      </span>
-                      Email detection & lookup
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </BlurFade>
-
             {/* CrossChekk - Dark Green theme */}
-            <BlurFade delay={0.3}>
+            <BlurFade delay={0.2}>
               <div className="relative group h-full">
                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/30 to-emerald-950/30 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative h-full rounded-3xl p-8 border border-emerald-900/50 hover:border-emerald-800/70 transition-all duration-300" style={{ background: 'linear-gradient(135deg, #1a3d2e 0%, #0f2419 100%)' }}>
                   <div className="w-14 h-14 rounded-2xl bg-emerald-950/80 flex items-center justify-center mb-6 border border-emerald-900/50">
-                    <svg className="w-7 h-7 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg className="w-7 h-7 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10" />
-                      <path d="M12 6v6l4 2" />
+                      <circle cx="12" cy="12" r="6" />
+                      <circle cx="12" cy="12" r="2" />
                     </svg>
                   </div>
                   <div className="flex items-center gap-3 mb-3">
@@ -375,7 +335,7 @@ export default function LandingPage() {
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
                   </div>
                   <p className="text-emerald-200/70 mb-6 leading-relaxed">
-                    Match candidates to job descriptions. Upload resumes or GitHub handles and get AI-powered fit scores.
+                    Match candidates to jobs with AI-powered fit scores and skill gap analysis.
                   </p>
                   <ul className="space-y-3 text-sm">
                     <li className="flex items-center gap-3 text-emerald-200/70">
@@ -401,6 +361,47 @@ export default function LandingPage() {
               </div>
             </BlurFade>
 
+            {/* AutoChekk - Black/Dark theme */}
+            <BlurFade delay={0.3}>
+              <div className="relative group h-full">
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/20 to-zinc-700/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-full bg-zinc-900 rounded-3xl p-8 border border-zinc-700/50 hover:border-zinc-600 transition-all duration-300">
+                  <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center mb-6 border border-zinc-700">
+                    <svg className="w-7 h-7 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-2xl font-bold text-white">AutoChekk</h3>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
+                  </div>
+                  <p className="text-zinc-400 mb-6 leading-relaxed">
+                    Automatic analysis on every email and GitHub account you visit while browsing.
+                  </p>
+                  <ul className="space-y-3 text-sm">
+                    <li className="flex items-center gap-3 text-zinc-400">
+                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Zero-click passive analysis
+                    </li>
+                    <li className="flex items-center gap-3 text-zinc-400">
+                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Live activity feed
+                    </li>
+                    <li className="flex items-center gap-3 text-zinc-400">
+                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      </span>
+                      Email detection & lookup
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </BlurFade>
+
             {/* BulkChekk - Navy Blue theme */}
             <BlurFade delay={0.4}>
               <div className="relative group h-full">
@@ -416,7 +417,7 @@ export default function LandingPage() {
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-black">PRO</span>
                   </div>
                   <p className="text-blue-200/70 mb-6 leading-relaxed">
-                    Analyze devs via CSV. Upload a list of candidates and analyze them all at once.
+                    Upload CSV, Excel, or PDF resumes and analyze multiple candidates at once.
                   </p>
                   <ul className="space-y-3 text-sm">
                     <li className="flex items-center gap-3 text-blue-200/70">
