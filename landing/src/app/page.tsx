@@ -489,7 +489,7 @@ export default function LandingPage() {
 
             {/* Pro Tier */}
             <BlurFade delay={0.3}>
-              <div className="relative bg-card rounded-2xl p-8 border-2 border-primary shadow-lg scale-105">
+              <div className="relative bg-card rounded-2xl p-8 border-2 border-primary shadow-lg">
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground px-4 py-1">Most Popular</Badge>
                 </div>
