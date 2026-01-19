@@ -203,7 +203,7 @@ export default function LandingPage() {
 
               <BlurFade delay={0.3}>
                 <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-8 leading-relaxed">
-                  Vibechekk analyzes GitHub profiles to reveal archetypes, code quality, and AI usage.
+                  Vibechekk analyzes GitHub profiles and resumes to reveal the best developers for your JD based on work history, code quality and archetypes.
                   <span className="font-semibold text-foreground"> In seconds.</span>
                 </p>
               </BlurFade>
