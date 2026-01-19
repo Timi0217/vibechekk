@@ -12,7 +12,7 @@ import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Sparkles, Shield, Zap, Users, Code, Brain, ChevronRight, Github, Chrome, ExternalLink } from "lucide-react";
+import { ArrowRight, Sparkles, Shield, Zap, Users, Code, Brain, ChevronRight, Github, Chrome, ExternalLink, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CHROME_STORE_URL, GITHUB_REPO_URL } from "@/lib/constants";
 
@@ -84,9 +84,9 @@ const features = [
     description: "We analyze actual code, not just repo metadata. Real technical signal.",
   },
   {
-    icon: <Users className="w-6 h-6" />,
-    title: "Team Fit",
-    description: "Understand which teams and projects a candidate would thrive on.",
+    icon: <Target className="w-6 h-6" />,
+    title: "JD Matching",
+    description: "Match candidates to job requirements with AI-powered fit scores and skill gap analysis.",
   },
 ];
 
@@ -277,8 +277,8 @@ export default function LandingPage() {
                 Beyond resumes. Beyond stars.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                We analyze what actually matters: code quality, development practices,
-                and growth trajectory. Not vanity metrics.
+                We analyze what actually matters for your JD: code quality, development practices,
+                and technical fit. Not vanity metrics.
               </p>
             </div>
           </BlurFade>
