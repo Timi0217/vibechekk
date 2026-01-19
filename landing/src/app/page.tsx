@@ -194,9 +194,9 @@ export default function LandingPage() {
 
               <BlurFade delay={0.2}>
                 <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-                  Screen devs who{" "}
+                  Find the devs who{" "}
                   <AnimatedShinyText className="inline text-primary">
-                    actually ship
+                    fit your JD
                   </AnimatedShinyText>
                 </h1>
               </BlurFade>
