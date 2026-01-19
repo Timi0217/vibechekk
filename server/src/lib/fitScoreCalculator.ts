@@ -153,14 +153,14 @@ IMPORTANT:
         messages: [
           {
             role: 'system',
-            content: 'You are an expert technical recruiter who evaluates candidate fit objectively based on data.'
+            content: 'You are an expert technical recruiter who evaluates candidate fit objectively based on data. Use precise, granular scoring - avoid round numbers and common patterns.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        temperature: 0.4,
+        temperature: 0.7,
         max_tokens: 2500
       })
     });
