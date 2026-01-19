@@ -2286,6 +2286,83 @@ app.delete('/api/crosschekk/delete-jd/:jdId', async (req, res) => {
     }
 });
 
+// Delete a single CrossChekk result
+app.delete('/api/crosschekk/delete-result/:resultId', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    try {
+        const { resultId } = req.params;
+
+        // Verify ownership before deleting
+        const result = await prisma.crossChekkResult.findUnique({
+            where: { id: resultId }
+        });
+
+        if (!result) {
+            return res.status(404).json({ success: false, error: 'Result not found' });
+        }
+
+        if (result.userId !== userId) {
+            return res.status(403).json({ success: false, error: 'Not authorized to delete this result' });
+        }
+
+        await prisma.crossChekkResult.delete({
+            where: { id: resultId }
+        });
+
+        log.info('[CrossChekk] Deleted result', { userId, resultId });
+
+        res.json({ success: true });
+    } catch (error) {
+        log.error('[CrossChekk] Failed to delete result', error);
+        res.status(500).json({ success: false, error: 'Failed to delete result' });
+    }
+});
+
+// Delete all CrossChekk results for user
+app.delete('/api/crosschekk/delete-all-results', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    try {
+        const deleteResult = await prisma.crossChekkResult.deleteMany({
+            where: { userId }
+        });
+
+        log.info('[CrossChekk] Deleted all results', { userId, count: deleteResult.count });
+
+        res.json({ success: true, deletedCount: deleteResult.count });
+    } catch (error) {
+        log.error('[CrossChekk] Failed to delete all results', error);
+        res.status(500).json({ success: false, error: 'Failed to delete results' });
+    }
+});
+
 // Run CrossChekk analysis
 app.post('/api/crosschekk/analyze', validate(crossChekkAnalyzeSchema), checkTierLimit, async (req, res) => {
     const authHeader = req.headers.authorization;

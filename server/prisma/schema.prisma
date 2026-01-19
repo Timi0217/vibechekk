@@ -152,7 +152,7 @@ model CrossChekkResult {
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id])
   jdId        String
-  jd          SavedJD   @relation(fields: [jdId], references: [id])
+  jd          SavedJD   @relation(fields: [jdId], references: [id], onDelete: Cascade)
 
   // FitScore calculation
   fitScore         Int // 0-100 percentage

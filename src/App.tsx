@@ -340,6 +340,9 @@ function App() {
     archetype?: string;
     name?: string;
   }>>([])
+  const [showBulkHistorySelection, setShowBulkHistorySelection] = useState(false)
+  const [bulkSelectedReports, setBulkSelectedReports] = useState<Set<string>>(new Set())
+  const [bulkResumes, setBulkResumes] = useState<Map<string, string>>(new Map())
   const [savedJDs, setSavedJDs] = useState<any[]>([])
   const [crossChekkResults, setCrossChekkResults] = useState<any[]>([])
   const [currentCrossChekkResult, setCurrentCrossChekkResult] = useState<any>(null)
@@ -1761,6 +1764,76 @@ function App() {
     }
   };
 
+  // Delete a single CrossChekk result
+  const deleteCrossChekkResult = async (resultId: string) => {
+    if (!tokens.vibeToken) {
+      alert('Authentication required');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to delete this result?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/delete-result/${resultId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // If we're viewing this result, go back to list
+        if (currentCrossChekkResult?.id === resultId) {
+          setCurrentCrossChekkResult(null);
+        }
+        await fetchCrossChekkResults();
+      } else {
+        alert(data.error || 'Failed to delete result');
+      }
+    } catch (err) {
+      console.error('[CrossChekk] Delete result error:', err);
+      alert('Failed to delete result');
+    }
+  };
+
+  // Delete all CrossChekk results
+  const deleteAllCrossChekkResults = async () => {
+    if (!tokens.vibeToken) {
+      alert('Authentication required');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to delete ALL results? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/delete-all-results`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCurrentCrossChekkResult(null);
+        await fetchCrossChekkResults();
+        alert(`Deleted ${data.deletedCount} result(s)`);
+      } else {
+        alert(data.error || 'Failed to delete results');
+      }
+    } catch (err) {
+      console.error('[CrossChekk] Delete all results error:', err);
+      alert('Failed to delete results');
+    }
+  };
+
   // Effect to fetch data when CrossChekk opens
   useEffect(() => {
     if (showCrossChekk && tokens.vibeToken) {
@@ -1994,7 +2067,7 @@ function App() {
                   letterSpacing: '0.02em'
                 }}
               >
-                SAVED ({savedJDs.length})
+                SAVED JDS
               </button>
             </div>
 
@@ -2187,6 +2260,287 @@ function App() {
                       )}
                     </div>
 
+                    {/* Bulk Add from History */}
+                    {history.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => setShowBulkHistorySelection(!showBulkHistorySelection)}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(34, 197, 94, 0.3)',
+                            background: 'rgba(34, 197, 94, 0.1)',
+                            color: '#22c55e',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <span>Bulk Add from History</span>
+                          <span style={{ fontSize: '12px' }}>{showBulkHistorySelection ? '▼' : '▶'}</span>
+                        </button>
+
+                        {showBulkHistorySelection && (
+                          <div style={{ marginTop: '12px' }}>
+                            {/* Select All */}
+                            <label style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '8px',
+                              borderRadius: '6px',
+                              background: 'rgba(255,255,255,0.05)',
+                              cursor: 'pointer',
+                              marginBottom: '8px'
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={bulkSelectedReports.size === history.length && history.length > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setBulkSelectedReports(new Set(history.map((item: any) => item.id)));
+                                  } else {
+                                    setBulkSelectedReports(new Set());
+                                  }
+                                }}
+                                style={{
+                                  width: '16px',
+                                  height: '16px',
+                                  cursor: 'pointer'
+                                }}
+                              />
+                              <span style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: '#22c55e',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em'
+                              }}>
+                                Select All ({history.length})
+                              </span>
+                            </label>
+
+                            {/* History Items */}
+                            <div style={{
+                              maxHeight: '300px',
+                              overflowY: 'auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}>
+                              {history.slice(0, 50).map((item: any) => {
+                                const isSelected = bulkSelectedReports.has(item.id);
+                                return (
+                                  <div
+                                    key={item.id}
+                                    style={{
+                                      padding: '8px',
+                                      borderRadius: '6px',
+                                      background: isSelected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255,255,255,0.03)',
+                                      border: `1px solid ${isSelected ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255,255,255,0.1)'}`,
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                  >
+                                    <label style={{
+                                      display: 'flex',
+                                      alignItems: 'flex-start',
+                                      gap: '8px',
+                                      cursor: 'pointer'
+                                    }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={(e) => {
+                                          const newSet = new Set(bulkSelectedReports);
+                                          if (e.target.checked) {
+                                            newSet.add(item.id);
+                                          } else {
+                                            newSet.delete(item.id);
+                                            // Remove resume if unchecked
+                                            const newResumes = new Map(bulkResumes);
+                                            newResumes.delete(item.id);
+                                            setBulkResumes(newResumes);
+                                          }
+                                          setBulkSelectedReports(newSet);
+                                        }}
+                                        style={{
+                                          width: '16px',
+                                          height: '16px',
+                                          cursor: 'pointer',
+                                          marginTop: '2px',
+                                          flexShrink: 0
+                                        }}
+                                      />
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{
+                                          fontSize: '11px',
+                                          fontWeight: 700,
+                                          color: 'white',
+                                          marginBottom: '2px',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          {item.candidate.name || `@${item.candidate.githubHandle}`}
+                                        </div>
+                                        <div style={{
+                                          fontSize: '9px',
+                                          color: 'rgba(255,255,255,0.6)',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          {item.archetype}
+                                        </div>
+
+                                        {/* Resume upload for selected items */}
+                                        {isSelected && (
+                                          <div style={{ marginTop: '6px' }}>
+                                            <input
+                                              type="file"
+                                              accept=".pdf"
+                                              onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                  try {
+                                                    const text = await extractTextFromPDF(file);
+                                                    const newResumes = new Map(bulkResumes);
+                                                    newResumes.set(item.id, text);
+                                                    setBulkResumes(newResumes);
+                                                  } catch (err) {
+                                                    console.error('PDF extraction error:', err);
+                                                    alert('Failed to extract text from PDF');
+                                                  }
+                                                }
+                                              }}
+                                              style={{ display: 'none' }}
+                                              id={`bulk-resume-${item.id}`}
+                                            />
+                                            <label
+                                              htmlFor={`bulk-resume-${item.id}`}
+                                              style={{
+                                                display: 'inline-block',
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                border: '1px dashed rgba(255,255,255,0.2)',
+                                                background: bulkResumes.has(item.id) ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255,255,255,0.03)',
+                                                color: bulkResumes.has(item.id) ? '#22c55e' : 'rgba(255,255,255,0.5)',
+                                                fontSize: '8px',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.03em'
+                                              }}
+                                            >
+                                              {bulkResumes.has(item.id) ? '✓ Resume Added' : '+ Add Resume (Optional)'}
+                                            </label>
+                                            {bulkResumes.has(item.id) && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  const newResumes = new Map(bulkResumes);
+                                                  newResumes.delete(item.id);
+                                                  setBulkResumes(newResumes);
+                                                }}
+                                                style={{
+                                                  marginLeft: '6px',
+                                                  padding: '4px 6px',
+                                                  borderRadius: '4px',
+                                                  border: 'none',
+                                                  background: 'rgba(239, 68, 68, 0.2)',
+                                                  color: '#ef4444',
+                                                  fontSize: '8px',
+                                                  fontWeight: 700,
+                                                  cursor: 'pointer',
+                                                  textTransform: 'uppercase'
+                                                }}
+                                              >
+                                                Remove
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </label>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Add Selected Button */}
+                            {bulkSelectedReports.size > 0 && (
+                              <button
+                                onClick={() => {
+                                  // Add all selected to candidates list
+                                  const newCandidates = Array.from(bulkSelectedReports).map(reportId => {
+                                    const historyItem = history.find((item: any) => item.id === reportId);
+                                    return {
+                                      id: `${Date.now()}-${reportId}`,
+                                      githubHandle: historyItem?.candidate?.githubHandle || '',
+                                      selectedReportId: reportId,
+                                      resumeText: bulkResumes.get(reportId) || '',
+                                      archetype: historyItem?.archetype || '',
+                                      name: historyItem?.candidate?.name || ''
+                                    };
+                                  }).filter(c => {
+                                    // Filter out duplicates
+                                    return !crossChekkCandidates.some(existing =>
+                                      existing.selectedReportId === c.selectedReportId
+                                    );
+                                  });
+
+                                  if (newCandidates.length === 0) {
+                                    alert('All selected candidates are already in the queue');
+                                    return;
+                                  }
+
+                                  setCrossChekkCandidates(prev => [...prev, ...newCandidates]);
+
+                                  // Clear bulk selections
+                                  setBulkSelectedReports(new Set());
+                                  setBulkResumes(new Map());
+                                  setShowBulkHistorySelection(false);
+
+                                  alert(`Added ${newCandidates.length} candidate(s) to queue`);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(34, 197, 94, 0.4)',
+                                  background: 'rgba(34, 197, 94, 0.15)',
+                                  color: '#22c55e',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.05em',
+                                  marginTop: '12px',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.25)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
+                                }}
+                              >
+                                Add {bulkSelectedReports.size} Selected to Queue
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Add to comparison button */}
                     <button
                       onClick={() => {
@@ -2259,7 +2613,8 @@ function App() {
                         justifyContent: 'center',
                         gap: '6px',
                         opacity: (!crossChekkForm.githubHandle && !crossChekkForm.selectedReportId) ? 0.5 : 1,
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.2s ease',
+                        marginTop: '8px'
                       }}
                       onMouseEnter={(e) => {
                         if (crossChekkForm.githubHandle || crossChekkForm.selectedReportId) {
@@ -2510,7 +2865,7 @@ function App() {
                             {jd.requiredSkills?.slice(0, 3).join(', ')}{jd.requiredSkills?.length > 3 && '...'}
                           </div>
                         </div>
-                        {/* Delete button */}
+                        {/* Delete button - circular design */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -2520,24 +2875,30 @@ function App() {
                             position: 'absolute',
                             top: '8px',
                             right: '8px',
-                            background: 'transparent',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
                             border: 'none',
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#ef4444',
+                            fontSize: '14px',
+                            fontWeight: 700,
                             cursor: 'pointer',
-                            padding: '4px',
-                            borderRadius: '4px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             transition: 'all 0.2s ease'
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                            e.currentTarget.style.transform = 'scale(1.1)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                            e.currentTarget.style.transform = 'scale(1)';
                           }}
                         >
-                          <X size={14} color="rgba(239, 68, 68, 0.8)" />
+                          ×
                         </button>
                       </div>
                     ))
@@ -2621,6 +2982,37 @@ function App() {
                       </select>
                     </div>
                   )}
+
+                  {/* Clear All Button */}
+                  {!currentCrossChekkResult && crossChekkResults.length > 0 && (
+                    <button
+                      onClick={deleteAllCrossChekkResults}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        color: '#ef4444',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        transition: 'all 0.2s ease',
+                        marginBottom: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                      }}
+                    >
+                      Clear All Results
+                    </button>
+                  )}
+
                   {currentCrossChekkResult ? (
                     // Detail View
                     <div style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '8px' }}>
@@ -2656,11 +3048,11 @@ function App() {
                         const fitScore = currentCrossChekkResult.fitScore;
                         let cardBackground;
                         if (fitScore <= 50) {
-                          cardBackground = 'linear-gradient(135deg, #fecaca 0%, #fee2e2 100%)'; // Reddish hue - more saturated
+                          cardBackground = 'linear-gradient(135deg, #fca5a5 0%, #fee2e2 100%)'; // Reddish hue - enhanced gradient
                         } else if (fitScore < 75) {
                           cardBackground = 'linear-gradient(135deg, #fef08a 0%, #fefce8 100%)'; // Yellowish hue
                         } else {
-                          cardBackground = 'linear-gradient(135deg, #bbf7d0 0%, #dcfce7 100%)'; // Greenish hue
+                          cardBackground = 'linear-gradient(135deg, #86efac 0%, #dcfce7 100%)'; // Greenish hue - enhanced gradient
                         }
 
                         return (
@@ -3217,13 +3609,13 @@ function App() {
                       let cardBackground;
                       if (fitScore <= 50) {
                         scoreColor = '#dc2626'; // Red (more saturated)
-                        cardBackground = 'linear-gradient(135deg, #fecaca 0%, #fee2e2 100%)'; // Reddish hue - more saturated
+                        cardBackground = 'linear-gradient(135deg, #fca5a5 0%, #fee2e2 100%)'; // Reddish hue - enhanced gradient
                       } else if (fitScore < 75) {
                         scoreColor = '#eab308'; // Yellow
                         cardBackground = 'linear-gradient(135deg, #fef08a 0%, #fefce8 100%)'; // Yellowish hue
                       } else {
                         scoreColor = '#22c55e'; // Green
-                        cardBackground = 'linear-gradient(135deg, #bbf7d0 0%, #dcfce7 100%)'; // Greenish hue
+                        cardBackground = 'linear-gradient(135deg, #86efac 0%, #dcfce7 100%)'; // Greenish hue - enhanced gradient
                       }
 
                       const circumference = 2 * Math.PI * 28;
@@ -3247,10 +3639,16 @@ function App() {
                           onMouseEnter={(e) => {
                             e.currentTarget.style.transform = 'translateY(-2px)';
                             e.currentTarget.style.boxShadow = `0 8px 24px ${scoreColor}30`;
+                            // Show delete button
+                            const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
+                            if (deleteBtn) deleteBtn.style.opacity = '1';
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.transform = 'translateY(0)';
                             e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                            // Hide delete button
+                            const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
+                            if (deleteBtn) deleteBtn.style.opacity = '0';
                           }}
                         >
 
@@ -3347,6 +3745,7 @@ function App() {
                               letterSpacing: '0.05em',
                               flexShrink: 0,
                               alignSelf: 'flex-start',
+                              marginTop: '14px',
                               width: '46px',
                               textAlign: 'center',
                               boxSizing: 'border-box',
@@ -3361,9 +3760,48 @@ function App() {
                             <ChevronRight
                               size={16}
                               color="rgba(0,0,0,0.3)"
-                              style={{ flexShrink: 0 }}
+                              style={{ flexShrink: 0, alignSelf: 'flex-start', marginTop: '17px' }}
                             />
                           </div>
+
+                          {/* Delete button - below arrow, centers aligned vertically, hidden by default */}
+                          <button
+                            className="delete-btn"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent card click
+                              deleteCrossChekkResult(result.id);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              bottom: '14px',
+                              right: '12px',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              border: 'none',
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              color: '#ef4444',
+                              fontSize: '14px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s ease, opacity 0.2s ease',
+                              zIndex: 10,
+                              opacity: 0
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                              e.currentTarget.style.transform = 'scale(1.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                              e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                          >
+                            ×
+                          </button>
                         </div>
                       );
                     })
