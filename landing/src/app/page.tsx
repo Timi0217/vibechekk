@@ -274,11 +274,10 @@ export default function LandingPage() {
           <BlurFade delay={0.1}>
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Beyond resumes. Beyond stars.
+                Beyond resumes. Beyond keywords.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                We analyze what actually matters for your JD: code quality, development practices,
-                and technical fit. Not vanity metrics.
+                Deep technical analysis that reveals actual coding ability and JD fit—not just buzzwords.
               </p>
             </div>
           </BlurFade>
