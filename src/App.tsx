@@ -332,9 +332,20 @@ function App() {
     saveJD: false,
     loading: false
   })
+  const [crossChekkCandidates, setCrossChekkCandidates] = useState<Array<{
+    id: string;
+    githubHandle: string;
+    selectedReportId: string;
+    resumeText: string;
+    archetype?: string;
+    name?: string;
+  }>>([])
   const [savedJDs, setSavedJDs] = useState<any[]>([])
   const [crossChekkResults, setCrossChekkResults] = useState<any[]>([])
   const [currentCrossChekkResult, setCurrentCrossChekkResult] = useState<any>(null)
+  const [crossChekkFilter, setCrossChekkFilter] = useState<'ALL' | 'SEND' | 'SKIP'>('ALL')
+  const [crossChekkSort, setCrossChekkSort] = useState<'recent' | 'high-low' | 'low-high'>('recent')
+  const [crossChekkJdFilter, setCrossChekkJdFilter] = useState<string>('ALL')
   const [bulkChekkTab, setBulkChekkTab] = useState<'import' | 'history'>('import')
   const [bulkHistory, setBulkHistory] = useState<any[]>([])
   const [bulkFile, setBulkFile] = useState<File | null>(null)
@@ -1471,7 +1482,26 @@ function App() {
       });
       const data = await response.json();
       if (data.success) {
-        setCrossChekkResults(data.data);
+        // Enrich results with archetype from history if missing
+        const enrichedResults = data.data.map((result: any) => {
+          if (!result.candidate?.archetype && result.candidate?.githubHandle) {
+            // Look up archetype from history
+            const historyItem = history.find((item: any) =>
+              item.candidate?.githubHandle?.toLowerCase() === result.candidate.githubHandle.toLowerCase()
+            );
+            if (historyItem?.archetype) {
+              return {
+                ...result,
+                candidate: {
+                  ...result.candidate,
+                  archetype: historyItem.archetype
+                }
+              };
+            }
+          }
+          return result;
+        });
+        setCrossChekkResults(enrichedResults);
       }
     } catch (err) {
       console.error('[CrossChekk] Failed to fetch results:', err);
@@ -1493,8 +1523,21 @@ function App() {
       return;
     }
 
-    if (!githubHandle && !selectedReportId) {
-      alert('Please enter a GitHub handle or select from history');
+    // Collect all candidates to analyze
+    const candidatesToAnalyze = [...crossChekkCandidates];
+
+    // Add current form candidate if filled
+    if (githubHandle || selectedReportId) {
+      candidatesToAnalyze.push({
+        id: Date.now().toString(),
+        githubHandle,
+        selectedReportId,
+        resumeText: crossChekkForm.resumeText
+      });
+    }
+
+    if (candidatesToAnalyze.length === 0) {
+      alert('Please add at least one candidate to compare');
       return;
     }
 
@@ -1529,54 +1572,89 @@ function App() {
         }
       }
 
-      const payload: any = {};
+      // Analyze each candidate
+      let successCount = 0;
+      let lastResult: any = null;
 
-      // JD data
-      if (jdIdToUse) {
-        payload.jdId = jdIdToUse;
-      } else {
-        payload.jdText = jdText;
-        payload.jdTitle = jdTitle;
-        if (jdCompany) payload.jdCompany = jdCompany;
-      }
+      for (let i = 0; i < candidatesToAnalyze.length; i++) {
+        const candidate = candidatesToAnalyze[i];
 
-      // Candidate data
-      if (selectedReportId) {
-        payload.reportId = selectedReportId;
-      } else {
-        // Extract handle from URL if user pasted full GitHub URL
-        let handle = githubHandle.trim();
-        if (handle.includes('github.com/')) {
-          handle = handle.split('github.com/')[1]?.split('/')[0] || handle;
+        try {
+          const payload: any = {};
+
+          // JD data
+          if (jdIdToUse) {
+            payload.jdId = jdIdToUse;
+          } else {
+            payload.jdText = jdText;
+            payload.jdTitle = jdTitle;
+            if (jdCompany) payload.jdCompany = jdCompany;
+          }
+
+          // Candidate data
+          if (candidate.selectedReportId) {
+            payload.reportId = candidate.selectedReportId;
+          } else {
+            // Extract handle from URL if user pasted full GitHub URL
+            let handle = candidate.githubHandle.trim();
+            if (handle.includes('github.com/')) {
+              handle = handle.split('github.com/')[1]?.split('/')[0] || handle;
+            }
+            handle = handle.replace('@', ''); // Remove @ if present
+            payload.githubHandle = handle;
+          }
+
+          // Optional enrichment data
+          if (candidate.resumeText) {
+            payload.resumeText = candidate.resumeText;
+          }
+
+          const response = await fetch(`${BACKEND_URL}/api/crosschekk/analyze`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${tokens.vibeToken}`
+            },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            successCount++;
+            lastResult = data.data;
+          } else {
+            console.error(`[CrossChekk] Failed to analyze ${candidate.githubHandle}:`, data.error);
+          }
+        } catch (err) {
+          console.error(`[CrossChekk] Error analyzing ${candidate.githubHandle}:`, err);
         }
-        handle = handle.replace('@', ''); // Remove @ if present
-        payload.githubHandle = handle;
       }
 
-      // Optional enrichment data
-      if (crossChekkForm.resumeText) {
-        payload.resumeText = crossChekkForm.resumeText;
-      }
+      // Refresh results and show latest
+      await fetchCrossChekkResults();
 
-      const response = await fetch(`${BACKEND_URL}/api/crosschekk/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tokens.vibeToken}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setCurrentCrossChekkResult(data.data);
-        // Refresh results list
-        await fetchCrossChekkResults();
+      if (successCount > 0) {
+        if (lastResult) {
+          setCurrentCrossChekkResult(lastResult);
+        }
         // Switch to results tab
         setCrossChekkTab('results');
+
+        // Clear candidates list after successful analysis
+        setCrossChekkCandidates([]);
+        setCrossChekkForm(prev => ({
+          ...prev,
+          githubHandle: '',
+          selectedReportId: '',
+          resumeText: ''
+        }));
+
+        if (successCount < candidatesToAnalyze.length) {
+          alert(`Analyzed ${successCount}/${candidatesToAnalyze.length} candidates. Some failed.`);
+        }
       } else {
-        alert(data.error || 'CrossChekk analysis failed');
+        alert('All candidate analyses failed. Please try again.');
       }
     } catch (err: any) {
       console.error('[CrossChekk] Analysis error:', err);
@@ -1597,6 +1675,17 @@ function App() {
 
     if (!jdText || !jdTitle) {
       alert('Please fill in job title and description');
+      return;
+    }
+
+    // Check for duplicates
+    const isDuplicate = savedJDs.some((jd: any) =>
+      jd.title.toLowerCase() === jdTitle.toLowerCase() &&
+      jd.description === jdText
+    );
+
+    if (isDuplicate) {
+      alert('This job description is already saved!');
       return;
     }
 
@@ -1638,6 +1727,37 @@ function App() {
     } catch (err) {
       console.error('[CrossChekk] Save JD error:', err);
       alert('Failed to save job description');
+    }
+  };
+
+  // Delete saved JD
+  const deleteSavedJD = async (jdId: string) => {
+    if (!tokens.vibeToken) {
+      return;
+    }
+
+    if (!confirm('Are you sure you want to delete this job description?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/crosschekk/delete-jd/${jdId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${tokens.vibeToken}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await fetchSavedJDs();
+      } else {
+        alert(data.error || 'Failed to delete job description');
+      }
+    } catch (err) {
+      console.error('[CrossChekk] Delete JD error:', err);
+      alert('Failed to delete job description');
     }
   };
 
@@ -1718,7 +1838,7 @@ function App() {
           </div>
 
           {/* Text */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span style={{
                 fontSize: '13px',
@@ -1812,7 +1932,8 @@ function App() {
         <div style={{
           maxHeight: showCrossChekk ? '600px' : '0',
           opacity: showCrossChekk ? 1 : 0,
-          overflow: 'hidden',
+          overflow: showCrossChekk ? 'auto' : 'hidden',
+          overflowX: 'hidden',
           transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
           background: 'rgba(255, 255, 255, 0.03)',
           borderTop: showCrossChekk ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
@@ -1851,7 +1972,8 @@ function App() {
                   color: 'white',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  letterSpacing: '0.02em'
+                  letterSpacing: '0.02em',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 RESULTS ({crossChekkResults.length})
@@ -1937,7 +2059,7 @@ function App() {
                       Select Candidate
                     </div>
                     <input
-                      placeholder="GitHub Handle *"
+                      placeholder="github.com/username or @handle"
                       value={crossChekkForm.githubHandle}
                       onChange={(e) => setCrossChekkForm(prev => ({ ...prev, githubHandle: e.target.value, selectedReportId: '' }))}
                       disabled={!!crossChekkForm.selectedReportId}
@@ -1963,100 +2085,286 @@ function App() {
                       style={{
                         width: '100%',
                         padding: '10px',
+                        paddingRight: '32px',
                         borderRadius: '8px',
                         border: '1px solid rgba(255,255,255,0.2)',
                         background: (history.length === 0 || crossChekkForm.githubHandle) ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)',
                         color: (history.length === 0 || crossChekkForm.githubHandle) ? 'rgba(255,255,255,0.4)' : 'white',
                         fontSize: '11px',
                         outline: 'none',
-                        cursor: (history.length === 0 || crossChekkForm.githubHandle) ? 'not-allowed' : 'pointer'
+                        cursor: (history.length === 0 || crossChekkForm.githubHandle) ? 'not-allowed' : 'pointer',
+                        marginBottom: '8px',
+                        appearance: 'none',
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.6)' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 10px center',
+                        backgroundSize: '12px'
                       }}
                     >
                       <option value="">{history.length === 0 ? 'No history yet' : crossChekkForm.githubHandle ? 'Clear GitHub handle to use history' : 'Or select from history...'}</option>
                       {history.slice(0, 20).map((item: any) => (
                         <option key={item.id} value={item.id} style={{ background: '#1a1a1a' }}>
-                          @{item.candidate.githubHandle} - {item.archetype}
+                          {item.candidate.name || `@${item.candidate.githubHandle}`} - {item.archetype}
                         </option>
                       ))}
                     </select>
-                  </div>
 
-                  {/* Resume PDF Upload */}
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          try {
-                            const text = await extractTextFromPDF(file);
-                            setCrossChekkForm(prev => ({ ...prev, resumeText: text }));
-                          } catch (err) {
-                            console.error('PDF extraction error:', err);
-                            alert('Failed to extract text from PDF');
+                    {/* Resume PDF Upload */}
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const text = await extractTextFromPDF(file);
+                              setCrossChekkForm(prev => ({ ...prev, resumeText: text }));
+                            } catch (err) {
+                              console.error('PDF extraction error:', err);
+                              alert('Failed to extract text from PDF');
+                            }
                           }
+                        }}
+                        style={{
+                          display: 'none'
+                        }}
+                        id="resume-upload"
+                      />
+                      <label
+                        htmlFor="resume-upload"
+                        style={{
+                          display: 'block',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px dashed rgba(255,255,255,0.25)',
+                          background: 'rgba(255,255,255,0.03)',
+                          color: 'rgba(255,255,255,0.6)',
+                          fontSize: '10px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          marginBottom: '8px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                          e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+                        }}
+                      >
+                        {crossChekkForm.resumeText ? (
+                          <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                            ✓ Resume uploaded ({crossChekkForm.resumeText.length} chars)
+                          </span>
+                        ) : (
+                          <span>
+                            Upload Resume PDF (optional)
+                          </span>
+                        )}
+                      </label>
+                      {crossChekkForm.resumeText && (
+                        <button
+                          onClick={() => setCrossChekkForm(prev => ({ ...prev, resumeText: '' }))}
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          CLEAR
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Add to comparison button */}
+                    <button
+                      onClick={() => {
+                        const handle = crossChekkForm.githubHandle || crossChekkForm.selectedReportId;
+                        if (!handle) {
+                          alert('Please enter a GitHub handle or select from history');
+                          return;
                         }
+
+                        // Check if already added (only check non-empty values)
+                        const isDuplicate = crossChekkCandidates.some(c => {
+                          if (crossChekkForm.githubHandle && c.githubHandle) {
+                            return c.githubHandle.toLowerCase() === crossChekkForm.githubHandle.toLowerCase();
+                          }
+                          if (crossChekkForm.selectedReportId && c.selectedReportId) {
+                            return c.selectedReportId === crossChekkForm.selectedReportId;
+                          }
+                          return false;
+                        });
+
+                        if (isDuplicate) {
+                          alert('This candidate is already added');
+                          return;
+                        }
+
+                        // Look up GitHub handle, archetype, and name from history if using selectedReportId
+                        let actualHandle = crossChekkForm.githubHandle;
+                        let archetype = '';
+                        let name = '';
+                        if (!actualHandle && crossChekkForm.selectedReportId) {
+                          const historyItem = history.find((item: any) => item.id === crossChekkForm.selectedReportId);
+                          actualHandle = historyItem?.candidate?.githubHandle || '';
+                          archetype = historyItem?.archetype || '';
+                          name = historyItem?.candidate?.name || '';
+                        }
+
+                        // Add to candidates list
+                        setCrossChekkCandidates(prev => [...prev, {
+                          id: Date.now().toString(),
+                          githubHandle: actualHandle,
+                          selectedReportId: crossChekkForm.selectedReportId,
+                          resumeText: crossChekkForm.resumeText,
+                          archetype: archetype,
+                          name: name
+                        }]);
+
+                        // Clear form
+                        setCrossChekkForm(prev => ({
+                          ...prev,
+                          githubHandle: '',
+                          selectedReportId: '',
+                          resumeText: ''
+                        }));
                       }}
+                      disabled={!crossChekkForm.githubHandle && !crossChekkForm.selectedReportId}
                       style={{
-                        display: 'none'
-                      }}
-                      id="resume-upload"
-                    />
-                    <label
-                      htmlFor="resume-upload"
-                      style={{
-                        display: 'block',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        border: '1px dashed rgba(255,255,255,0.3)',
-                        background: 'rgba(255,255,255,0.03)',
-                        color: 'rgba(255,255,255,0.7)',
-                        fontSize: '11px',
-                        textAlign: 'center',
-                        cursor: 'pointer',
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(34, 197, 94, 0.4)',
+                        background: 'rgba(34, 197, 94, 0.15)',
+                        color: '#22c55e',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        cursor: (!crossChekkForm.githubHandle && !crossChekkForm.selectedReportId) ? 'not-allowed' : 'pointer',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        opacity: (!crossChekkForm.githubHandle && !crossChekkForm.selectedReportId) ? 0.5 : 1,
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
-                        e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+                        if (crossChekkForm.githubHandle || crossChekkForm.selectedReportId) {
+                          e.currentTarget.style.background = 'rgba(34, 197, 94, 0.25)';
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+                        e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
                       }}
                     >
-                      {crossChekkForm.resumeText ? (
-                        <span style={{ color: '#22c55e', fontWeight: 600 }}>
-                          ✓ Resume uploaded ({crossChekkForm.resumeText.length} chars)
-                        </span>
-                      ) : (
-                        <span>
-                          📄 Upload Resume PDF
-                        </span>
-                      )}
-                    </label>
-                    {crossChekkForm.resumeText && (
-                      <button
-                        onClick={() => setCrossChekkForm(prev => ({ ...prev, resumeText: '' }))}
-                        style={{
-                          position: 'absolute',
-                          top: '8px',
-                          right: '8px',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          border: 'none',
-                          background: 'rgba(239, 68, 68, 0.2)',
-                          color: '#ef4444',
-                          fontSize: '9px',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        CLEAR
-                      </button>
-                    )}
+                      <span style={{ fontSize: '14px', lineHeight: '10px' }}>+</span>
+                      <span>Crosschekk More</span>
+                    </button>
                   </div>
+
+                  {/* Candidates List */}
+                  {crossChekkCandidates.length > 0 && (
+                    <div style={{
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(34, 197, 94, 0.3)',
+                      background: 'rgba(34, 197, 94, 0.03)'
+                    }}>
+                      <div style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        color: 'rgba(255,255,255,0.6)',
+                        marginBottom: '8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span>Candidates to Compare ({crossChekkCandidates.length})</span>
+                        <button
+                          onClick={() => setCrossChekkCandidates([])}
+                          style={{
+                            padding: '3px 6px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            fontSize: '8px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            textTransform: 'uppercase'
+                          }}
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto' }}>
+                        {crossChekkCandidates.map((candidate) => (
+                          <div
+                            key={candidate.id}
+                            style={{
+                              padding: '8px',
+                              borderRadius: '6px',
+                              background: 'rgba(255,255,255,0.05)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '8px'
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '11px', color: 'white', fontWeight: 600, marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {candidate.name || `@${candidate.githubHandle}` || `History #${candidate.selectedReportId.slice(0, 8)}`}
+                              </div>
+                              {candidate.archetype && (
+                                <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.6)', marginBottom: '2px', textTransform: 'uppercase', fontWeight: 600 }}>
+                                  {candidate.archetype}
+                                </div>
+                              )}
+                              {candidate.resumeText && (
+                                <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>
+                                  Resume attached
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => {
+                                setCrossChekkCandidates(prev => prev.filter(c => c.id !== candidate.id));
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                background: 'rgba(239, 68, 68, 0.15)',
+                                color: '#ef4444',
+                                fontSize: '9px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                flexShrink: 0
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {/* Save JD Toggle */}
                   <div
                     onClick={() => setCrossChekkForm(prev => ({ ...prev, saveJD: !prev.saveJD }))}
@@ -2097,45 +2405,62 @@ function App() {
                   </div>
 
                   {/* Run Button */}
-                  <button
-                    onClick={runCrossChekk}
-                    disabled={crossChekkForm.loading}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: crossChekkForm.loading ? 'rgba(34, 197, 94, 0.3)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                      color: 'white',
-                      fontSize: '11px',
-                      fontWeight: 800,
-                      cursor: crossChekkForm.loading ? 'not-allowed' : 'pointer',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em',
-                      marginTop: '8px',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      boxShadow: crossChekkForm.loading ? 'none' : '0 4px 12px rgba(34, 197, 94, 0.3)',
-                      transform: crossChekkForm.loading ? 'scale(0.98)' : 'scale(1)',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    {crossChekkForm.loading && (
-                      <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
-                        animation: 'shimmer 1.5s infinite',
-                        transformOrigin: 'center'
-                      }} />
-                    )}
-                    <span style={{ position: 'relative', zIndex: 1 }}>
-                      {crossChekkForm.loading ? '⚡ ANALYZING...' : '🎯 RUN CROSSCHEKK'}
-                    </span>
-                  </button>
+                  {(() => {
+                    // Calculate total candidates to analyze
+                    let totalCandidates = crossChekkCandidates.length;
+                    if (crossChekkForm.githubHandle || crossChekkForm.selectedReportId) {
+                      totalCandidates += 1;
+                    }
+                    const hasNoCandidates = totalCandidates === 0;
+
+                    return (
+                      <button
+                        onClick={runCrossChekk}
+                        disabled={crossChekkForm.loading || hasNoCandidates}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: (crossChekkForm.loading || hasNoCandidates) ? 'rgba(34, 197, 94, 0.3)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                          color: 'white',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          cursor: (crossChekkForm.loading || hasNoCandidates) ? 'not-allowed' : 'pointer',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          marginTop: '8px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          boxShadow: (crossChekkForm.loading || hasNoCandidates) ? 'none' : '0 4px 12px rgba(34, 197, 94, 0.3)',
+                          transform: (crossChekkForm.loading || hasNoCandidates) ? 'scale(0.98)' : 'scale(1)',
+                          opacity: hasNoCandidates ? 0.5 : 1,
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        {crossChekkForm.loading && (
+                          <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
+                            animation: 'shimmer 1.5s infinite',
+                            transformOrigin: 'center'
+                          }} />
+                        )}
+                        <span style={{ position: 'relative', zIndex: 1 }}>
+                          {crossChekkForm.loading
+                            ? 'ANALYZING...'
+                            : totalCandidates > 1
+                              ? `RUN CROSSCHEKK (${totalCandidates} CANDIDATES)`
+                              : 'RUN CROSSCHEKK'
+                          }
+                        </span>
+                      </button>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -2149,17 +2474,14 @@ function App() {
                     savedJDs.map((jd: any) => (
                       <div
                         key={jd.id}
-                        onClick={() => {
-                          setCrossChekkForm(prev => ({ ...prev, selectedJdId: jd.id, jdTitle: jd.title, jdCompany: jd.company || '', jdText: jd.description }));
-                          setCrossChekkTab('new');
-                        }}
                         style={{
                           padding: '12px',
                           borderRadius: '8px',
                           background: 'rgba(255,255,255,0.05)',
                           border: '1px solid rgba(255,255,255,0.1)',
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease'
+                          transition: 'all 0.2s ease',
+                          position: 'relative'
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
@@ -2170,17 +2492,53 @@ function App() {
                           e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
                         }}
                       >
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'white', marginBottom: '4px' }}>
-                          {jd.title}
-                        </div>
-                        {jd.company && (
-                          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>
-                            {jd.company}
+                        <div
+                          onClick={() => {
+                            setCrossChekkForm(prev => ({ ...prev, selectedJdId: jd.id, jdTitle: jd.title, jdCompany: jd.company || '', jdText: jd.description }));
+                            setCrossChekkTab('new');
+                          }}
+                        >
+                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'white', marginBottom: '4px', paddingRight: '24px' }}>
+                            {jd.title}
                           </div>
-                        )}
-                        <div style={{ fontSize: '9px', color: 'rgba(34, 197, 94, 0.8)' }}>
-                          {jd.requiredSkills?.slice(0, 3).join(', ')}{jd.requiredSkills?.length > 3 && '...'}
+                          {jd.company && (
+                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>
+                              {jd.company}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '9px', color: 'rgba(34, 197, 94, 0.8)' }}>
+                            {jd.requiredSkills?.slice(0, 3).join(', ')}{jd.requiredSkills?.length > 3 && '...'}
+                          </div>
                         </div>
+                        {/* Delete button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSavedJD(jd.id);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <X size={14} color="rgba(239, 68, 68, 0.8)" />
+                        </button>
                       </div>
                     ))
                   )}
@@ -2189,6 +2547,80 @@ function App() {
 
               {crossChekkTab === 'results' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {!currentCrossChekkResult && crossChekkResults.length > 0 && (
+                    // Filter and Sort Controls - Single grid for perfect alignment
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px 4px', marginBottom: '8px' }}>
+                      {/* Row 1: Recommendation Filter Buttons */}
+                      {(['ALL', 'SEND', 'SKIP'] as const).map((filter) => (
+                        <button
+                          key={filter}
+                          onClick={() => setCrossChekkFilter(filter)}
+                          style={{
+                            padding: '6px 0',
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            borderRadius: '6px',
+                            border: crossChekkFilter === filter ? '1.5px solid rgba(34, 197, 94, 0.5)' : '1.5px solid rgba(255,255,255,0.15)',
+                            background: crossChekkFilter === filter ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.05)',
+                            color: crossChekkFilter === filter ? '#22c55e' : 'rgba(255,255,255,0.7)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            letterSpacing: '0.05em',
+                            boxSizing: 'border-box'
+                          }}
+                        >
+                          {filter}
+                        </button>
+                      ))}
+                      {/* Row 2: JD Filter Dropdown - spans first 2 columns */}
+                      <select
+                        value={crossChekkJdFilter}
+                        onChange={(e) => setCrossChekkJdFilter(e.target.value)}
+                        style={{
+                          gridColumn: '1 / 3',
+                          padding: '6px 10px',
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          background: 'rgba(255,255,255,0.05)',
+                          color: 'rgba(255,255,255,0.7)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="ALL">All Jobs</option>
+                        {Array.from(new Set(crossChekkResults.map((r: any) => r.jd?.id).filter(Boolean))).map((jdId: any) => {
+                          const result = crossChekkResults.find((r: any) => r.jd?.id === jdId);
+                          const jdTitle = result?.jd?.title || 'Custom JD';
+                          const jdCompany = result?.jd?.company;
+                          return (
+                            <option key={jdId} value={jdId}>
+                              {jdTitle}{jdCompany && ` • ${jdCompany}`}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      {/* Row 2: Sort Dropdown - takes 3rd column */}
+                      <select
+                        value={crossChekkSort}
+                        onChange={(e) => setCrossChekkSort(e.target.value as 'recent' | 'high-low' | 'low-high')}
+                        style={{
+                          padding: '6px 10px',
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          background: 'rgba(255,255,255,0.05)',
+                          color: 'rgba(255,255,255,0.7)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="recent">Most Recent</option>
+                        <option value="high-low">Score: High→Low</option>
+                        <option value="low-high">Score: Low→High</option>
+                      </select>
+                    </div>
+                  )}
                   {currentCrossChekkResult ? (
                     // Detail View
                     <div style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '8px' }}>
@@ -2218,88 +2650,226 @@ function App() {
                         ← BACK TO RESULTS
                       </button>
 
-                      {/* Header */}
-                      <div style={{ marginBottom: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                          {/* Circular Score */}
-                          {(() => {
-                            const isGoodFit = currentCrossChekkResult.recommendation === 'SEND';
-                            const scoreColor = isGoodFit ? '#22c55e' : '#ef4444';
-                            const circumference = 2 * Math.PI * 32;
-                            const strokeOffset = circumference - (currentCrossChekkResult.fitScore / 100) * circumference;
+                      {/* Header Card */}
+                      {(() => {
+                        // Determine card background color based on score
+                        const fitScore = currentCrossChekkResult.fitScore;
+                        let cardBackground;
+                        if (fitScore <= 50) {
+                          cardBackground = 'linear-gradient(135deg, #fecaca 0%, #fee2e2 100%)'; // Reddish hue - more saturated
+                        } else if (fitScore < 75) {
+                          cardBackground = 'linear-gradient(135deg, #fef08a 0%, #fefce8 100%)'; // Yellowish hue
+                        } else {
+                          cardBackground = 'linear-gradient(135deg, #bbf7d0 0%, #dcfce7 100%)'; // Greenish hue
+                        }
 
-                            return (
-                              <div style={{ position: 'relative', width: '72px', height: '72px', flexShrink: 0 }}>
-                                <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
-                                  <circle
-                                    cx="36"
-                                    cy="36"
-                                    r="32"
-                                    fill="none"
-                                    stroke="rgba(255,255,255,0.1)"
-                                    strokeWidth="4"
-                                  />
-                                  <circle
-                                    cx="36"
-                                    cy="36"
-                                    r="32"
-                                    fill="none"
-                                    stroke={scoreColor}
-                                    strokeWidth="4"
-                                    strokeDasharray={circumference}
-                                    strokeDashoffset={strokeOffset}
-                                    strokeLinecap="round"
-                                    style={{
-                                      transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
-                                      filter: `drop-shadow(0 0 8px ${scoreColor}60)`
-                                    }}
-                                  />
-                                </svg>
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '50%',
-                                  left: '50%',
-                                  transform: 'translate(-50%, -50%)',
-                                  fontSize: '20px',
-                                  fontWeight: 900,
-                                  color: scoreColor,
-                                  textShadow: `0 0 12px ${scoreColor}40`
-                                }}>
-                                  {currentCrossChekkResult.fitScore}%
-                                </div>
-                              </div>
-                            );
-                          })()}
+                        return (
+                          <div style={{
+                            marginBottom: '16px',
+                            padding: '16px',
+                            borderRadius: '12px',
+                            background: cardBackground,
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                          }}>
+                            {(() => {
+                              // Calculate score color once for reuse
+                              const fitScore = currentCrossChekkResult.fitScore;
+                              let scoreColor;
+                              if (fitScore <= 50) {
+                                scoreColor = '#dc2626'; // Red (more saturated)
+                              } else if (fitScore < 75) {
+                                scoreColor = '#eab308'; // Yellow
+                              } else {
+                                scoreColor = '#22c55e'; // Green
+                              }
 
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '14px', fontWeight: 900, color: 'white', marginBottom: '4px' }}>
-                              @{currentCrossChekkResult.candidate?.githubHandle}
-                            </div>
+                              return (
+                                <>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                                    {/* Circular Score */}
+                                    {(() => {
+                                      const circumference = 2 * Math.PI * 32;
+                                      const strokeOffset = circumference - (currentCrossChekkResult.fitScore / 100) * circumference;
+
+                                      return (
+                                        <div style={{ position: 'relative', width: '72px', height: '72px', flexShrink: 0 }}>
+                                          <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
+                                            <circle
+                                              cx="36"
+                                              cy="36"
+                                              r="32"
+                                              fill="none"
+                                              stroke="rgba(0,0,0,0.1)"
+                                              strokeWidth="4"
+                                            />
+                                            <circle
+                                              cx="36"
+                                              cy="36"
+                                              r="32"
+                                              fill="none"
+                                              stroke={scoreColor}
+                                              strokeWidth="4"
+                                              strokeDasharray={circumference}
+                                              strokeDashoffset={strokeOffset}
+                                              strokeLinecap="round"
+                                              style={{
+                                                transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                filter: `drop-shadow(0 0 8px ${scoreColor}60)`
+                                              }}
+                                            />
+                                          </svg>
+                                          <div style={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            left: '50%',
+                                            transform: 'translate(-50%, -50%)',
+                                            fontSize: '20px',
+                                            fontWeight: 900,
+                                            color: scoreColor,
+                                            textShadow: `0 0 12px ${scoreColor}40`
+                                          }}>
+                                            {currentCrossChekkResult.fitScore}%
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      {/* Name Row */}
+                                      <div style={{ fontSize: '16px', fontWeight: 900, color: '#1a1a1a', marginBottom: '8px' }}>
+                                        {currentCrossChekkResult.candidate?.name || `@${currentCrossChekkResult.candidate?.githubHandle}`}
+                                      </div>
+
+                                      {/* Archetype and Badge Row */}
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                        {currentCrossChekkResult.candidate?.archetype && (() => {
+                                          const archetype = currentCrossChekkResult.candidate.archetype;
+                                          const tier = getRarityFromLabel(archetype);
+                                          const tierColor = getRarityColor(tier, archetype);
+
+                                          return (
+                                            <div style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              padding: '3px 7px',
+                                              borderRadius: '6px',
+                                              background: `${tierColor}12`,
+                                              border: `1px solid ${tierColor}25`,
+                                              flex: 1,
+                                              minWidth: 0
+                                            }}>
+                                              <ArchetypeIcon label={archetype} size={11} />
+                                              <span style={{
+                                                fontSize: '9px',
+                                                color: tierColor,
+                                                fontWeight: 700,
+                                                letterSpacing: '0.02em',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap'
+                                              }}>
+                                                {archetype.replace(/^THE\s+/i, '')}
+                                              </span>
+                                            </div>
+                                          );
+                                        })()}
+
+                                        {/* SKIP/SEND Badge */}
+                                        <div style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          background: `${scoreColor}25`,
+                                          border: `1.5px solid ${scoreColor}`,
+                                          fontSize: '9px',
+                                          fontWeight: 800,
+                                          color: scoreColor,
+                                          letterSpacing: '0.05em',
+                                          flexShrink: 0
+                                        }}>
+                                          {currentCrossChekkResult.recommendation}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Centered Job Title */}
+                                  <div style={{
+                                    fontSize: '11px',
+                                    color: 'rgba(0,0,0,0.7)',
+                                    textAlign: 'center',
+                                    lineHeight: '1.4',
+                                    marginBottom: '4px',
+                                    fontWeight: 600
+                                  }}>
+                                    {currentCrossChekkResult.jd?.title || 'Custom JD'} {currentCrossChekkResult.jd?.company && `• ${currentCrossChekkResult.jd.company}`}
+                                  </div>
+                                </>
+                              );
+                            })()}
+
+                            {/* View Full Analysis Button */}
+                            <button
+                              onClick={async () => {
+                                const handle = currentCrossChekkResult.candidate?.githubHandle;
+                                if (handle) {
+                                  // Find the report in history
+                                  const existingReport = history.find((item: any) =>
+                                    item.candidate?.githubHandle?.toLowerCase() === handle.toLowerCase()
+                                  );
+
+                                  if (existingReport) {
+                                    // Report exists - open it from history
+                                    setSelectedReport(existingReport);
+                                    setActiveTab('history');
+                                  } else {
+                                    // No report yet - go to analyze tab
+                                    setActiveTab('analyze');
+                                    setManualUrl(handle);
+                                  }
+
+                                  // Close CrossChekk panel
+                                  setShowCrossChekk(false);
+                                }
+                              }}
+                              style={{
+                                marginTop: '12px',
+                                width: '100%',
+                                padding: '10px',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(34, 197, 94, 0.3)',
+                                background: 'rgba(34, 197, 94, 0.1)',
+                                color: '#22c55e',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                              }}
+                            >
+                              View Full GitHub Analysis
+                            </button>
                           </div>
-                        </div>
-                        <div style={{
-                          display: 'inline-block',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          background: currentCrossChekkResult.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                          border: `1px solid ${currentCrossChekkResult.recommendation === 'SEND' ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-                          fontSize: '9px',
-                          fontWeight: 800,
-                          color: currentCrossChekkResult.recommendation === 'SEND' ? '#22c55e' : '#ef4444',
-                          letterSpacing: '0.05em'
-                        }}>
-                          {currentCrossChekkResult.recommendation}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginTop: '6px' }}>
-                          {currentCrossChekkResult.jd?.title || 'Custom JD'} {currentCrossChekkResult.jd?.company && `• ${currentCrossChekkResult.jd.company}`}
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* VibeReport Section */}
                       {currentCrossChekkResult.vibeReport && (
                         <div style={{ marginBottom: '16px' }}>
-                          <div style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', marginBottom: '8px', letterSpacing: '0.05em' }}>
-                            📊 GITHUB ANALYSIS
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: 'white', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                            GITHUB ANALYSIS
                           </div>
                           <div style={{
                             padding: '10px',
@@ -2331,20 +2901,20 @@ function App() {
                                 {currentCrossChekkResult.vibeReport.tier}
                               </div>
                             </div>
-                            <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.8)', lineHeight: '1.4', marginBottom: '6px' }}>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', lineHeight: '1.5', marginBottom: '8px' }}>
                               {currentCrossChekkResult.vibeReport.trajectorySummary}
                             </div>
                             {currentCrossChekkResult.vibeReport.meritPoints?.slice(0, 3).map((mp: any, idx: number) => (
                               <div key={idx} style={{
-                                fontSize: '8px',
-                                color: 'rgba(255,255,255,0.7)',
-                                padding: '5px',
+                                fontSize: '10px',
+                                color: 'rgba(255,255,255,0.8)',
+                                padding: '8px',
                                 background: 'rgba(255,255,255,0.03)',
-                                borderRadius: '3px',
-                                marginTop: '4px',
+                                borderRadius: '4px',
+                                marginTop: '6px',
                                 borderLeft: '2px solid rgba(34, 197, 94, 0.5)'
                               }}>
-                                <div style={{ fontWeight: 700, color: '#22c55e', marginBottom: '2px' }}>
+                                <div style={{ fontWeight: 700, color: '#22c55e', marginBottom: '3px' }}>
                                   {mp.title}
                                 </div>
                                 {mp.detail}
@@ -2354,28 +2924,55 @@ function App() {
                         </div>
                       )}
 
-                      {/* AI Summary */}
+                      {/* Summary */}
                       <div style={{ marginBottom: '16px' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', marginBottom: '6px', letterSpacing: '0.05em' }}>
-                          🤖 AI SUMMARY
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'white', marginBottom: '6px', letterSpacing: '0.05em' }}>
+                          SUMMARY
                         </div>
                         <div style={{
-                          padding: '10px',
+                          padding: '12px',
                           borderRadius: '6px',
                           background: 'rgba(255,255,255,0.05)',
                           border: '1px solid rgba(255,255,255,0.1)',
-                          fontSize: '9px',
-                          color: 'rgba(255,255,255,0.8)',
-                          lineHeight: '1.4'
+                          display: 'flex',
+                          gap: '12px',
+                          alignItems: 'flex-start'
                         }}>
-                          {currentCrossChekkResult.aiSummary}
+                          <div style={{
+                            fontSize: '12px',
+                            color: 'rgba(255,255,255,0.9)',
+                            lineHeight: '1.6',
+                            flex: 1
+                          }}>
+                            {currentCrossChekkResult.aiSummary}
+                          </div>
+                          <button
+                            className="copy-icon-btn"
+                            style={{
+                              background: 'rgba(255,255,255,0.05)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              color: 'rgba(255,255,255,0.6)'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(currentCrossChekkResult.aiSummary);
+                              setCopiedId('crosschekk-summary');
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                          >
+                            {copiedId === 'crosschekk-summary' ? (
+                              <BadgeCheck size={14} strokeWidth={2} color="rgba(255,255,255,0.9)" />
+                            ) : (
+                              <Copy size={14} strokeWidth={2} />
+                            )}
+                          </button>
                         </div>
                       </div>
 
                       {/* Skills Match */}
                       <div style={{ marginBottom: '16px' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', marginBottom: '6px', letterSpacing: '0.05em' }}>
-                          💡 SKILLS MATCH
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'white', marginBottom: '6px', letterSpacing: '0.05em' }}>
+                          SKILLS MATCH
                         </div>
                         <div style={{
                           padding: '10px',
@@ -2384,19 +2981,20 @@ function App() {
                           border: '1px solid rgba(255,255,255,0.1)'
                         }}>
                           {currentCrossChekkResult.skillsMatch?.matched?.length > 0 && (
-                            <div style={{ marginBottom: '6px' }}>
-                              <div style={{ fontSize: '8px', fontWeight: 700, color: '#22c55e', marginBottom: '3px' }}>
+                            <div style={{ marginBottom: '8px' }}>
+                              <div style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', marginBottom: '4px' }}>
                                 ✓ MATCHED
                               </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                 {currentCrossChekkResult.skillsMatch.matched.map((skill: string, idx: number) => (
                                   <span key={idx} style={{
-                                    padding: '3px 6px',
-                                    borderRadius: '3px',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
                                     background: 'rgba(34, 197, 94, 0.2)',
                                     border: '1px solid rgba(34, 197, 94, 0.3)',
-                                    fontSize: '8px',
-                                    color: '#22c55e'
+                                    fontSize: '11px',
+                                    color: '#22c55e',
+                                    fontWeight: 500
                                   }}>
                                     {skill}
                                   </span>
@@ -2405,19 +3003,20 @@ function App() {
                             </div>
                           )}
                           {currentCrossChekkResult.skillsMatch?.missing?.length > 0 && (
-                            <div style={{ marginBottom: '6px' }}>
-                              <div style={{ fontSize: '8px', fontWeight: 700, color: '#ef4444', marginBottom: '3px' }}>
+                            <div style={{ marginBottom: '8px' }}>
+                              <div style={{ fontSize: '10px', fontWeight: 700, color: '#ef4444', marginBottom: '4px' }}>
                                 ✗ MISSING
                               </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                 {currentCrossChekkResult.skillsMatch.missing.map((skill: string, idx: number) => (
                                   <span key={idx} style={{
-                                    padding: '3px 6px',
-                                    borderRadius: '3px',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
                                     background: 'rgba(239, 68, 68, 0.2)',
                                     border: '1px solid rgba(239, 68, 68, 0.3)',
-                                    fontSize: '8px',
-                                    color: '#ef4444'
+                                    fontSize: '11px',
+                                    color: '#ef4444',
+                                    fontWeight: 500
                                   }}>
                                     {skill}
                                   </span>
@@ -2427,18 +3026,19 @@ function App() {
                           )}
                           {currentCrossChekkResult.skillsMatch?.extra?.length > 0 && (
                             <div>
-                              <div style={{ fontSize: '8px', fontWeight: 700, color: '#f59e0b', marginBottom: '3px' }}>
+                              <div style={{ fontSize: '10px', fontWeight: 700, color: '#f59e0b', marginBottom: '4px' }}>
                                 + BONUS SKILLS
                               </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                 {currentCrossChekkResult.skillsMatch.extra.map((skill: string, idx: number) => (
                                   <span key={idx} style={{
-                                    padding: '3px 6px',
-                                    borderRadius: '3px',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
                                     background: 'rgba(245, 158, 11, 0.2)',
                                     border: '1px solid rgba(245, 158, 11, 0.3)',
-                                    fontSize: '8px',
-                                    color: '#f59e0b'
+                                    fontSize: '11px',
+                                    color: '#f59e0b',
+                                    fontWeight: 500
                                   }}>
                                     {skill}
                                   </span>
@@ -2451,16 +3051,16 @@ function App() {
 
                       {/* Experience Match */}
                       <div style={{ marginBottom: '16px' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', marginBottom: '6px', letterSpacing: '0.05em' }}>
-                          📈 EXPERIENCE MATCH
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'white', marginBottom: '6px', letterSpacing: '0.05em' }}>
+                          EXPERIENCE MATCH
                         </div>
                         <div style={{
-                          padding: '10px',
+                          padding: '12px',
                           borderRadius: '6px',
                           background: 'rgba(255,255,255,0.05)',
                           border: '1px solid rgba(255,255,255,0.1)',
-                          fontSize: '9px',
-                          color: 'rgba(255,255,255,0.8)'
+                          fontSize: '11px',
+                          color: 'rgba(255,255,255,0.9)'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
                             <span>Candidate Level:</span>
@@ -2489,21 +3089,43 @@ function App() {
                       {/* Strengths */}
                       {currentCrossChekkResult.strengthsForRole?.length > 0 && (
                         <div style={{ marginBottom: '16px' }}>
-                          <div style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', marginBottom: '6px', letterSpacing: '0.05em' }}>
-                            💪 STRENGTHS FOR ROLE
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: 'white', marginBottom: '6px', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>STRENGTHS FOR ROLE</span>
+                            <button
+                              className="copy-icon-btn"
+                              style={{
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'rgba(255,255,255,0.6)',
+                                padding: '4px'
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const allStrengths = currentCrossChekkResult.strengthsForRole.join('\n\n');
+                                navigator.clipboard.writeText(allStrengths);
+                                setCopiedId('all-strengths');
+                                setTimeout(() => setCopiedId(null), 2000);
+                              }}
+                            >
+                              {copiedId === 'all-strengths' ? (
+                                <BadgeCheck size={12} strokeWidth={2} color="rgba(255,255,255,0.9)" />
+                              ) : (
+                                <Copy size={12} strokeWidth={2} />
+                              )}
+                            </button>
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {currentCrossChekkResult.strengthsForRole.map((strength: string, idx: number) => (
                               <div key={idx} style={{
-                                padding: '6px',
+                                padding: '8px',
                                 borderRadius: '5px',
                                 background: 'rgba(34, 197, 94, 0.1)',
                                 border: '1px solid rgba(34, 197, 94, 0.2)',
-                                fontSize: '8px',
+                                fontSize: '11px',
                                 color: 'rgba(255,255,255,0.9)',
-                                lineHeight: '1.3'
+                                lineHeight: '1.5'
                               }}>
-                                • {strength}
+                                {strength}
                               </div>
                             ))}
                           </div>
@@ -2513,21 +3135,43 @@ function App() {
                       {/* Concerns */}
                       {currentCrossChekkResult.concernsForRole?.length > 0 && (
                         <div>
-                          <div style={{ fontSize: '10px', fontWeight: 700, color: '#ef4444', marginBottom: '6px', letterSpacing: '0.05em' }}>
-                            ⚠️ CONCERNS
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: 'white', marginBottom: '6px', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>CONCERNS</span>
+                            <button
+                              className="copy-icon-btn"
+                              style={{
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'rgba(255,255,255,0.6)',
+                                padding: '4px'
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const allConcerns = currentCrossChekkResult.concernsForRole.join('\n\n');
+                                navigator.clipboard.writeText(allConcerns);
+                                setCopiedId('all-concerns');
+                                setTimeout(() => setCopiedId(null), 2000);
+                              }}
+                            >
+                              {copiedId === 'all-concerns' ? (
+                                <BadgeCheck size={12} strokeWidth={2} color="rgba(255,255,255,0.9)" />
+                              ) : (
+                                <Copy size={12} strokeWidth={2} />
+                              )}
+                            </button>
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {currentCrossChekkResult.concernsForRole.map((concern: string, idx: number) => (
                               <div key={idx} style={{
-                                padding: '6px',
+                                padding: '8px',
                                 borderRadius: '5px',
                                 background: 'rgba(239, 68, 68, 0.1)',
                                 border: '1px solid rgba(239, 68, 68, 0.2)',
-                                fontSize: '8px',
+                                fontSize: '11px',
                                 color: 'rgba(255,255,255,0.9)',
-                                lineHeight: '1.3'
+                                lineHeight: '1.5'
                               }}>
-                                • {concern}
+                                {concern}
                               </div>
                             ))}
                           </div>
@@ -2540,9 +3184,48 @@ function App() {
                     </div>
                   ) : (
                     // Results List
-                    crossChekkResults.map((result: any) => {
-                      const isGoodFit = result.recommendation === 'SEND';
-                      const scoreColor = isGoodFit ? '#22c55e' : '#ef4444';
+                    (() => {
+                      // Apply filtering
+                      let filteredResults = crossChekkResults;
+
+                      // Filter by recommendation
+                      if (crossChekkFilter !== 'ALL') {
+                        filteredResults = filteredResults.filter((r: any) => r.recommendation === crossChekkFilter);
+                      }
+
+                      // Filter by JD
+                      if (crossChekkJdFilter !== 'ALL') {
+                        filteredResults = filteredResults.filter((r: any) => r.jd?.id === crossChekkJdFilter);
+                      }
+
+                      // Apply sorting
+                      const sortedResults = crossChekkSort === 'recent'
+                        ? filteredResults // Keep original order (most recent first)
+                        : [...filteredResults].sort((a: any, b: any) => {
+                            if (crossChekkSort === 'high-low') {
+                              return b.fitScore - a.fitScore;
+                            } else {
+                              return a.fitScore - b.fitScore;
+                            }
+                          });
+
+                      return sortedResults;
+                    })().map((result: any) => {
+                      // Determine color and background based on score thresholds
+                      const fitScore = result.fitScore;
+                      let scoreColor;
+                      let cardBackground;
+                      if (fitScore <= 50) {
+                        scoreColor = '#dc2626'; // Red (more saturated)
+                        cardBackground = 'linear-gradient(135deg, #fecaca 0%, #fee2e2 100%)'; // Reddish hue - more saturated
+                      } else if (fitScore < 75) {
+                        scoreColor = '#eab308'; // Yellow
+                        cardBackground = 'linear-gradient(135deg, #fef08a 0%, #fefce8 100%)'; // Yellowish hue
+                      } else {
+                        scoreColor = '#22c55e'; // Green
+                        cardBackground = 'linear-gradient(135deg, #bbf7d0 0%, #dcfce7 100%)'; // Greenish hue
+                      }
+
                       const circumference = 2 * Math.PI * 28;
                       const strokeOffset = circumference - (result.fitScore / 100) * circumference;
 
@@ -2553,38 +3236,23 @@ function App() {
                           style={{
                             padding: '14px',
                             borderRadius: '12px',
-                            background: isGoodFit
-                              ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%)'
-                              : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)',
-                            border: `1px solid ${isGoodFit ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                            background: cardBackground,
+                            border: `1px solid rgba(0,0,0,0.1)`,
                             cursor: 'pointer',
                             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             position: 'relative',
                             overflow: 'hidden',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-                            e.currentTarget.style.boxShadow = isGoodFit
-                              ? '0 8px 24px rgba(34, 197, 94, 0.3)'
-                              : '0 8px 24px rgba(239, 68, 68, 0.3)';
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = `0 8px 24px ${scoreColor}30`;
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
                           }}
                         >
-                          {/* Decorative blob */}
-                          <div style={{
-                            position: 'absolute',
-                            top: '-20px',
-                            right: '-20px',
-                            width: '80px',
-                            height: '80px',
-                            borderRadius: '50%',
-                            background: `radial-gradient(circle, ${scoreColor}20 0%, transparent 70%)`,
-                            pointerEvents: 'none'
-                          }} />
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 1 }}>
                             {/* Circular Score Indicator */}
@@ -2596,7 +3264,7 @@ function App() {
                                   cy="32"
                                   r="28"
                                   fill="none"
-                                  stroke="rgba(255,255,255,0.1)"
+                                  stroke="rgba(0,0,0,0.08)"
                                   strokeWidth="4"
                                 />
                                 {/* Progress circle */}
@@ -2611,8 +3279,7 @@ function App() {
                                   strokeDashoffset={strokeOffset}
                                   strokeLinecap="round"
                                   style={{
-                                    transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    filter: `drop-shadow(0 0 6px ${scoreColor}60)`
+                                    transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)'
                                   }}
                                 />
                               </svg>
@@ -2624,40 +3291,28 @@ function App() {
                                 transform: 'translate(-50%, -50%)',
                                 fontSize: '18px',
                                 fontWeight: 900,
-                                color: scoreColor,
-                                textShadow: `0 0 8px ${scoreColor}40`
+                                color: scoreColor
                               }}>
                                 {result.fitScore}%
                               </div>
                             </div>
 
                             {/* Content */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                               <div style={{
                                 fontSize: '13px',
                                 fontWeight: 800,
-                                color: 'white',
+                                color: '#1a1a1a',
                                 marginBottom: '4px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
                               }}>
-                                <span>@{result.candidate?.githubHandle}</span>
-                                <div style={{
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  background: isGoodFit ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-                                  fontSize: '8px',
-                                  fontWeight: 800,
-                                  color: scoreColor,
-                                  letterSpacing: '0.05em'
-                                }}>
-                                  {result.recommendation}
-                                </div>
+                                {result.candidate?.name || `@${result.candidate?.githubHandle}`}
                               </div>
                               <div style={{
                                 fontSize: '10px',
-                                color: 'rgba(255,255,255,0.7)',
+                                color: 'rgba(0,0,0,0.6)',
                                 marginBottom: '6px',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -2666,24 +3321,46 @@ function App() {
                                 {result.jd?.title || 'Custom JD'}
                               </div>
                               {/* Quick stats */}
-                              <div style={{ display: 'flex', gap: '8px', fontSize: '8px', color: 'rgba(255,255,255,0.6)' }}>
+                              <div style={{ display: 'flex', gap: '8px', fontSize: '8px', color: 'rgba(0,0,0,0.5)', flexWrap: 'nowrap' }}>
                                 {result.skillsMatch?.matched?.length > 0 && (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                                     <span style={{ color: '#22c55e' }}>✓</span> {result.skillsMatch.matched.length} skills
                                   </span>
                                 )}
                                 {result.skillsMatch?.missing?.length > 0 && (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                                     <span style={{ color: '#ef4444' }}>✗</span> {result.skillsMatch.missing.length} missing
                                   </span>
                                 )}
                               </div>
                             </div>
 
+                            {/* SEND/SKIP Badge - Right Aligned */}
+                            <div style={{
+                              padding: '5px 0',
+                              borderRadius: '6px',
+                              background: `${scoreColor}25`,
+                              border: `1.5px solid ${scoreColor}`,
+                              fontSize: '9px',
+                              fontWeight: 800,
+                              color: scoreColor,
+                              letterSpacing: '0.05em',
+                              flexShrink: 0,
+                              alignSelf: 'flex-start',
+                              width: '46px',
+                              textAlign: 'center',
+                              boxSizing: 'border-box',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              {result.recommendation}
+                            </div>
+
                             {/* Arrow indicator */}
                             <ChevronRight
                               size={16}
-                              color="rgba(255,255,255,0.4)"
+                              color="rgba(0,0,0,0.3)"
                               style={{ flexShrink: 0 }}
                             />
                           </div>
@@ -2753,8 +3430,8 @@ function App() {
           }}>
             <Binoculars size={22} color="white" strokeWidth={2} />
           </div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1px' }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span style={{
                 fontSize: '13px',
                 fontWeight: 800,
@@ -3038,8 +3715,8 @@ function App() {
         </div>
       </div>
 
-      {/* CHEKKLIST Card */}
-      <div style={{
+      {/* CHEKKLIST Card - DEPRECATED: Archived for potential future restoration */}
+      {false && (<div style={{
         marginBottom: '12px',
         borderRadius: '16px',
         overflow: 'visible',
@@ -4076,7 +4753,7 @@ function App() {
             </div>
           )}
         </div>
-      </div>
+      </div>)}
 
       {/* BULKCHEKK Card */}
       <div style={{
@@ -4146,7 +4823,7 @@ function App() {
             </div>
 
             {/* Text Info */}
-            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                 <span style={{
                   fontSize: '13px',

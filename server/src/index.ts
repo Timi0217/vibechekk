@@ -2240,6 +2240,52 @@ app.get('/api/crosschekk/jds', async (req, res) => {
     }
 });
 
+// Delete saved JD
+app.delete('/api/crosschekk/delete-jd/:jdId', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let userId: string;
+
+    try {
+        const decoded = jwt.verify(token, SECURE_JWT_SECRET) as { userId: string };
+        userId = decoded.userId;
+    } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+
+    try {
+        const { jdId } = req.params;
+
+        // Verify ownership before deleting
+        const jd = await prisma.savedJD.findUnique({
+            where: { id: jdId }
+        });
+
+        if (!jd) {
+            return res.status(404).json({ success: false, error: 'Job description not found' });
+        }
+
+        if (jd.userId !== userId) {
+            return res.status(403).json({ success: false, error: 'Not authorized to delete this job description' });
+        }
+
+        await prisma.savedJD.delete({
+            where: { id: jdId }
+        });
+
+        log.info('[CrossChekk] Deleted JD', { userId, jdId });
+
+        res.json({ success: true });
+    } catch (error) {
+        log.error('[CrossChekk] Failed to delete JD', error);
+        res.status(500).json({ success: false, error: 'Failed to delete job description' });
+    }
+});
+
 // Run CrossChekk analysis
 app.post('/api/crosschekk/analyze', validate(crossChekkAnalyzeSchema), checkTierLimit, async (req, res) => {
     const authHeader = req.headers.authorization;
@@ -2482,6 +2528,10 @@ app.post('/api/crosschekk/analyze', validate(crossChekkAnalyzeSchema), checkTier
             success: true,
             data: {
                 ...result,
+                candidate: {
+                    ...result.candidate,
+                    archetype: vibeReport.archetype
+                },
                 vibeReport
             }
         });
@@ -2512,14 +2562,30 @@ app.get('/api/crosschekk/results', async (req, res) => {
         const results = await prisma.crossChekkResult.findMany({
             where: { userId },
             include: {
-                candidate: true,
+                candidate: {
+                    include: {
+                        reports: {
+                            orderBy: { createdAt: 'desc' },
+                            take: 1
+                        }
+                    }
+                },
                 jd: true
             },
             orderBy: { createdAt: 'desc' },
             take: 100
         });
 
-        res.json({ success: true, data: results });
+        // Enrich candidate objects with archetype from their latest vibeReport
+        const enrichedResults = results.map(result => ({
+            ...result,
+            candidate: {
+                ...result.candidate,
+                archetype: result.candidate.reports?.[0]?.archetype || null
+            }
+        }));
+
+        res.json({ success: true, data: enrichedResults });
     } catch (error) {
         log.error('[CrossChekk] Failed to fetch results', error);
         res.status(500).json({ success: false, error: 'Failed to fetch results' });
